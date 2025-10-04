@@ -665,6 +665,7 @@ pdp10_fixup_subreg (rtx first)
 	{
 	  SET_DEST (set) = SUBREG_REG (dest);
 	  SET_SRC (set) = x;
+	  INSN_CODE (insn) = -1;
 	}
       else if (GET_CODE (src) == SUBREG
 	       && GET_CODE (SUBREG_REG (src)) == ZERO_EXTRACT
@@ -672,6 +673,7 @@ pdp10_fixup_subreg (rtx first)
 	{
 	  SET_DEST (set) = x;
 	  SET_SRC (set) = SUBREG_REG (src);
+	  INSN_CODE (insn) = -1;
 	}
     }
 }

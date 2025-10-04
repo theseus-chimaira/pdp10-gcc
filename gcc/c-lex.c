@@ -1237,12 +1237,27 @@ lex_string (str, len, wide)
      int wide;
 {
   tree value;
-  char *buf = alloca ((len + 1) * (wide ? WCHAR_BYTES : 1));
-  char *q = buf;
+  int narrow_bytes = 1;
+  char *buf;
+  char *q;
   const unsigned char *p = str, *limit = str + len;
   unsigned int c;
   unsigned width = wide ? WCHAR_TYPE_SIZE
 			: TYPE_PRECISION (char_type_node);
+
+#ifdef __PDP10_H__
+  /* TREE_STRING_POINTER is host-byte storage, not target-byte storage.
+     A PDP-10 9-bit character cannot always be represented in one host
+     char, because octal escapes may produce values 0400..0777.
+     Store those narrow string elements as two host bytes, high bits
+     first, and teach the string combiner/constant output path to decode
+     that representation again.  */
+  if (!wide && pdp10_string_literal_byte_size == 9)
+    narrow_bytes = 2;
+#endif
+
+  buf = alloca ((len + 1) * (wide ? WCHAR_BYTES : narrow_bytes));
+  q = buf;
 
 #ifdef MULTIBYTE_CHARS
   /* Reset multibyte conversion state.  */
@@ -1306,7 +1321,15 @@ lex_string (str, len, wide)
 	}
       else
 	{
-	  *q++ = c;
+#ifdef __PDP10_H__
+	  if (narrow_bytes == 2)
+	    {
+	      *q++ = (c >> 8) & 0377;
+	      *q++ = c & 0377;
+	    }
+	  else
+#endif
+	    *q++ = c;
 	}
     }
 
@@ -1320,7 +1343,15 @@ lex_string (str, len, wide)
     }
   else
     {
-      *q++ = '\0';
+#ifdef __PDP10_H__
+      if (narrow_bytes == 2)
+	{
+	  *q++ = 0;
+	  *q++ = 0;
+	}
+      else
+#endif
+	*q++ = '\0';
     }
 
   value = build_string (q - buf, buf);
@@ -1329,8 +1360,13 @@ lex_string (str, len, wide)
     TREE_TYPE (value) = wchar_array_type_node;
   else
     {
-      /* PDP-10: string constants may have 7-bit bytes.  */
+      /* PDP-10: string constants may have 6-, 7-, 8-, or 9-bit bytes.
+	 A 9-bit literal uses two host bytes per target character; keep
+	 that storage fact on the STRING_CST and give the literal its
+	 logical array bound here, since not every caller later goes
+	 through combine_strings.  */
       tree char_type;
+      int nchars;
 
       switch (pdp10_string_literal_byte_size)
 	{
@@ -1350,7 +1386,17 @@ lex_string (str, len, wide)
 	  abort ();
 	}
 
-      TREE_TYPE (value) = build_array_type (char_type, integer_type_node);
+#ifdef __PDP10_H__
+      if (narrow_bytes == 2)
+	PDP10_STRING_CST_9BIT_P (value) = 1;
+      nchars = (q - buf) / narrow_bytes;
+#else
+      nchars = q - buf;
+#endif
+
+      TREE_TYPE (value)
+	= build_array_type (char_type,
+			    build_index_type (build_int_2 (nchars - 1, 0)));
     }
 
   return value;

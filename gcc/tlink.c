@@ -650,7 +650,7 @@ scan_linker_output (fname)
       if (! sym && ! end)
 	/* Try a mangled name in quotes.  */
 	{
-	  const char *oldq = q+1;
+	  char *oldq = q+1;
 	  demangled *dem = 0;
 	  q = 0;
 
@@ -755,3 +755,4 @@ do_tlink (ld_argv, object_lst)
       collect_exit (exit);
     }
 }
+

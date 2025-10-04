@@ -422,11 +422,11 @@ static void emul	PARAMS ((const UEMUSHORT *, const UEMUSHORT *,
 				 UEMUSHORT *));
 static void e53toe	PARAMS ((const UEMUSHORT *, UEMUSHORT *));
 static void e64toe	PARAMS ((const UEMUSHORT *, UEMUSHORT *));
-#if (INTEL_EXTENDED_IEEE_FORMAT == 0)
+#if MAX_LONG_DOUBLE_TYPE_SIZE == 128 && (INTEL_EXTENDED_IEEE_FORMAT == 0)
 static void e113toe	PARAMS ((const UEMUSHORT *, UEMUSHORT *));
 #endif
 static void e24toe	PARAMS ((const UEMUSHORT *, UEMUSHORT *));
-#if (INTEL_EXTENDED_IEEE_FORMAT == 0)
+#if MAX_LONG_DOUBLE_TYPE_SIZE == 128 && (INTEL_EXTENDED_IEEE_FORMAT == 0)
 static void etoe113	PARAMS ((const UEMUSHORT *, UEMUSHORT *));
 static void toe113	PARAMS ((UEMUSHORT *, UEMUSHORT *));
 #endif
@@ -458,7 +458,7 @@ static void etoasc	PARAMS ((const UEMUSHORT *, char *, int));
 static void asctoe24	PARAMS ((const char *, UEMUSHORT *));
 static void asctoe53	PARAMS ((const char *, UEMUSHORT *));
 static void asctoe64	PARAMS ((const char *, UEMUSHORT *));
-#if (INTEL_EXTENDED_IEEE_FORMAT == 0)
+#if MAX_LONG_DOUBLE_TYPE_SIZE == 128 && (INTEL_EXTENDED_IEEE_FORMAT == 0)
 static void asctoe113	PARAMS ((const char *, UEMUSHORT *));
 #endif
 static void asctoe	PARAMS ((const char *, UEMUSHORT *));
@@ -531,7 +531,7 @@ endian (e, x, mode)
       switch (mode)
 	{
 	case TFmode:
-#if (INTEL_EXTENDED_IEEE_FORMAT == 0)
+#if MAX_LONG_DOUBLE_TYPE_SIZE == 128 && (INTEL_EXTENDED_IEEE_FORMAT == 0)
 	  /* Swap halfwords in the fourth long.  */
 	  th = (unsigned long) e[6] & 0xffff;
 	  t = (unsigned long) e[7] & 0xffff;
@@ -582,7 +582,7 @@ endian (e, x, mode)
       switch (mode)
 	{
 	case TFmode:
-#if (INTEL_EXTENDED_IEEE_FORMAT == 0)
+#if MAX_LONG_DOUBLE_TYPE_SIZE == 128 && (INTEL_EXTENDED_IEEE_FORMAT == 0)
 	  /* Pack the fourth long.  */
 	  th = (unsigned long) e[7] & 0xffff;
 	  t = (unsigned long) e[6] & 0xffff;
@@ -783,7 +783,7 @@ ereal_atof (s, t)
       break;
 
     case TFmode:
-#if (INTEL_EXTENDED_IEEE_FORMAT == 0)
+#if MAX_LONG_DOUBLE_TYPE_SIZE == 128 && (INTEL_EXTENDED_IEEE_FORMAT == 0)
       asctoe113 (s, tem);
       e113toe (tem, e);
       break;
@@ -930,7 +930,7 @@ ereal_from_int (d, i, j, mode)
       break;
 
     case 128:
-#if (INTEL_EXTENDED_IEEE_FORMAT == 0)
+#if MAX_LONG_DOUBLE_TYPE_SIZE == 128 && (INTEL_EXTENDED_IEEE_FORMAT == 0)
       etoe113 (dg, df);
       e113toe (df, dg);
 #else
@@ -991,7 +991,7 @@ ereal_from_uint (d, i, j, mode)
       break;
 
     case 128:
-#if (INTEL_EXTENDED_IEEE_FORMAT == 0)
+#if MAX_LONG_DOUBLE_TYPE_SIZE == 128 && (INTEL_EXTENDED_IEEE_FORMAT == 0)
       etoe113 (dg, df);
       e113toe (df, dg);
 #else
@@ -1135,7 +1135,7 @@ real_value_truncate (mode, arg)
   switch (mode)
     {
     case TFmode:
-#if (INTEL_EXTENDED_IEEE_FORMAT == 0)
+#if MAX_LONG_DOUBLE_TYPE_SIZE == 128 && (INTEL_EXTENDED_IEEE_FORMAT == 0)
       etoe113 (e, t);
       e113toe (t, t);
       break;
@@ -1282,7 +1282,7 @@ etartdouble (r, l)
   UEMUSHORT e[NE];
 
   GET_REAL (&r, e);
-#if INTEL_EXTENDED_IEEE_FORMAT == 0
+#if MAX_LONG_DOUBLE_TYPE_SIZE == 128 && INTEL_EXTENDED_IEEE_FORMAT == 0
   etoe113 (e, e);
 #else
   etoe64 (e, e);
@@ -3418,7 +3418,7 @@ bigend_nan:
     *q++ = *p++;
 }
 
-#if (INTEL_EXTENDED_IEEE_FORMAT == 0)
+#if MAX_LONG_DOUBLE_TYPE_SIZE == 128 && (INTEL_EXTENDED_IEEE_FORMAT == 0)
 /* Convert 128-bit long double precision float PE to e type Y.  */
 
 static void
@@ -3619,7 +3619,7 @@ e24toe (pe, y)
 #endif /* not IBM */
 }
 
-#if (INTEL_EXTENDED_IEEE_FORMAT == 0)
+#if MAX_LONG_DOUBLE_TYPE_SIZE == 128 && (INTEL_EXTENDED_IEEE_FORMAT == 0)
 /* Convert e-type X to IEEE 128-bit long double format E.  */
 
 static void
@@ -5283,7 +5283,7 @@ asctoe64 (s, y)
   asctoeg (s, y, 64);
 }
 
-#if (INTEL_EXTENDED_IEEE_FORMAT == 0)
+#if MAX_LONG_DOUBLE_TYPE_SIZE == 128 && (INTEL_EXTENDED_IEEE_FORMAT == 0)
 /* Convert ASCII string S to 128-bit long double Y.  */
 
 static void
@@ -5694,7 +5694,7 @@ read_expnt:
     case 64:
       toe64 (yy, y);
       break;
-#if (INTEL_EXTENDED_IEEE_FORMAT == 0)
+#if MAX_LONG_DOUBLE_TYPE_SIZE == 128 && (INTEL_EXTENDED_IEEE_FORMAT == 0)
     case 113:
       toe113 (yy, y);
       break;
@@ -6505,7 +6505,8 @@ pdp10toe (d, e, mode)
      enum machine_mode mode;
 {
   unsigned EMUSHORT y[NI];
-
+  unsigned EMUSHORT tmp[5];
+  const unsigned EMUSHORT *p;
   /* Short-circuit the zero case. */
   if (d[0] == 0x0000
       && d[1] == 0x0000
@@ -6519,19 +6520,35 @@ pdp10toe (d, e, mode)
     }
 
   ecleaz (y);			/* start with a zero */
+  p = d;
   if (d[0] & (unsigned int) 0x8000)
     {
-      pdp10negate (d, mode);
+      tmp[0] = d[0];
+      tmp[1] = d[1];
+      tmp[2] = d[2];
+      if (mode == SFmode)
+	{
+	  tmp[3] = 0;
+	  tmp[4] = 0;
+	}
+      else
+	{
+	  tmp[3] = d[3];
+	  tmp[4] = d[4];
+	}
+
+      pdp10negate (tmp, mode);
+      p = tmp;
       y[0] = 0xffff;		/* fill in our sign */
     }
 
   /* Exponent */
-  y[1] = (d[0] >> 7) - 0201 + EXONE;
+  y[1] = (p[0] >> 7) - 0201 + EXONE;
 
   /* Now do the high order mantissa. */
-  y[M] = d[0] & 0x7f;
-  y[M+1] = d[1];
-  y[M+2] = d[2] & 0xf000;
+  y[M] = p[0] & 0x7f;
+  y[M+1] = p[1];
+  y[M+2] = p[2] & 0xf000;
   if (mode == SFmode)
     {
       y[M+3] = 0;
@@ -6542,9 +6559,9 @@ pdp10toe (d, e, mode)
     {
       /* Fill in the rest of our mantissa. */
       eshift (y, -1);
-      y[M+2] |= d[2] & 0x07ff;
-      y[M+3] = d[3];
-      y[M+4] = d[4] & 0xff00;
+      y[M+2] |= p[2] & 0x07ff;
+      y[M+3] = p[3];
+      y[M+4] = p[4] & 0xff00;
       eshift (y, -6);
     }
 
@@ -6702,7 +6719,7 @@ make_nan (nan, sign, mode)
    used like NaN's, but probably not in the same way as IEEE.  */
 #if !defined(DEC) && !defined(IBM) && !defined(C4X) && !defined(PDP10)
     case TFmode:
-#if (INTEL_EXTENDED_IEEE_FORMAT == 0)
+#if MAX_LONG_DOUBLE_TYPE_SIZE == 128 && (INTEL_EXTENDED_IEEE_FORMAT == 0)
       n = 8;
       if (REAL_WORDS_BIG_ENDIAN)
 	p = TFbignan;
@@ -7370,7 +7387,7 @@ switch (GET_MODE_BITSIZE (mode))
 #endif
 
   case 128:
-#if (INTEL_EXTENDED_IEEE_FORMAT == 0)
+#if MAX_LONG_DOUBLE_TYPE_SIZE == 128 && (INTEL_EXTENDED_IEEE_FORMAT == 0)
     return 113;
 #else
     return 64;

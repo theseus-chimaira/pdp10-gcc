@@ -2026,15 +2026,59 @@ fixup_var_refs_1 (var, promoted_mode, loc, insn, replacements, no_share)
 	      HOST_WIDE_INT ps;
 	      rtx seq, reg;
 
-	      if (! TARGET_EXTENDED)
+	      /* Build a byte pointer for the sub-word stack slot.
+		 Extended targets can use the compact OWGBP selector
+		 encoding in the PS field; unextended PDP-6/KA10 targets
+		 need an ordinary local byte-pointer PS field.  */
+	      if (bitpos < 0 || bitpos + bitsize > 36
+		  || bitpos % bitsize != 0)
 		abort ();
 
-	      if (bitsize == 9)
-		ps = (070 + bitpos / 9) << 6;
-	      else if (bitsize == 18)
-		ps = (075 + bitpos / 18) << 6;
+	      if (TARGET_EXTENDED)
+		{
+		  int base;
+
+		  switch (bitsize)
+		    {
+		    case 6:
+		      base = 046;
+		      break;
+		    case 7:
+		      base = 062;
+		      break;
+		    case 8:
+		      base = 055;
+		      break;
+		    case 9:
+		      base = 070;
+		      break;
+		    case 18:
+		      base = 075;
+		      break;
+		    default:
+		      abort ();
+		    }
+
+		  ps = (base + bitpos / bitsize) << 6;
+		}
 	      else
-		abort ();
+		{
+		  switch (bitsize)
+		    {
+		    case 6:
+		    case 7:
+		    case 8:
+		    case 9:
+		    case 18:
+		      break;
+		    default:
+		      abort ();
+		    }
+
+		  /* Local byte pointer: P,,S with P naming the high bit
+		     of the byte, encoded as (P << 6) + S.  */
+		  ps = ((36 - bitsize - bitpos) << 6) + bitsize;
+		}
 
 	      start_sequence ();
 	      emit_move_insn (tmp, XEXP (XEXP (sub, 0), 0));

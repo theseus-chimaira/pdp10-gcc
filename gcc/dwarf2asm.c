@@ -42,7 +42,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 /* Output an unaligned integer with the given value and size.  Prefer not
    to print a newline, since the caller may want to add a comment.  */
 
-char *dw2_assemble_string[10];
+const char *dw2_assemble_string[10];
 int dw2_assemble_integer_size[10];
 rtx dw2_assemble_integer_x[10];
 int dw2_assemble_integer_n = 0;

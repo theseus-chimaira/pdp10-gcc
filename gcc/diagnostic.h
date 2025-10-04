@@ -318,3 +318,4 @@ extern void record_last_error_function	PARAMS ((void));
 extern void report_problematic_module	PARAMS ((output_buffer *));     
 
 #endif /* ! GCC_DIAGNOSTIC_H */
+

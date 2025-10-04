@@ -74,6 +74,18 @@ static int spelling_length		PARAMS ((void));
 static char *print_spelling		PARAMS ((char *));
 static void warning_init		PARAMS ((const char *));
 static tree digest_init			PARAMS ((tree, tree, int));
+#ifdef __PDP10_H__
+#ifndef PDP10_STRING_CST_9BIT_P
+#define PDP10_STRING_CST_9BIT_P(NODE) TREE_LANG_FLAG_1 (NODE)
+#endif
+static HOST_WIDE_INT pdp10_string_cst_logical_length PARAMS ((tree));
+static void pdp10_complete_array_type_from_string PARAMS ((tree, tree));
+static tree pdp10_asm_string PARAMS ((tree));
+static void pdp10_normalize_asm_operands PARAMS ((tree));
+static void pdp10_normalize_asm_clobbers PARAMS ((tree));
+static int pdp10_preserve_component_address_p PARAMS ((tree));
+static int pdp10_preserve_array_ref_address_p PARAMS ((tree));
+#endif
 static void output_init_element		PARAMS ((tree, tree, tree, int));
 static void output_pending_init_elements PARAMS ((int));
 static int set_designator		PARAMS ((int));
@@ -2449,7 +2461,7 @@ build_binary_op (code, orig_op0, orig_op1, convert_p)
 	     pass the copies by reference, then copy them back afterward.  */
 	  tree xop0 = op0, xop1 = op1, xresult_type = result_type;
 	  enum tree_code xresultcode = resultcode;
-	  tree val 
+	  tree val
 	    = shorten_compare (&xop0, &xop1, &xresult_type, &xresultcode);
 
 	  if (val != 0)
@@ -2467,11 +2479,11 @@ build_binary_op (code, orig_op0, orig_op1, convert_p)
 	      int unsignedp0, unsignedp1;
 	      tree primop0 = get_narrower (op0, &unsignedp0);
 	      tree primop1 = get_narrower (op1, &unsignedp1);
+	      tree warn_op0 = orig_op0;
+	      tree warn_op1 = orig_op1;
 
-	      xop0 = orig_op0;
-	      xop1 = orig_op1;
-	      STRIP_TYPE_NOPS (xop0);
-	      STRIP_TYPE_NOPS (xop1);
+	      STRIP_TYPE_NOPS (warn_op0);
+	      STRIP_TYPE_NOPS (warn_op1);
 
 	      /* Give warnings for comparisons between signed and unsigned
 		 quantities that may fail. 
@@ -2492,9 +2504,9 @@ build_binary_op (code, orig_op0, orig_op1, convert_p)
 		  tree sop, uop;
 
 		  if (op0_signed)
-		    sop = xop0, uop = xop1;
+		    sop = warn_op0, uop = warn_op1;
 		  else
-		    sop = xop1, uop = xop0;
+		    sop = warn_op1, uop = warn_op0;
 
 		  /* Do not warn if the signed quantity is an
 		     unsuffixed integer literal (or some static
@@ -2696,6 +2708,81 @@ pointer_diff (op0, op1)
     TREE_CONSTANT (folded) = TREE_CONSTANT (op0) & TREE_CONSTANT (op1);
   return folded;
 }
+
+#ifdef __PDP10_H__
+/* Return nonzero if taking the address of COMPONENT_REF ARG must preserve
+   the component reference until RTL expansion.
+
+   The generic C front end normally lowers &record.field to
+
+       (type *) (&record + byte_position (field))
+
+   which is fine on ordinary byte-addressed machines.  It is wrong for
+   PDP-10 sub-word byte fields, because byte_position is expressed in
+   GCC storage units, not in PDP-10 hardware byte-pointer position bits.
+   For example, a 6-bit field at bit position 30 in a 36-bit word has
+   byte_position 3 when BITS_PER_UNIT is 9, but it must remain the sixth
+   6-bit byte in the original word, not become a pointer advanced by
+   three 6-bit bytes from the start of the object.
+
+   Keep such component addresses in tree form so the PDP-10 expander can
+   build the correct P,S byte pointer from the actual FIELD_DECL.  */
+static int
+pdp10_preserve_component_address_p (arg)
+     tree arg;
+{
+  tree field;
+  tree field_type;
+  int bytesize;
+
+  if (TREE_CODE (arg) != COMPONENT_REF)
+    return 0;
+
+  field = TREE_OPERAND (arg, 1);
+  if (DECL_C_BIT_FIELD (field))
+    return 0;
+
+  field_type = TREE_TYPE (field);
+  if (field_type == error_mark_node || TYPE_SIZE (field_type) == NULL_TREE)
+    return 0;
+
+  bytesize = pdp10_bytesize (field_type);
+
+  /* Preserve byte sizes that the PDP-10 local byte-pointer machinery can
+     represent directly.  pdp10_bytesize normalizes 16-bit objects to 18-bit
+     halfword pointers and 32-bit objects to word pointers, so this also
+     covers short16/ushort16 component arrays through the 18-bit path.  */
+  return (bytesize == 6
+	  || bytesize == 7
+	  || bytesize == 8
+	  || bytesize == 9
+	  || bytesize == 18);
+}
+
+/* Return nonzero if ADDR_EXPR of ARRAY_REF ARG must not be folded early
+   to base-plus-index.  When the array object is itself a COMPONENT_REF,
+   the field bit position is still needed by the PDP-10 expander to build
+   the right local byte pointer.  Folding &p->field[i] to p->field + i
+   first can force expansion of the array component as a value, which is
+   wrong for sub-word fields.  */
+static int
+pdp10_preserve_array_ref_address_p (arg)
+     tree arg;
+{
+  tree array;
+
+  if (TREE_CODE (arg) != ARRAY_REF)
+    return 0;
+
+  array = TREE_OPERAND (arg, 0);
+  while (TREE_CODE (array) == NON_LVALUE_EXPR)
+    array = TREE_OPERAND (array, 0);
+
+  return (TREE_CODE (array) == COMPONENT_REF
+	  && pdp10_preserve_component_address_p (array));
+}
+#endif
+
 
 /* Construct and perhaps optimize a tree representation
    for a unary operation.  CODE, a tree_code, specifies the operation
@@ -2993,17 +3080,11 @@ build_unary_op (code, xarg, flag)
     case ADDR_EXPR:
       /* Note that this operation never does default_conversion.  */
 
-      /* PDP-10: can't take the address of scalar 7- or 8-bit bytes.
-	 Also warn for address taken of 9-bit bytes.  */
-      if (TREE_CODE (arg) == VAR_DECL
-	  /* TODO: signal error when TYPE_SIZE() is NULL?  This
-	     happens when the type isn't completely defined.  */
-	  && TYPE_SIZE (TREE_TYPE (arg)) != NULL_TREE
-	  && (tree_low_cst (TYPE_SIZE (TREE_TYPE (arg)), 1) == 7
-	      || tree_low_cst (TYPE_SIZE (TREE_TYPE (arg)), 1) == 8
-	      || tree_low_cst (TYPE_SIZE (TREE_TYPE (arg)), 1) == 9))
-	warning ("address of scalar %d-bit byte taken",
-		 tree_low_cst (TYPE_SIZE (TREE_TYPE (arg)), 1));
+      /* PDP-10: older versions warned when taking the address of
+	 scalar 7- or 8-bit byte objects.  That was a temporary guard
+	 while local byte-pointer constants and conversions for those
+	 sizes were incomplete.  The backend now represents such addresses
+	 with ordinary local byte pointers, so do not warn here.  */
 
       /* Let &* cancel out to simplify resulting code.  */
       if (TREE_CODE (arg) == INDIRECT_REF)
@@ -3014,8 +3095,13 @@ build_unary_op (code, xarg, flag)
 	  return TREE_OPERAND (arg, 0);
 	}
 
-      /* For &x[y], return x+y */
-      if (TREE_CODE (arg) == ARRAY_REF)
+      /* For &x[y], return x+y.  PDP-10 keeps selected component-array
+	 addresses intact so the field bit position reaches RTL expansion.  */
+      if (TREE_CODE (arg) == ARRAY_REF
+#ifdef __PDP10_H__
+	  && !pdp10_preserve_array_ref_address_p (arg)
+#endif
+	  )
 	{
 	  if (!c_mark_addressable (TREE_OPERAND (arg, 0)))
 	    return error_mark_node;
@@ -3091,6 +3177,11 @@ build_unary_op (code, xarg, flag)
 		return error_mark_node;
 	      }
 
+#ifdef __PDP10_H__
+	    if (pdp10_preserve_component_address_p (arg))
+	      addr = build1 (code, argtype, arg);
+	    else
+#endif
 	    {
 	      tree byte_pos = byte_position (field);
 	      tree size_unit, size_bits;
@@ -4735,6 +4826,128 @@ warning_init (msgid)
   if (*ofwhat)
     warning ("(near initialization for `%s')", ofwhat);
 }
+
+#ifdef __PDP10_H__
+/* Return the logical number of target string elements represented by STR.
+   Most STRING_CSTs use one host byte per target element.  PDP-10 9-bit
+   narrow strings use two host bytes per target element so octal escapes
+   in the range 0400..0777 do not lose their high bit in host char storage.
+
+   This is a front-end size/accounting helper.  It must agree with the
+   PDP-10 string output path in varasm.c, but it intentionally does not
+   emit anything.  */
+
+static HOST_WIDE_INT
+pdp10_string_cst_logical_length (str)
+     tree str;
+{
+  HOST_WIDE_INT len = TREE_STRING_LENGTH (str);
+
+  if (PDP10_STRING_CST_9BIT_P (str))
+    len /= 2;
+
+  return len;
+}
+
+/* Complete an unsized character array from a STRING_CST using the logical
+   target element count, not the host storage byte count.  Without this,
+   static uchar9 a[] = "..." is given twice the required object size when
+   the string literal uses the PDP-10 two-host-byte representation.  */
+
+static void
+pdp10_complete_array_type_from_string (type, str)
+     tree type, str;
+{
+  HOST_WIDE_INT len;
+
+  if (TREE_CODE (type) != ARRAY_TYPE || TYPE_DOMAIN (type) != 0)
+    return;
+
+  len = pdp10_string_cst_logical_length (str);
+  TYPE_DOMAIN (type) = build_index_type (build_int_2 (len - 1, 0));
+  layout_type (type);
+}
+
+/* Return STR in ordinary host-byte form for compiler metadata uses.
+   PDP-10 narrow string literals may use a two-host-byte representation
+   so that 9-bit target characters survive lexing.  That is correct for
+   C object data, but asm templates, constraints, operand names, and
+   clobber names are interpreted by the compiler itself using host string
+   routines such as strchr and strlen.  Decode those metadata strings at
+   the front-end boundary instead of teaching every later asm path about
+   PDP-10 string storage.  */
+
+static tree
+pdp10_asm_string (str)
+     tree str;
+{
+  const unsigned char *p;
+  char *buf;
+  HOST_WIDE_INT in_len, out_len, i, j;
+  tree out;
+
+  if (str == NULL_TREE || TREE_CODE (str) != STRING_CST)
+    return str;
+
+  if (TREE_CHAIN (str))
+    str = combine_strings (str);
+
+  if (!PDP10_STRING_CST_9BIT_P (str))
+    return str;
+
+  in_len = TREE_STRING_LENGTH (str);
+  out_len = (in_len + 1) / 2;
+  p = (const unsigned char *) TREE_STRING_POINTER (str);
+  buf = (char *) alloca (out_len ? out_len : 1);
+
+  for (i = 0, j = 0; i + 1 < in_len; i += 2)
+    buf[j++] = p[i + 1];
+
+  /* A well-formed PDP-10 9-bit STRING_CST has an even host length,
+     including the two-byte terminating zero.  Be conservative if an
+     older or malformed node reaches us.  */
+  if (i < in_len)
+    buf[j++] = p[i];
+
+  out = build_string (j, buf);
+  TREE_TYPE (out)
+    = build_array_type (char_type_node,
+			build_index_type (build_int_2 (j ? j - 1 : 0, 0)));
+  return out;
+}
+
+/* Decode asm operand constraints.  Each operand list node has the
+   expression in TREE_VALUE and a TREE_LIST in TREE_PURPOSE; the latter
+   carries the optional operand name in TREE_PURPOSE and the constraint
+   STRING_CST in TREE_VALUE.  */
+
+static void
+pdp10_normalize_asm_operands (operands)
+     tree operands;
+{
+  tree t;
+
+  for (t = operands; t; t = TREE_CHAIN (t))
+    {
+      tree spec = TREE_PURPOSE (t);
+
+      if (spec != NULL_TREE && TREE_CODE (spec) == TREE_LIST)
+	TREE_VALUE (spec) = pdp10_asm_string (TREE_VALUE (spec));
+    }
+}
+
+/* Decode asm clobber names, which are a TREE_LIST of STRING_CST nodes.  */
+
+static void
+pdp10_normalize_asm_clobbers (clobbers)
+     tree clobbers;
+{
+  tree t;
+
+  for (t = clobbers; t; t = TREE_CHAIN (t))
+    TREE_VALUE (t) = pdp10_asm_string (TREE_VALUE (t));
+}
+#endif
 
 /* Digest the parser output INIT as an initializer for type TYPE.
    Return a C expression of type TYPE to represent the initial value.
@@ -4780,7 +4993,12 @@ digest_init (type, init, require_constant)
 	{
 	  if (comptypes (TYPE_MAIN_VARIANT (TREE_TYPE (inside_init)),
 			 TYPE_MAIN_VARIANT (type)))
-	    return inside_init;
+	    {
+#ifdef __PDP10_H__
+	      pdp10_complete_array_type_from_string (type, inside_init);
+#endif
+	      return inside_init;
+	    }
 
 	  if ((TYPE_MAIN_VARIANT (TREE_TYPE (TREE_TYPE (inside_init)))
 	       != char_type_node)
@@ -4801,6 +5019,9 @@ digest_init (type, init, require_constant)
 	      return error_mark_node;
 	    }
 
+#ifdef __PDP10_H__
+	  pdp10_complete_array_type_from_string (type, inside_init);
+#endif
 	  TREE_TYPE (inside_init) = type;
 	  if (TYPE_DOMAIN (type) != 0
 	      && TYPE_SIZE (type) != 0
@@ -4809,7 +5030,11 @@ digest_init (type, init, require_constant)
 		 because it's ok to ignore the terminating null char
 		 that is counted in the length of the constant.  */
 	      && 0 > compare_tree_int (TYPE_SIZE_UNIT (type),
+#ifdef __PDP10_H__
+				       pdp10_string_cst_logical_length (inside_init)
+#else
 				       TREE_STRING_LENGTH (inside_init)
+#endif
 				       - ((TYPE_PRECISION (typ1)
 					   != TYPE_PRECISION (char_type_node))
 					  ? (TYPE_PRECISION (wchar_type_node)
@@ -6934,6 +7159,9 @@ simple_asm_stmt (expr)
 
       if (TREE_CHAIN (expr))
 	expr = combine_strings (expr);
+#ifdef __PDP10_H__
+      expr = pdp10_asm_string (expr);
+#endif
       stmt = add_stmt (build_stmt (ASM_STMT, NULL_TREE, expr,
 				   NULL_TREE, NULL_TREE,
 				   NULL_TREE));
@@ -6965,6 +7193,12 @@ build_asm_stmt (cv_qualifier, string, outputs, inputs, clobbers)
       error ("asm template is not a string constant");
       return NULL_TREE;
     }
+#ifdef __PDP10_H__
+  string = pdp10_asm_string (string);
+  pdp10_normalize_asm_operands (outputs);
+  pdp10_normalize_asm_operands (inputs);
+  pdp10_normalize_asm_clobbers (clobbers);
+#endif
 
   if (cv_qualifier != NULL_TREE
       && cv_qualifier != ridpointers[(int) RID_VOLATILE])

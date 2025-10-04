@@ -23,6 +23,17 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #define GCC_RTL_H
 
 struct function;
+struct rtx_def;
+struct rtvec_def;
+union tree_node;
+
+/* rtl.h uses these pointer typedefs before the complete structures are
+   defined below.  Older host compiler modes tolerated more implicit typing;
+   modern GCC correctly rejects the forward uses.  Keep the declarations here
+   so generator files such as gengenrtl.c can include rtl.h directly.  */
+typedef struct rtx_def *rtx;
+typedef struct rtvec_def *rtvec;
+typedef union tree_node *tree;
 
 #include "machmode.h"
 
@@ -30,6 +41,17 @@ struct function;
 #undef FLOAT /* Likewise.  */
 #undef ABS /* Likewise.  */
 #undef PC /* Likewise.  */
+/* Modern host headers, libiberty headers, or ansidecl.h can define names
+   that are also RTL enum codes.  In particular ansidecl.h defines CONST.
+   If these macros are live while rtl.def is included, the enum generator is
+   corrupted.  Keep these undefined for both rtl.h's include of rtl.def and
+   generator programs that include rtl.def again after rtl.h.  */
+#undef CONST
+#undef AND
+#undef IOR
+#undef XOR
+#undef NOT
+#undef NIL
 
 /* Value used by some passes to "recognize" noop moves as valid
  instructions.  */

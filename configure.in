@@ -463,7 +463,7 @@ copy_dirs=
 
 # Handle --with-headers=XXX.  The contents of the named directory are
 # copied to $(tooldir)/sys-include.
-if [ x"${with_headers}" != x ]; then
+if [ x"${with_headers}" != x ] && [ x"${with_headers}" != xno ]; then
   if [ x${is_cross_compiler} = xno ]; then
     echo 1>&2 '***' --with-headers is only supported when cross compiling
     exit 1

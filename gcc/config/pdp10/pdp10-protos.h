@@ -46,6 +46,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 
 int		pdp10_pointer_alignment PARAMS ((rtx x));
 int		pdp10_pointer_offset PARAMS ((rtx x));
+int		pdp10_scalar_mem_p PARAMS ((rtx op));
 
 /* Run-time Target Specification.  */
 extern void	pdp10_override_options PARAMS ((void));
@@ -77,6 +78,8 @@ extern void	pdp10_output_func_prologue PARAMS ((FILE *, HOST_WIDE_INT));
 extern void	pdp10_output_func_epilogue PARAMS ((FILE *, HOST_WIDE_INT));
 extern void	pdp10_function_profiler PARAMS ((FILE *, int));
 extern int	pdp10_setup_incoming_varargs PARAMS ((CUMULATIVE_ARGS, int));
+extern enum machine_mode
+		pdp10_function_value_mode PARAMS ((tree type));
 
 /* Addressing Modes.  */
 extern int	pdp10_legitimate_address_p PARAMS ((enum machine_mode mode,
@@ -220,6 +223,9 @@ extern void	output_ascii_pseudo_op PARAMS ((FILE *stream, unsigned char *p,
 						int len));
 extern void	asm_output_ascii PARAMS ((FILE *stream, const char *ptr,
 					  int len));
+extern void	pdp10_gas_output_ascii PARAMS ((FILE *stream,
+					      const char *ptr,
+					      int len));
 extern void	macro_section_end PARAMS ((FILE *stream));
 extern void	macro_output_ascii PARAMS ((FILE *stream, const char *ptr,
 					    int len));
@@ -268,6 +274,7 @@ extern tree	char9_unsigned_type_node;
 #define pdp10_char7_unsigned_type_node \
   ((void) pdp10_build_machine_types (), char7_unsigned_type_node)
 
-extern void	pdp10_build_machine_types PARAMS ((void));
+extern void     pdp10_build_machine_types PARAMS ((void));
+extern void     pdp10_asm_output_align PARAMS ((FILE *, int));
 
 #endif /* GCC_PDP10_PROTOS_H */

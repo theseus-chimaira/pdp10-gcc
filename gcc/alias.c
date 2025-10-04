@@ -2645,11 +2645,9 @@ init_alias_analysis ()
   reg_known_value_size = maxreg;
 
   reg_known_value 
-    = (rtx *) xcalloc ((maxreg - FIRST_PSEUDO_REGISTER), sizeof (rtx))
-    - FIRST_PSEUDO_REGISTER;
+    = (rtx *) xcalloc (maxreg, sizeof (rtx));
   reg_known_equiv_p 
-    = (char*) xcalloc ((maxreg - FIRST_PSEUDO_REGISTER), sizeof (char))
-    - FIRST_PSEUDO_REGISTER;
+    = (char *) xcalloc (maxreg, sizeof (char));
 
   /* Overallocate reg_base_value to allow some growth during loop
      optimization.  Loop unrolling can create a large number of
@@ -2865,10 +2863,10 @@ init_alias_analysis ()
 void
 end_alias_analysis ()
 {
-  free (reg_known_value + FIRST_PSEUDO_REGISTER);
+  free (reg_known_value);
   reg_known_value = 0;
   reg_known_value_size = 0;
-  free (reg_known_equiv_p + FIRST_PSEUDO_REGISTER);
+  free (reg_known_equiv_p);
   reg_known_equiv_p = 0;
   if (reg_base_value)
     {
@@ -2883,3 +2881,4 @@ end_alias_analysis ()
       alias_invariant = 0;
     }
 }
+

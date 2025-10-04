@@ -392,8 +392,7 @@ static void delete_macro	 PARAMS ((HASHNODE *));
 /* First arg to v_message.  */
 enum msgtype { MT_WARNING = 0, MT_ERROR, MT_FATAL };
 static void v_message		 PARAMS ((enum msgtype mtype, int line,
-					  const char *msgid, va_list ap))
-     ATTRIBUTE_PRINTF (3, 0);
+					  const char *msgid, va_list ap));
 
 static int line_for_error	 PARAMS ((int));
 
@@ -5160,7 +5159,8 @@ static void
 make_definition (str)
      const char *str;
 {
-  char *buf, *p;
+  char *buf;
+  const char *p;
   size_t count;
 
   /* Copy the entire option so we can modify it. 

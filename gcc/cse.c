@@ -599,7 +599,7 @@ struct cse_basic_block_data
    || (GET_CODE (X) == PLUS && GET_CODE (XEXP (X, 1)) == CONST_INT \
        && (XEXP (X, 0) == frame_pointer_rtx			\
 	   || XEXP (X, 0) == hard_frame_pointer_rtx		\
-	   || ((X) == arg_pointer_rtx				\
+	   || (XEXP (X, 0) == arg_pointer_rtx			\
 	       && fixed_regs[ARG_POINTER_REGNUM])		\
 	   || XEXP (X, 0) == virtual_stack_vars_rtx		\
 	   || XEXP (X, 0) == virtual_incoming_args_rtx))	\
@@ -618,7 +618,7 @@ struct cse_basic_block_data
    || (GET_CODE (X) == PLUS && GET_CODE (XEXP (X, 1)) == CONST_INT \
        && (XEXP (X, 0) == frame_pointer_rtx			\
 	   || XEXP (X, 0) == hard_frame_pointer_rtx		\
-	   || ((X) == arg_pointer_rtx				\
+	   || (XEXP (X, 0) == arg_pointer_rtx			\
 	       && fixed_regs[ARG_POINTER_REGNUM])		\
 	   || XEXP (X, 0) == virtual_stack_vars_rtx		\
 	   || XEXP (X, 0) == virtual_incoming_args_rtx))	\
@@ -1560,10 +1560,22 @@ insert (x, classp, hash, mode)
 {
   struct table_elt *elt;
 
-  /* If X is a register and we haven't made a quantity for it,
-     something is wrong.  */
+  /* If X is a register and we haven't made a quantity for it, make one
+     here rather than aborting.  Most callers arrange this with
+     insert_regs before calling insert, but related-value insertion and
+     some target-specific address forms can expose a REG directly.  This
+     keeps CSE total over such ordinary RTL; recompute HASH because a new
+     quantity changes the hash of a REG.  */
   if (GET_CODE (x) == REG && ! REGNO_QTY_VALID_P (REGNO (x)))
-    abort ();
+    {
+      if (insert_regs (x, classp, 0))
+	{
+	  rehash_using_reg (x);
+	  hash = HASH (x, mode);
+	}
+      if (! REGNO_QTY_VALID_P (REGNO (x)))
+	abort ();
+    }
 
   /* If X is a hard register, show it is being put in the table.  */
   if (GET_CODE (x) == REG && REGNO (x) < FIRST_PSEUDO_REGISTER)
@@ -3688,12 +3700,44 @@ fold_rtx (x, insn)
 	  }
 
 	/* PDP-10: fold (mem:QI (const:SI <constant byte pointer>)) into
-	   (zero_extend:SI (mem:SI ...)).  */
+	   (zero_extract:SI (mem:SI ...)).  */
 	if (base && CONSTANT_ADDRESS_P (base)
 	    && GET_MODE_SIZE (mode) < UNITS_PER_WORD)
 	  {
-	    int ps = (offset >> 30) & 077;
-	    int pos, size, b;
+	    int ps, pos, size, b;
+
+	    size = GET_MODE_BITSIZE (mode);
+
+	    if (!TARGET_EXTENDED)
+	      {
+		HOST_WIDE_INT word_offset;
+
+		/* Local byte pointers keep the 12-bit P,S field in
+		   bits 0..11 of the left half, i.e. in bits 24..35
+		   of the 36-bit word.  The low 18 bits are the word
+		   address.  */
+		ps = (offset >> 24) & 07777;
+		if (ps == 0)
+		  return x;
+
+		size = ps & 077;
+		pos = 36 - size - (ps >> 6);
+		if (size <= 0 || pos < 0 || pos + size > 36)
+		  abort ();
+
+		word_offset = offset & 0777777;
+		word_offset ^= 0400000;
+		word_offset -= 0400000;
+
+		return gen_rtx_ZERO_EXTRACT (SImode,
+					 gen_rtx_MEM (SImode,
+						      plus_constant (base,
+							     word_offset)),
+					 GEN_INT (size),
+					 GEN_INT (pos));
+	      }
+
+	    ps = (offset >> 30) & 077;
 
 	    offset &= 07777777777;
 	    offset ^= 04000000000;
@@ -3701,11 +3745,6 @@ fold_rtx (x, insn)
 
 	    if (offset < 0)
 	      ps++;
-
-	    if (!TARGET_EXTENDED)
-	      abort ();
-
-	    size = GET_MODE_BITSIZE (mode);
 
 	    switch (ps)
 	      {

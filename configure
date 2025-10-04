@@ -613,7 +613,7 @@ else
 fi
 
 ### break up ${srcdir}/configure.in.
-case "`grep '^# per\-host:' ${srcdir}/configure.in`" in
+case "`grep '^# per-host:' ${srcdir}/configure.in`" in
 "")
         echo '***' ${srcdir}/configure.in has no \"per-host:\" line. 1>&2
 	# Check for a directory that's been converted to use autoconf since
@@ -649,7 +649,7 @@ case "`grep '^# per\-host:' ${srcdir}/configure.in`" in
 *) ;;
 esac
 
-case "`grep '^# per\-target:' ${srcdir}/configure.in`" in
+case "`grep '^# per-target:' ${srcdir}/configure.in`" in
 "")
         echo '***' ${srcdir}/configure.in has no \"per-target:\" line. 1>&2
         exit 1
@@ -675,13 +675,13 @@ trap "rm -rf Makefile.tem ${tmpdir}; exit 1" 0 1 2 15
 
 # split ${srcdir}/configure.in into common, per-host, per-target,
 # and post-target parts.  Post-target is optional.
-sed -e '/^# per\-host:/,$d' ${srcdir}/configure.in > ${tmpfile}.com
-sed -e '1,/^# per\-host:/d' -e '/^# per\-target:/,$d' ${srcdir}/configure.in > ${tmpfile}.hst
+sed -e '/^# per-host:/,$d' ${srcdir}/configure.in > ${tmpfile}.com
+sed -e '1,/^# per-host:/d' -e '/^# per-target:/,$d' ${srcdir}/configure.in > ${tmpfile}.hst
 if grep '^# post-target:' ${srcdir}/configure.in >/dev/null ; then
-  sed -e '1,/^# per\-target:/d' -e '/^# post\-target:/,$d' ${srcdir}/configure.in > ${tmpfile}.tgt
-  sed -e '1,/^# post\-target:/d' ${srcdir}/configure.in > ${tmpfile}.pos
+  sed -e '1,/^# per-target:/d' -e '/^# post-target:/,$d' ${srcdir}/configure.in > ${tmpfile}.tgt
+  sed -e '1,/^# post-target:/d' ${srcdir}/configure.in > ${tmpfile}.pos
 else
-  sed -e '1,/^# per\-target:/d' ${srcdir}/configure.in > ${tmpfile}.tgt
+  sed -e '1,/^# per-target:/d' ${srcdir}/configure.in > ${tmpfile}.tgt
   echo >${tmpfile}.pos
 fi
 

@@ -36,6 +36,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
       STMT_EXPR_NO_SCOPE (in STMT_EXPR)
    1: C_DECLARED_LABEL_FLAG (in LABEL_DECL)
       STMT_IS_FULL_EXPR_P (in _STMT)
+      PDP10_STRING_CST_9BIT_P (in STRING_CST)
    2: STMT_LINENO_FOR_FN_P (in _STMT)
    3: SCOPE_NO_CLEANUPS_P (in SCOPE_STMT)
       COMPOUND_STMT_BODY_BLOCK (in COMPOUND_STMT)
@@ -240,6 +241,13 @@ extern tree c_global_trees[CTI_MAX];
 /* Flag strings given by __FUNCTION__ and __PRETTY_FUNCTION__ for a
    warning if they undergo concatenation.  */
 #define C_ARTIFICIAL_STRING_P(NODE) TREE_LANG_FLAG_0 (NODE)
+
+#ifdef __PDP10_H__
+/* Narrow PDP-10 string constants whose elements are stored as two host
+   bytes, high byte first, so 9-bit character values 0400..0777 survive
+   the host char type.  This is storage metadata, not a type qualifier.  */
+#define PDP10_STRING_CST_9BIT_P(NODE) TREE_LANG_FLAG_1 (NODE)
+#endif
 
 typedef enum c_language_kind
 {

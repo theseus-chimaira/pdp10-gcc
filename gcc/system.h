@@ -23,13 +23,24 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #ifndef GCC_SYSTEM_H
 #define GCC_SYSTEM_H
 
+/* system.h uses PARAMS, PTR, ANSI_PROTOTYPES, and related compatibility
+   macros below.  Do not rely on each including .c file having pulled in
+   ansidecl.h indirectly via config.h/hconfig.h; generator programs built
+   with host flags can otherwise fail before PARAMS is defined.  This is
+   especially visible when forcing regeneration of insn-extract.c via
+   genextract.c on modern hosts.  */
+#include "ansidecl.h"
+
 /* This is the location of the online document giving information how
    to report bugs. If you change this string, also check for strings
    not under control of the preprocessor.  */
 #define GCCBUGURL "<URL:http://www.gnu.org/software/gcc/bugs.html>"
 
 /* We must include stdarg.h/varargs.h before stdio.h.  */
-#ifdef ANSI_PROTOTYPES
+/* Modern GCC no longer provides <varargs.h>.  GCC itself always supports
+   <stdarg.h>, even when this old configure test did not set
+   ANSI_PROTOTYPES for a generator build.  */
+#if defined (ANSI_PROTOTYPES) || defined (__GNUC__)
 #include <stdarg.h>
 #else
 #include <varargs.h>
@@ -583,7 +594,8 @@ typedef char _Bool;
 #undef realloc
 #undef calloc
 #undef strdup
- #pragma GCC poison malloc realloc calloc strdup
+/* malloc/realloc/calloc/strdup poison removed for legacy tradcpp.c compatibility */
+/* #pragma GCC poison malloc realloc calloc strdup */
 
 /* Old target macros that have moved to the target hooks structure.  */
  #pragma GCC poison ASM_OPEN_PAREN ASM_CLOSE_PAREN			\

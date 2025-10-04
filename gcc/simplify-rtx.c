@@ -56,7 +56,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
    || (GET_CODE (X) == PLUS && GET_CODE (XEXP (X, 1)) == CONST_INT \
        && (XEXP (X, 0) == frame_pointer_rtx			\
 	   || XEXP (X, 0) == hard_frame_pointer_rtx		\
-	   || ((X) == arg_pointer_rtx				\
+	   || (XEXP (X, 0) == arg_pointer_rtx			\
 	       && fixed_regs[ARG_POINTER_REGNUM])		\
 	   || XEXP (X, 0) == virtual_stack_vars_rtx		\
 	   || XEXP (X, 0) == virtual_incoming_args_rtx))	\
@@ -75,7 +75,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
    || (GET_CODE (X) == PLUS && GET_CODE (XEXP (X, 1)) == CONST_INT \
        && (XEXP (X, 0) == frame_pointer_rtx			\
 	   || XEXP (X, 0) == hard_frame_pointer_rtx		\
-	   || ((X) == arg_pointer_rtx				\
+	   || (XEXP (X, 0) == arg_pointer_rtx			\
 	       && fixed_regs[ARG_POINTER_REGNUM])		\
 	   || XEXP (X, 0) == virtual_stack_vars_rtx		\
 	   || XEXP (X, 0) == virtual_incoming_args_rtx))	\

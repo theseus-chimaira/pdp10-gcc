@@ -1,0 +1,16 @@
+# DAIMOS/PDP-10 bare target make fragment.
+#
+# Build libgcc for the oldest useful baseline.  pdp10-dec-none must not
+# inherit TOPS-20/PIC/libc assumptions: early DAIMOS has no target libc,
+# no real dynamic loader, and PDP-6/166-safe code should run upward on
+# later PDP-10-class machines.
+
+TARGET_LIBGCC2_CFLAGS = -fomit-frame-pointer -DUNDERSCORE=. -Dinhibit_libc -march=166 -mtune=166 -munextended -mno-string -mlong-long-71bit
+LIBGCC2_DEBUG_CFLAGS = -g0
+
+# Early DAIMOS baseline has no floating-point runtime yet.  Do not build
+# libgcc2 floating conversion helpers; they would require target FP codegen
+# and assembler FP opcode support which are deliberately deferred.
+LIB2FUNCS_EXCLUDE = _floatdidf _floatdisf _fixunsdfsi _fixunssfsi \
+  _fixunsdfdi _fixdfdi _fixunssfdi _fixsfdi _fixxfdi _fixunsxfdi \
+  _floatdixf _fixunsxfsi _fixtfdi _fixunstfdi _floatditf

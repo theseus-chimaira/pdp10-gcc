@@ -2686,6 +2686,7 @@ pdp10-*-tops20*)
 		exit 1
 		;;
 	esac
+	tm_file="$tm_file pdp10/tops20.h"
 	xm_file="pdp10/xm-tops20.h $xm_file"
 	tmake_file=pdp10/t-tops20
 	xmake_file=pdp10/x-tops20
@@ -2695,6 +2696,11 @@ pdp10-*-its*)
 	tm_file="pdp10/midas.h pdp10/macro.h $tm_file"
 	tmake_file=pdp10/t-tops20
 	xmake_file=pdp10/x-its
+	float_format=pdp10
+	;;
+pdp10-*-none*)
+	tm_file="pdp10/gas.h $tm_file"
+	tmake_file=pdp10/t-none
 	float_format=pdp10
 	;;
 pdp11-*-bsd)

@@ -1,0 +1,9 @@
+gcc/c-lex.c
+gcc/c-common.c
+gcc/c-common.h
+gcc/c-typeck.c
+gcc/stmt.c
+gcc/recog.c
+gcc/tree.h
+gcc/config/pdp10/pdp10.h
+gcc/config/pdp10/pdp10.c

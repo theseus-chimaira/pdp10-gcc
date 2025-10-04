@@ -556,6 +556,20 @@ fname_decl (rid, id)
   return decl;
 }
 
+#ifdef __PDP10_H__
+/* Return the number of host bytes used to store one narrow STRING_CST
+   element.  This is normally one, but PDP-10 9-bit strings use two
+   host bytes per element so octal escapes in the range 0400..0777 are
+   not truncated by the host char type.  */
+
+static int
+pdp10_string_cst_unit_bytes (t)
+     tree t;
+{
+  return PDP10_STRING_CST_9BIT_P (t) ? 2 : 1;
+}
+#endif
+
 /* Given a chain of STRING_CST nodes,
    concatenate them into one STRING_CST
    and give it a suitable array-of-chars data type.  */
@@ -569,6 +583,9 @@ combine_strings (strings)
   int wide_length = 0;
   int wide_flag = 0;
   int wchar_bytes = TYPE_PRECISION (wchar_type_node) / BITS_PER_UNIT;
+#ifdef __PDP10_H__
+  int narrow_bytes = 1;
+#endif
   int nchars;
   const int nchars_max = flag_isoc99 ? 4095 : 509;
 
@@ -576,6 +593,11 @@ combine_strings (strings)
     {
       /* More than one in the chain, so concatenate.  */
       char *p, *q;
+
+#ifdef __PDP10_H__
+      narrow_bytes = pdp10_string_cst_unit_bytes (strings);
+      length = narrow_bytes;
+#endif
 
       /* Don't include the \0 at the end of each substring,
 	 except for the last one.
@@ -589,7 +611,12 @@ combine_strings (strings)
 	    }
 	  else
 	    {
+#ifdef __PDP10_H__
+	      length += (TREE_STRING_LENGTH (t)
+			 - pdp10_string_cst_unit_bytes (t));
+#else
 	      length += (TREE_STRING_LENGTH (t) - 1);
+#endif
 	      if (C_ARTIFICIAL_STRING_P (t) && !in_system_header)
 		warning ("concatenation of string literals with __FUNCTION__ is deprecated.  This feature will be removed in future"); 
 	    }
@@ -611,7 +638,13 @@ combine_strings (strings)
 	{
 	  int len = (TREE_STRING_LENGTH (t)
 		     - ((TREE_TYPE (t) == wchar_array_type_node)
-			? wchar_bytes : 1));
+			? wchar_bytes
+#ifdef __PDP10_H__
+			: pdp10_string_cst_unit_bytes (t)
+#else
+			: 1
+#endif
+			));
 	  if ((TREE_TYPE (t) == wchar_array_type_node) == wide_flag)
 	    {
 	      memcpy (q, TREE_STRING_POINTER (t), len);
@@ -620,17 +653,36 @@ combine_strings (strings)
 	  else
 	    {
 	      int i, j;
-	      for (i = 0; i < len; i++)
+#ifdef __PDP10_H__
+	      int unit = pdp10_string_cst_unit_bytes (t);
+#endif
+	      for (i = 0; i < len;
+#ifdef __PDP10_H__
+		   i += unit
+#else
+		   i++
+#endif
+		   )
 		{
+#ifdef __PDP10_H__
+		  int ch;
+		  if (unit == 2)
+		    ch = (((unsigned char) TREE_STRING_POINTER (t)[i]) << 8)
+		      | ((unsigned char) TREE_STRING_POINTER (t)[i + 1]);
+		  else
+		    ch = (unsigned char) TREE_STRING_POINTER (t)[i];
+#else
+		  int ch = (unsigned char) TREE_STRING_POINTER (t)[i];
+#endif
 		  if (BYTES_BIG_ENDIAN)
 		    {
 		      for (j=0; j<(WCHAR_TYPE_SIZE / BITS_PER_UNIT)-1; j++)
 			*q++ = 0;
-		      *q++ = TREE_STRING_POINTER (t)[i];
+		      *q++ = ch;
 		    }
 		  else
 		    {
-		      *q++ = TREE_STRING_POINTER (t)[i];
+		      *q++ = ch;
 		      for (j=0; j<(WCHAR_TYPE_SIZE / BITS_PER_UNIT)-1; j++)
 			*q++ = 0;
 		    }
@@ -644,9 +696,19 @@ combine_strings (strings)
 	    *q++ = 0;
 	}
       else
-	*q = 0;
+	{
+#ifdef __PDP10_H__
+	  memset (q, 0, narrow_bytes);
+#else
+	  *q = 0;
+#endif
+	}
 
       value = build_string (length, p);
+#ifdef __PDP10_H__
+      if (!wide_flag && narrow_bytes == 2)
+	PDP10_STRING_CST_9BIT_P (value) = 1;
+#endif
     }
   else
     {
@@ -654,10 +716,18 @@ combine_strings (strings)
       length = TREE_STRING_LENGTH (value);
       if (TREE_TYPE (value) == wchar_array_type_node)
 	wide_flag = 1;
+#ifdef __PDP10_H__
+      else
+	narrow_bytes = pdp10_string_cst_unit_bytes (value);
+#endif
     }
 
   /* Compute the number of elements, for the array type.  */
+#ifdef __PDP10_H__
+  nchars = wide_flag ? length / wchar_bytes : length / narrow_bytes;
+#else
   nchars = wide_flag ? length / wchar_bytes : length;
+#endif
 
   if (pedantic && nchars - 1 > nchars_max && c_language == clk_c)
     pedwarn ("string length `%d' is greater than the length `%d' ISO C%d compilers are required to support",

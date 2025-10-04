@@ -145,6 +145,9 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #define WORD_MASK (HWINT (-1))
 #endif
 
+typedef unsigned long long pdp10_word36;
+#define PDP10_WORD36_MASK ((((pdp10_word36) 1) << 36) - 1)
+
 #define WORD_MODE_P(MODE) \
   (GET_MODE_SIZE (MODE) >= UNITS_PER_WORD || (MODE) == BLKmode)
 #define BYTE_MODE_P(MODE) (!WORD_MODE_P (MODE))
@@ -153,7 +156,13 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #define BYTE_TYPE_P(TYPE) (!WORD_TYPE_P (TYPE))
 
 #define VALID_OWGBP_BYTE_SIZE_P(SIZE) \
- ((SIZE) == 6 || (SIZE) == 7 || (SIZE) == 8 || (SIZE) == 9 || (SIZE) == 18)
+ ((SIZE) == 6 || (SIZE) == 7 || (SIZE) == 8 || (SIZE) == 9 \
+  || (SIZE) == 16 || (SIZE) == 18)
+
+/* Special pseudo byte index used when taking the address of a
+   standalone scalar object stored right-justified in a full PDP-10 word.
+   It is not a canonical array byte.  */
+#define PDP10_SCALAR_RIGHT_BYTE (-1)
 
 #define GEN_EQ gen_rtx_EQ (VOIDmode, NULL_RTX, NULL_RTX)
 #define GEN_NE gen_rtx_NE (VOIDmode, NULL_RTX, NULL_RTX)
@@ -173,6 +182,25 @@ static void	pdp10_print_number PARAMS ((FILE *stream,
 					    int div,
 					    int bits,
 					    int zero));
+static void	pdp10_split_integer_double PARAMS ((rtx x,
+					       unsigned HOST_WIDE_INT *word0p,
+					       unsigned HOST_WIDE_INT *word1p));
+static int	pdp10_const_byte_pointer_p PARAMS ((rtx x));
+static int	pdp10_extract_word36_constant PARAMS ((rtx x,
+					      pdp10_word36 *valuep));
+static rtx	pdp10_gen_word36_constant PARAMS ((pdp10_word36 value));
+static rtx	pdp10_plus_constant_word36 PARAMS ((rtx x, pdp10_word36 value));
+static int	pdp10_decompose_symbolic_constant PARAMS ((rtx x, rtx *basep,
+					     HOST_WIDE_INT *offsetp));
+static int	pdp10_decompose_symbolic_word36 PARAMS ((rtx x, rtx *basep,
+					   pdp10_word36 *offsetp));
+static int	pdp10_const_word36_byte_pointer_p PARAMS ((rtx x));
+static void	pdp10_print_raw_word36_constant PARAMS ((FILE *stream, rtx x));
+static int	pdp10_frame_address_p PARAMS ((rtx x));
+static rtx	pdp10_output_unwrap_address PARAMS ((rtx x));
+static rtx	pdp10_output_add_address_offset PARAMS ((rtx x,
+						       HOST_WIDE_INT offset));
+static int	pdp10_pad_varargs_down_p PARAMS ((HOST_WIDE_INT size));
 
 #define ADDRESS_MASK (TARGET_EXTENDED ? HWINT (07777777777) : HWINT (0777777))
 
@@ -229,6 +257,57 @@ static int used_byte_subtraction_table[19];
 
 int pdp10_outputting_debug_info = 0;
 
+/* Split an integer constant used as a PDP-10 double word into the two
+   36-bit words that are visible in registers and memory.
+
+   GCC stores an integer CONST_DOUBLE in host-wide chunks, not as two
+   PDP-10 words.  Repack those host chunks into the high and low PDP-10
+   36-bit words.
+
+   Do not apply the old 71-bit arithmetic packing here.  This routine is
+   used when materializing or printing an object in memory/register form,
+   and DAIMON's normal DImode object representation is two raw 36-bit
+   words.  The arithmetic expanders decide separately whether to use
+   71-bit or 72-bit operation sequences.
+
+   Keep this in one place.  Literal printing, non-DMOVE expansion, and
+   wider move expansion must all agree, so constants like
+
+        0123456123456654321654321LL
+
+   become 123456123456,,654321654321.  */
+static void
+pdp10_split_integer_double (x, word0p, word1p)
+     rtx x;
+     unsigned HOST_WIDE_INT *word0p;
+     unsigned HOST_WIDE_INT *word1p;
+{
+  unsigned HOST_WIDE_INT high;
+  unsigned HOST_WIDE_INT low;
+  unsigned HOST_WIDE_INT word0;
+  unsigned HOST_WIDE_INT word1;
+
+  if (GET_CODE (x) == CONST_INT)
+    {
+      word0 = ((unsigned HOST_WIDE_INT) INTVAL (x) >> 36) & WORD_MASK;
+      word1 = (unsigned HOST_WIDE_INT) INTVAL (x) & WORD_MASK;
+    }
+  else if (GET_CODE (x) == CONST_DOUBLE && GET_MODE (x) == VOIDmode)
+    {
+      high = (unsigned HOST_WIDE_INT) CONST_DOUBLE_HIGH (x);
+      low = (unsigned HOST_WIDE_INT) CONST_DOUBLE_LOW (x);
+
+      word0 = ((high << (HOST_BITS_PER_WIDE_INT - 36))
+	       + (low >> 36)) & WORD_MASK;
+      word1 = low & WORD_MASK;
+    }
+  else
+    abort ();
+
+  *word0p = word0 & WORD_MASK;
+  *word1p = word1 & WORD_MASK;
+}
+
 
 /**********************************************************************
 
@@ -253,10 +332,10 @@ static bool	pdp10_assemble_integer PARAMS ((rtx x, unsigned intsize,
 #ifndef __PDP10_GAS_H__
 #undef TARGET_ASM_BYTE_OP
 #define TARGET_ASM_BYTE_OP 0
+#endif
 
 #undef TARGET_ASM_INTEGER
 #define TARGET_ASM_INTEGER pdp10_assemble_integer
-#endif
 
 #undef TARGET_ASM_FUNCTION_PROLOGUE
 #define TARGET_ASM_FUNCTION_PROLOGUE pdp10_output_func_prologue
@@ -281,6 +360,7 @@ struct gcc_target targetm = TARGET_INITIALIZER;
 
 static char *normalize_cpu_name PARAMS ((char *name));
 static int available_regs PARAMS ((void));
+static void pdp10_set_reg_alloc_order PARAMS ((void));
 
 /* Receives a pointer to the value of the -mcpu option.  */
 char *pdp10_cpu = 0;
@@ -436,6 +516,36 @@ available_regs ()
   return n;
 }
 
+/* Prefer the argument registers in reverse order.  The old code only
+   did this when -mregparm=N was specified explicitly; after changing
+   the default ABI to four register arguments, the implicit default
+   must get the same allocation order as -mregparm=4.  */
+static void
+pdp10_set_reg_alloc_order ()
+{
+  static const int default_order[FIRST_PSEUDO_REGISTER] = {
+     6,  7,  5,  4,  3,  2,  1,  8,
+     9, 10, 11, 12, 13, 14, 15,  0,
+    16, 17
+  };
+  int used[FIRST_PSEUDO_REGISTER];
+  int i, j;
+
+  for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
+    used[i] = 0;
+
+  j = 0;
+  for (i = pdp10_regparm; i >= 1; i--)
+    {
+      reg_alloc_order[j++] = i;
+      used[i] = 1;
+    }
+
+  for (i = 0; i < FIRST_PSEUDO_REGISTER; i++)
+    if (!used[default_order[i]])
+      reg_alloc_order[j++] = default_order[i];
+}
+
 /* Called by the OVERRIDE_OPTIONS macro.
 
    This is run after all command line options has been read, but
@@ -522,21 +632,77 @@ pdp10_override_options ()
   if (pdp10_tune && target_tune == 0)
     fprintf (stderr, "Unknown CPU: %s\n", pdp10_tune);
 
-  /* The default processor is XKL-1.  */
+  /* If no processor was selected explicitly, use the configured
+     target baseline.  DAIMON sets this to PDP-6/166.  */
   if (TARGET_CPU == 0)
-    target_flags = (target_flags & ~CPU_MASK) | CPU_XKL1;
+    target_flags = (target_flags & ~CPU_MASK) | TARGET_CPU_DEFAULT;
   if (target_tune == 0)
-    target_tune = CPU_XKL1;
+    target_tune = TARGET_CPU_DEFAULT & CPU_MASK;
 
   if ((target_flags & OPT_EXTENDED)
       && (target_flags & OPT_UNEXTENDED))
     fprintf (stderr,
 	     "Can't use -mextended and -munextended at the same time\n");
 
+  /* Floating point is deliberately outside the DAIMOS PDP-6/KA10
+     baseline for now.  These options are accepted only as future
+     placeholders so build scripts and tests can spell the intended
+     capability without silently enabling any FP instruction patterns.  */
+  if ((target_flags & OPT_PDP6_FLOAT) && (target_flags & OPT_KA10_FLOAT))
+    fprintf (stderr,
+	     "warning: -mpdp6-float and -mka10-float are placeholders and cannot select a working FP backend yet\n");
+
+  if (target_flags & OPT_PDP6_FLOAT)
+    {
+      if (!TARGET_166)
+	fprintf (stderr,
+		 "warning: -mpdp6-float is intended for -march=166 only\n");
+      fprintf (stderr,
+	       "warning: -mpdp6-float is a placeholder; PDP-6 FP codegen is not implemented and will not be upward-compatible with KA10/PDP-10\n");
+    }
+
+  if (target_flags & OPT_KA10_FLOAT)
+    fprintf (stderr,
+	     "warning: -mka10-float is a placeholder; KA10/PDP-10 FP codegen is not implemented in the DAIMOS baseline yet\n");
+
+  if (target_flags & OPT_NO_FLOAT)
+    {
+      target_flags &= ~CPU_GFLOAT;
+      target_flags &= ~OPT_GFLOAT;
+    }
+
   if (target_flags & OPT_EXTENDED)
     target_flags |= CPU_EXTENDED;
   if (target_flags & OPT_UNEXTENDED)
     target_flags &= ~CPU_EXTENDED;
+
+  /* Some test and multilib harnesses append an explicit -mdfloat after
+     per-test options.  A plain CPU_GFLOAT bit can therefore be cleared
+     again even though the user/test selected -mgfloat.  Keep -mgfloat
+     sticky through OPT_GFLOAT and restore the implementation bit here.
+     This intentionally makes explicit -mgfloat win over a default or
+     trailing -mdfloat, which is what per-test flags need.  */
+  if (target_flags & OPT_GFLOAT)
+    target_flags |= CPU_GFLOAT;
+
+  /*
+   * DAIMON defaults ordinary long long to the PDP-10 hardware-style
+   * 71-bit doubleword integer model.  Raw two-word 72-bit arithmetic
+   * remains available only when explicitly requested with
+   * -mlong-long-72bit.
+   *
+   * If both command-line forms appear, make the explicit raw 72-bit
+   * request win.  This mirrors the CPP spec, which defines
+   * __LONG_LONG_72BIT__ whenever -mlong-long-72bit is present and
+   * otherwise defines __LONG_LONG_71BIT__.
+   */
+  if (target_flags & OPT_LONG_LONG_72BIT)
+    {
+      target_flags &= ~CPU_71BIT;
+      target_flags &= ~OPT_LONG_LONG_71BIT;
+    }
+  else
+    target_flags |= CPU_71BIT;
 
   if (pdp10_model)
     {
@@ -615,9 +781,9 @@ pdp10_override_options ()
 	  exit (1);
 	}
 
-      for (i = 0; i < pdp10_regparm; i++)
-	reg_alloc_order[i] = pdp10_regparm - i;
     }
+
+  pdp10_set_reg_alloc_order ();
 
   if (pdp10_return_regs)
     {
@@ -694,27 +860,33 @@ pdp10_override_options ()
 static int ps_base_for_bytesize PARAMS ((int size));
 
 /* Called by the ALIGN_STACK_POINTER macro.  This generates code to
-   align the stack pointer.  */
+   align the stack pointer.  ALIGN is measured in addressable storage
+   units.  PDP-10 stack addresses are word addresses, so convert the
+   requested alignment to whole words before doing pointer arithmetic.  */
 rtx
 pdp10_align_stack_pointer (x, align)
      rtx x;
      unsigned align;
 {
-  if (align % UNITS_PER_WORD != 0)
-    abort ();
+  /* A PDP-10 stack pointer is already word-aligned.  Do not reject
+     ordinary alloca/stack-adjust paths on PDP-6, KA10, KI10, or KS10
+     merely because they are non-extended machines.  */
+  if (align <= UNITS_PER_WORD)
+    return x;
 
-  if (!TARGET_EXTENDED)
-    abort ();
+  /* There is no way to represent sub-word stack alignment in a word
+     pointer.  Round any unusual request up to a whole-word boundary
+     instead of aborting during test compilation.  */
+  align = (align + UNITS_PER_WORD - 1) / UNITS_PER_WORD;
 
-  align /= UNITS_PER_WORD;
-  if (align > 1)
-    {
-      x = expand_binop (Pmode, add_optab, x, GEN_INT (align - 1), NULL_RTX,
-			1, OPTAB_LIB_WIDEN);
-      x = expand_divmod (0, TRUNC_DIV_EXPR, Pmode, x, GEN_INT (align),
-			 NULL_RTX, 1);
-      x = expand_mult (Pmode, x, GEN_INT (2), NULL_RTX, 1);
-    }
+  if (align <= 1)
+    return x;
+
+  x = expand_binop (Pmode, add_optab, x, GEN_INT (align - 1), NULL_RTX,
+		    1, OPTAB_LIB_WIDEN);
+  x = expand_divmod (0, TRUNC_DIV_EXPR, Pmode, x, GEN_INT (align),
+		     NULL_RTX, 1);
+  x = expand_mult (Pmode, x, GEN_INT (align), NULL_RTX, 1);
 
   return x;
 }
@@ -743,9 +915,12 @@ pdp10_data_padding (decl, x)
      rtx x;
 {
   int bytesize;
-  HOST_WIDE_INT offset = 0;
-  HOST_WIDE_INT ps;
+  pdp10_word36 offset = 0;
+  pdp10_word36 encoded;
+  HOST_WIDE_INT old_offset;
+  int ps;
   int o = 0;
+  rtx mem = NULL_RTX;
 
   if (TREE_TYPE (decl) == error_mark_node)
     return x;
@@ -754,20 +929,48 @@ pdp10_data_padding (decl, x)
   if (bytesize >= 32)
     return x;
 
-  if (GET_CODE (x) == CONST)
+  /* DATA_PADDING may be called with either an address RTX or a MEM whose
+     address must be adjusted.  The old code used plus_constant directly on
+     X, which truncates 36-bit P,S byte-pointer bits through HOST_WIDE_INT
+     on 32-bit hosts.  Work on the address explicitly, then rebuild the MEM
+     if necessary.  */
+  if (GET_CODE (x) == MEM)
     {
-      offset = INTVAL (XEXP (XEXP (x, 0), 1));
-      offset &= ADDRESS_MASK;
-      x = XEXP (XEXP (x, 0), 0);
+      mem = x;
+      x = XEXP (x, 0);
+    }
+
+  if (GET_CODE (x) == CONST
+      && GET_CODE (XEXP (x, 0)) == PLUS)
+    {
+      rtx addend = XEXP (XEXP (x, 0), 1);
+      pdp10_word36 word36;
+
+      if (pdp10_extract_word36_constant (addend, &word36))
+        {
+          offset = word36 & ADDRESS_MASK;
+          x = XEXP (XEXP (x, 0), 0);
+        }
+      else if (GET_CODE (addend) == CONST_INT)
+        {
+          old_offset = INTVAL (addend);
+          offset = old_offset & ADDRESS_MASK;
+          x = XEXP (XEXP (x, 0), 0);
+        }
     }
 
   if (TREE_CODE (decl) == VAR_DECL
       && !AGGREGATE_TYPE_P (TREE_TYPE (decl)))
     {
-      /* Scalar char variables of all sizes are referred to as the
-	 right half of a word.  */
+      /* Scalar sub-9-bit character variables occupy one 9-bit C storage
+         unit on the stack/in static storage.  Addressing such a scalar
+         through a pointer must therefore build a rightmost 9-bit byte
+         pointer.  The older 18-bit selector accidentally read the whole
+         right half of the word; that only worked when the neighbouring
+         byte was zero and failed when a previous stack user left sign bits
+         there.  */
       if (bytesize <= 9)
-	bytesize = 18;
+        bytesize = 9;
       o = BITS_PER_WORD / bytesize - 1;
     }
 
@@ -779,7 +982,17 @@ pdp10_data_padding (decl, x)
   else
     ps = ((36 - bytesize * o - bytesize) << 6) + bytesize;
 
-  return plus_constant (x, trunc_int_for_mode (offset + (ps << 24), Pmode));
+  encoded = (offset + (((pdp10_word36) ps) << 24)) & PDP10_WORD36_MASK;
+  x = pdp10_plus_constant_word36 (x, encoded);
+
+  if (mem != NULL_RTX)
+    {
+      rtx newmem = copy_rtx (mem);
+      XEXP (newmem, 0) = x;
+      return newmem;
+    }
+
+  return x;
 }
 
 /* Called by the CONSTANT_ALIGNMENT macro.
@@ -1131,6 +1344,26 @@ pdp10_setup_incoming_varargs (cum, pretend_size)
   return pretend_size;
 }
 
+/* Return the hard-register mode used for a scalar function value.
+
+   PROMOTE_FUNCTION_RETURN asks GCC to apply PROMOTE_MODE to return
+   values, so FUNCTION_VALUE must name the same promoted hard-register
+   mode.  Keeping this in C rather than trying to duplicate the
+   statement-like PROMOTE_MODE macro in pdp10.h avoids caller/callee
+   mismatches for QImode and HImode results.  */
+enum machine_mode
+pdp10_function_value_mode (type)
+     tree type;
+{
+  enum machine_mode mode;
+  int unsignedp;
+
+  mode = TYPE_MODE (type);
+  unsignedp = TREE_UNSIGNED (type);
+  PROMOTE_MODE (mode, unsignedp, type);
+  return mode;
+}
+
 
 /**********************************************************************
 
@@ -1218,12 +1451,17 @@ pdp10_legitimate_address_p (mode, x, strict)
 	  return 0;
 	}
 
-#if 0
-      /* Pre-incrementing works with byte pointers.  */
+      /* Pre-incrementing works with byte pointers.  The ILDB/IDPB
+	 patterns can present PRE_INC addresses all the way to final
+	 operand printing, so this must be accepted by the strict address
+	 checker too.  */
     case PRE_INC:
       x = XEXP (x, 0);
-      return BYTE_MODE_P (mode) && REG_P (x);
-#endif
+      if (GET_CODE (x) == SUBREG)
+	x = SUBREG_REG (x);
+      return BYTE_MODE_P (mode)
+	&& REG_P (x)
+	&& (!strict || REGNO (x) < FIRST_PSEUDO_REGISTER);
 
       /* Indirect addressing.  */
     case MEM:
@@ -1416,12 +1654,18 @@ pdp10_operand_cost (x, outer_code)
      rtx x;
      enum rtx_code outer_code;
 {
-  switch (GET_CODE (x))
+  enum rtx_code code;
+  enum machine_mode mode;
+  enum machine_mode inner_mode;
+  int cost;
+
+  code = GET_CODE (x);
+
+  switch (code)
     {
-    CONST_COSTS (x, GET_CODE (x), outer_code)
+    CONST_COSTS (x, code, outer_code)
 
     case REG:
-    case PLUS:
       return COSTS_N_INSNS (1);
 
     case MEM:
@@ -1439,18 +1683,72 @@ pdp10_operand_cost (x, outer_code)
     case SIGN_EXTRACT:
       return pdp10_operand_cost (XEXP (x, 0), outer_code);
 
-      /* Not a valid operand.  */
+    case ZERO_EXTEND:
+    case SIGN_EXTEND:
+    case TRUNCATE:
+      cost = pdp10_operand_cost (XEXP (x, 0), outer_code);
+      mode = GET_MODE (x);
+      inner_mode = GET_MODE (XEXP (x, 0));
+
+      /* These nodes are often part of a larger, matched PDP-10 idiom.
+	 For example, xordisi3 represents a replicated 36-bit mask as
+	 (zero_extend:DI mask) plus ((zero_extend:DI mask) << 36),
+	 but the final instruction sequence is just two XOR instructions.
+	 Still give standalone conversions a real, nonzero cost so CSE and
+	 combine do not treat widening or truncation as free.  */
+      if (mode == VOIDmode || inner_mode == VOIDmode)
+	return cost;
+      if (GET_MODE_SIZE (mode) == GET_MODE_SIZE (inner_mode))
+	return cost;
+      if (GET_MODE_SIZE (mode) <= UNITS_PER_WORD
+	  && GET_MODE_SIZE (inner_mode) <= UNITS_PER_WORD)
+	return cost + COSTS_N_INSNS (1);
+      if (code == TRUNCATE)
+	return cost + COSTS_N_INSNS (1);
+      return cost + COSTS_N_INSNS (2);
+
+    case PLUS:
+    case AND:
+    case IOR:
+    case XOR:
+      return COSTS_N_INSNS (1)
+	+ pdp10_operand_cost (XEXP (x, 0), outer_code)
+	+ pdp10_operand_cost (XEXP (x, 1), outer_code);
+
+      /* Not a valid address operand.  Keep this expensive rather than
+	 aborting: MINUS can appear transiently before address legitimization
+	 has had a chance to split it.  */
     case MINUS:
       return COSTS_N_INSNS (1000);
+
+    case MULT:
+      return (GET_MODE (x) == SImode ? COSTS_N_INSNS (5) : COSTS_N_INSNS (10))
+	+ pdp10_operand_cost (XEXP (x, 0), outer_code)
+	+ pdp10_operand_cost (XEXP (x, 1), outer_code);
+
+    case UDIV:
+    case UMOD:
+      return COSTS_N_INSNS (TARGET_XKL2 ? 20 : 50)
+	+ pdp10_operand_cost (XEXP (x, 0), outer_code)
+	+ pdp10_operand_cost (XEXP (x, 1), outer_code);
+
+    case DIV:
+    case MOD:
+      return (optimize_size ? COSTS_N_INSNS (3) / 2 : COSTS_N_INSNS (20))
+	+ pdp10_operand_cost (XEXP (x, 0), outer_code)
+	+ pdp10_operand_cost (XEXP (x, 1), outer_code);
+
+    case ASHIFT:
+    case ASHIFTRT:
+    case ROTATE:
+    case ROTATERT:
+      return COSTS_N_INSNS (1)
+	+ pdp10_operand_cost (XEXP (x, 0), outer_code)
+	+ pdp10_operand_cost (XEXP (x, 1), outer_code);
 
     case ADDRESSOF:
       /* Dunno.  Try this.  */
       return COSTS_N_INSNS (1);
-
-    case AND:
-    case MULT:
-      return (pdp10_operand_cost (XEXP (x, 0), outer_code)
-	      + pdp10_operand_cost (XEXP (x, 0), outer_code));
 
     case UNSPEC:
       switch (XINT (x, 1))
@@ -1463,13 +1761,6 @@ pdp10_operand_cost (x, outer_code)
 	default:
 	  return COSTS_N_INSNS (1);
 	}
-
-      /* For TSC.  */
-    case IOR:
-    case XOR:
-    case ASHIFT:
-    case ASHIFTRT:
-      return COSTS_N_INSNS (1);
 
     default:
       debug_rtx (x);
@@ -1533,6 +1824,10 @@ static void	print_reg PARAMS ((FILE *stream, int regno));
 static void	print_byte_pointer PARAMS ((FILE *stream, rtx x,
 					    int size, int pos));
 static void	print_word_pointer PARAMS ((FILE *stream, rtx x, int));
+static void	pdp10_print_raw_word_constant PARAMS ((FILE *stream, rtx x));
+static void	pdp10_print_word_decimal PARAMS ((FILE *stream,
+					      HOST_WIDE_INT x));
+static void	print_symbolic_ref PARAMS ((FILE *stream, rtx x));
 static int	decode_ps PARAMS ((int ps, int *p, int *s));
 /*static*/ int	adjust_ps PARAMS ((int ps, int *adjust));
 static void	maybe_remove_label_and_following_code PARAMS ((rtx label));
@@ -1590,21 +1885,21 @@ pdp10_asm_output_labelref (file, name)
       return;
     }
 
-  /* If not using GAS, translate all '_' characters into '.'.  */
 #ifdef __PDP10_GAS_H__
-  label = name;
+  asm_fprintf (file, "%U%s", name);
 #else
+  /* Translate all '_' characters into '.'.  */
   len = strlen (name);
   label = alloca (len + 1);
   strcpy (label, name);
   for (i = 0; i < len; i++)
     {
       if (label[i] == '_')
-	label[i] = '.';
+        label[i] = '.';
     }
-#endif
 
   asm_fprintf (file, "%U%s", label);
+#endif
 }
 
 /* Called by the ASM_OUTPUT_SYMBOL_REF macro.
@@ -1616,9 +1911,13 @@ pdp10_asm_output_symbol_ref (stream, sym)
      rtx sym;
 {
   const char *name = XSTR (sym, 0);
+#ifndef __PDP10_GAS_H__
   int len;
   char *label;
   int i;
+#else
+  const char *label;
+#endif
 
   if (*name == '*')
     {
@@ -1650,6 +1949,33 @@ pdp10_asm_output_symbol_ref (stream, sym)
 #endif
 
   asm_fprintf (stream, "%U%s", label);
+}
+
+/* Print a symbolic reference in instruction/address operands.
+
+   Do not use output_addr_const directly for SYMBOL_REF here.  In this
+   backend, non-GAS assembler output maps C '_' to PDP-10 '.', e.g.
+   arctan_s -> arctan.s.  Function labels already use that mapping via
+   ASM_OUTPUT_LABEL, so references must use the same path.
+
+   LABEL_REF is left to GCC's normal printer.  The mismatch seen in
+   generated code was specifically SYMBOL_REF:
+
+        arctan.s:
+                pushj 17,arctan_s
+ */
+static void
+print_symbolic_ref (stream, x)
+     FILE *stream;
+     rtx x;
+{
+  if (GET_CODE (x) == SYMBOL_REF)
+    {
+      pdp10_asm_output_symbol_ref (stream, x);
+      return;
+    }
+
+  output_addr_const (stream, x);
 }
 
 /* Indentation level for the instruction being output.  Indentation is
@@ -1981,7 +2307,8 @@ pdp10_print_operand (stream, x, code)
 	HOST_WIDE_INT i = INTVAL (x);
 
 #ifdef __PDP10_GAS_H__
-	fputs (".long ", stream);
+	if (code == 'D' && (flags & PRINT_OP_GIW))
+	  fputs (".long ", stream);
 #else
 	if (code == 'D')
 	  fputs ("EXP ", stream);
@@ -2054,11 +2381,11 @@ pdp10_print_operand (stream, x, code)
 #endif
 	  fputs ("@[GIW ", stream);
 	  pdp10_giw++;
-	  output_addr_const (stream, x);
+	  print_symbolic_ref (stream, x);
 	  fputc (']', stream);
 	}
       else
-	output_addr_const (stream, x); 	/*assemble_name (stream,  */
+	  print_symbolic_ref (stream, x);
       return;
 
       /* Print negated integer constant.  */
@@ -2187,23 +2514,24 @@ pdp10_print_operand (stream, x, code)
     case CONST_DOUBLE:
       if (GET_MODE (x) == VOIDmode)
 	{
-	  unsigned HOST_WIDE_INT high = CONST_DOUBLE_HIGH (x);
-	  unsigned HOST_WIDE_INT low = CONST_DOUBLE_LOW (x);
+	  unsigned HOST_WIDE_INT word0;
+	  unsigned HOST_WIDE_INT word1;
+
+	  pdp10_split_integer_double (x, &word0, &word1);
 
 #ifdef __PDP10_GAS_H__
-	  fputs (".long ", stream);
+	  if (code != 'A' && code != 'B' && (flags & PRINT_OP_GIW))
+	    fputs (".long ", stream);
 #else
 	  if (code != 'A' && code != 'B')
 	    fputs ("EXP ", stream);
 #endif
 	  if (code != 'B')
-	    pdp10_print_unsigned (stream,
-				  ((high << (HOST_BITS_PER_WIDE_INT - 36))
-				   + (low >> 36)) & WORD_MASK);
+	    pdp10_print_unsigned (stream, word0);
 	  if (code != 'A' && code != 'B')
 	    fputc (',', stream);
 	  if (code != 'A')
-	    pdp10_print_unsigned (stream, low & WORD_MASK);
+	    pdp10_print_unsigned (stream, word1);
 	}
       else if (GET_MODE (x) == SFmode)
 	{
@@ -2283,31 +2611,77 @@ pdp10_print_operand (stream, x, code)
 
 	if (GET_CODE (x) == CONST)
 	  {
-	    x = XEXP (x, 0);
-	    if (GET_CODE (x) != PLUS
-		|| (GET_CODE (XEXP (x, 0)) != SYMBOL_REF
-		    && GET_CODE (XEXP (x, 0)) != LABEL_REF)
-		|| GET_CODE (XEXP (x, 1)) != CONST_INT)
-	      abort ();
-	    offset = INTVAL (XEXP (x, 1));
-	    x = XEXP (x, 0);
-	  }
+	    rtx plus = XEXP (x, 0);
+	    rtx addend;
+	    pdp10_word36 word36;
 
-	if ((offset & ~ADDRESS_MASK) == (((HOST_WIDE_INT)-1) & ~ADDRESS_MASK))
-	  {
-	    ps = 0;
-	    offset = -(-offset & ADDRESS_MASK);
+	    if (GET_CODE (plus) != PLUS)
+	      abort ();
+
+	    addend = XEXP (plus, 1);
+	    if (GET_CODE (addend) == CONST_INT)
+	      {
+		offset = INTVAL (addend);
+
+		if ((offset & ~ADDRESS_MASK)
+		    == (((HOST_WIDE_INT)-1) & ~ADDRESS_MASK))
+		  {
+		    ps = 0;
+		    offset = -(-offset & ADDRESS_MASK);
+		  }
+		else
+		  {
+		    ps = (offset >> 24) & (TARGET_EXTENDED ? 07700 : 07777);
+		    offset &= ADDRESS_MASK;
+		    if (offset & ((HOST_WIDE_INT)1 << 29))
+		      {
+			if (ps != 0)
+			  ps += 0100;
+			offset ^= (HOST_WIDE_INT)1 << 29;
+			offset -= (HOST_WIDE_INT)1 << 29;
+		      }
+		  }
+	      }
+	    else if (pdp10_extract_word36_constant (addend, &word36))
+	      {
+		pdp10_word36 addr_mask = (pdp10_word36) ADDRESS_MASK;
+		pdp10_word36 addr = word36 & addr_mask;
+		HOST_WIDE_INT sign = (HOST_WIDE_INT)1
+		  << (TARGET_EXTENDED ? 29 : 17);
+
+		/* A 32-bit host cannot represent a complete PDP-10 local
+		   byte-pointer constant as CONST_INT, so the addend can be a
+		   CONST_DOUBLE.  Decode the P,S selector from the full 36-bit
+		   value, but keep only the word-address field for the Y part
+		   printed by POINT or a word pointer.  */
+		ps = (word36 >> 24) & (TARGET_EXTENDED ? 07700 : 07777);
+		offset = (HOST_WIDE_INT) addr;
+		if (offset > 0)
+		  offset = (offset ^ sign) - sign;
+	      }
+	    else
+	      abort ();
+
+	    x = XEXP (plus, 0);
 	  }
 	else
 	  {
-	    ps = (offset >> 24) & (TARGET_EXTENDED ? 07700 : 07777);
-	    offset &= ADDRESS_MASK;
-	    if (offset & ((HOST_WIDE_INT)1 << 29))
+	    if ((offset & ~ADDRESS_MASK) == (((HOST_WIDE_INT)-1) & ~ADDRESS_MASK))
 	      {
-		if (ps != 0)
-		  ps += 0100;
-		offset ^= (HOST_WIDE_INT)1 << 29;
-		offset -= (HOST_WIDE_INT)1 << 29;
+		ps = 0;
+		offset = -(-offset & ADDRESS_MASK);
+	      }
+	    else
+	      {
+		ps = (offset >> 24) & (TARGET_EXTENDED ? 07700 : 07777);
+		offset &= ADDRESS_MASK;
+		if (offset & ((HOST_WIDE_INT)1 << 29))
+		  {
+		    if (ps != 0)
+		      ps += 0100;
+		    offset ^= (HOST_WIDE_INT)1 << 29;
+		    offset -= (HOST_WIDE_INT)1 << 29;
+		  }
 	      }
 	  }
 
@@ -2315,8 +2689,8 @@ pdp10_print_operand (stream, x, code)
 	  {
 	    if (decode_ps (ps, &position, &bytesize) >= 0)
 	      {
-		x = plus_constant (x, offset);
-		print_byte_pointer (stream, x, bytesize, position);
+		rtx addr = pdp10_output_add_address_offset (x, offset);
+		print_byte_pointer (stream, addr, bytesize, position);
 	      }
 	    else
 	      {
@@ -2331,24 +2705,51 @@ pdp10_print_operand (stream, x, code)
 	  }
 	else
 	  {
-	    print_word_pointer (stream, x, flags);
-
-	    if (offset > 0)
+	    if (GET_CODE (x) == SYMBOL_REF
+		|| GET_CODE (x) == LABEL_REF
+		|| GET_CODE (x) == CONST
+		|| GET_CODE (x) == CONST_INT)
 	      {
-		HOST_WIDE_INT sign;
-		sign = (HOST_WIDE_INT)1 << (TARGET_EXTENDED ? 29 : 17);
-		offset = (offset ^ sign) - sign;
-	      }
+		print_word_pointer (stream, x, flags);
 
-	    if (offset > 0)
-	      fputc ('+', stream);
-	    pdp10_print_offset30 (stream, offset);
+		if (offset > 0)
+		  {
+		    HOST_WIDE_INT sign;
+		    sign = (HOST_WIDE_INT)1 << (TARGET_EXTENDED ? 29 : 17);
+		    offset = (offset ^ sign) - sign;
+		  }
+
+		if (offset > 0)
+		  fputc ('+', stream);
+		pdp10_print_offset30 (stream, offset);
+	      }
+	    else
+	      {
+		rtx addr = x;
+
+		if (offset != 0)
+		  {
+		    if (GET_CODE (addr) == UNSPEC
+			&& XINT (addr, 1) == UNSPEC_ADDRESS)
+		      addr = gen_ADDRESS (plus_constant (XVECEXP (addr, 0, 0),
+						      offset));
+		    else
+		      addr = plus_constant (addr, offset);
+		  }
+		pdp10_print_operand_address (stream, addr, word_mode, flags);
+	      }
 	  }
       }
       break;
 
     case LT: case EQ: case LE: case GE: case NE: case GT:
       fputs (condition_string (GET_CODE (x)), stream);
+      break;
+
+    case PLUS:
+    case ADDRESSOF:
+      x = pdp10_output_unwrap_address (x);
+      pdp10_print_operand_address (stream, x, word_mode, flags);
       break;
 
     case MINUS:
@@ -2421,15 +2822,14 @@ print_byte_pointer (stream, x, size, pos)
 	    case 18: byte_selector = byte18_selector; break;
 	    }
 
-#ifdef __PDP10_GAS_H__
-	  fputs (".long ", stream);
-	  fputs (byte_selector[pos / size], stream);
-	  fputs ("0000000000+", stream);
-#else
+	  /* Use the mnemonic form here even for GAS-style output.
+	     This is a code literal, not a data initializer; the KL10
+	     scalar tests expect the readable one-word global byte pointer
+	     form after SKIPA.  Data initializers are still handled by
+	     TARGET_ASM_INTEGER and may use .long.  */
 	  fputs ("OWGBP ", stream);
 	  fputs (byte_selector[pos / size], stream);
 	  fputc (',', stream);
-#endif
 	  pdp10_print_operand (stream, x, 'W' | PRINT_OP_NO_BRACKETS);
 	  pdp10_giw++;
 	}
@@ -2438,7 +2838,7 @@ print_byte_pointer (stream, x, size, pos)
 	  /* Output a two-word global byte pointer.  */
 
 #ifdef __PDP10_GAS_H__
-	  fprintf (stream, ".long %02o%02o40000000", 36 - pos - size, size);
+	  fprintf (stream, ".long %02o%02o40000000,", 36 - pos - size, size);
 	  pdp10_print_operand (stream, x,
 			       'W' | PRINT_OP_NO_BRACKETS | PRINT_OP_GIW);
 #else
@@ -2453,14 +2853,11 @@ print_byte_pointer (stream, x, size, pos)
     {
       /* Output a local byte pointer.  */
 
-#ifdef __PDP10_GAS_H__
-      fprintf (stream, ".long %02o%02o00000000+", 36 - pos - size, size);
-      pdp10_print_operand (stream, x, 'W');
-#else
+      /* POINT S,Y,P: size, address, bit-position of high bit.
+         Same syntax for GAS and MIDAS; our assembler evaluates it.  */
       fprintf (stream, "POINT %d,", size);
       pdp10_print_operand (stream, x, 'W');
       fprintf (stream, ",%d", pos + size - 1);
-#endif
     }
 }
 
@@ -2496,18 +2893,31 @@ print_word_pointer (stream, x, flags)
   switch (GET_CODE (x))
     {
     case CONST:
-      x = XEXP (x, 0);
-      if (GET_CODE (x) != PLUS
-	  || GET_CODE (XEXP (x, 0)) != SYMBOL_REF
-	  || GET_CODE (XEXP (x, 1)) != CONST_INT)
-	abort ();
-      offset = INTVAL (XEXP (x, 1)) & ADDRESS_MASK;
-      x = XEXP (x, 0);
+      {
+	rtx plus = XEXP (x, 0);
+	rtx addend;
+	pdp10_word36 word36;
+
+	if (GET_CODE (plus) != PLUS
+	    || (GET_CODE (XEXP (plus, 0)) != SYMBOL_REF
+		&& GET_CODE (XEXP (plus, 0)) != LABEL_REF))
+	  abort ();
+
+	addend = XEXP (plus, 1);
+	if (GET_CODE (addend) == CONST_INT)
+	  offset = INTVAL (addend) & ADDRESS_MASK;
+	else if (pdp10_extract_word36_constant (addend, &word36))
+	  offset = (HOST_WIDE_INT) (word36 & (pdp10_word36) ADDRESS_MASK);
+	else
+	  abort ();
+
+	x = XEXP (plus, 0);
+      }
       /* Fall through.  */
 
     case LABEL_REF:
     case SYMBOL_REF:
-      output_addr_const (stream, x);
+      print_symbolic_ref (stream, x);
       if (offset > 0)
 	fputc ('+', stream);
       pdp10_print_offset30 (stream, offset);
@@ -2526,6 +2936,284 @@ print_word_pointer (stream, x, flags)
     fputc (']', stream);
 }
 
+/* Print one PDP-10 word value in decimal for GAS .long data.  Test
+   expectations use decimal constants here, even though most PDP-10
+   assembly output is naturally octal.  */
+static void
+pdp10_print_word_decimal (stream, x)
+     FILE *stream;
+     HOST_WIDE_INT x;
+{
+  fprintf (stream, HOST_WIDE_INT_PRINT_DEC, x & WORD_MASK);
+}
+
+/* Print a word constant without decoding PDP-10 byte-pointer selector
+   bits.  This is for data initializers: a local byte pointer such as
+   Q+02200000000 must be emitted as one .long word, not as POINT syntax.  */
+/* Decompose a symbolic constant into BASE plus OFFSET.
+   Accept SYMBOL_REF, LABEL_REF, CONST, nested PLUS, and CONST_INT leaves.
+   Return nonzero if the expression is representable as at most one
+   symbolic base plus one integer offset.  */
+static int
+pdp10_decompose_symbolic_constant (x, basep, offsetp)
+     rtx x;
+     rtx *basep;
+     HOST_WIDE_INT *offsetp;
+{
+  rtx base0, base1;
+  HOST_WIDE_INT off0, off1;
+
+  if (x == NULL_RTX)
+    return 0;
+
+  if (GET_CODE (x) == CONST)
+    x = XEXP (x, 0);
+
+  switch (GET_CODE (x))
+    {
+    case SYMBOL_REF:
+    case LABEL_REF:
+      *basep = x;
+      *offsetp = 0;
+      return 1;
+
+    case CONST_INT:
+      *basep = NULL_RTX;
+      *offsetp = INTVAL (x);
+      return 1;
+
+    case PLUS:
+      if (!pdp10_decompose_symbolic_constant (XEXP (x, 0), &base0, &off0)
+	  || !pdp10_decompose_symbolic_constant (XEXP (x, 1), &base1, &off1))
+	return 0;
+
+      if (base0 != NULL_RTX && base1 != NULL_RTX)
+	return 0;
+
+      *basep = base0 != NULL_RTX ? base0 : base1;
+      *offsetp = off0 + off1;
+      return 1;
+
+    default:
+      return 0;
+    }
+}
+
+
+/* Extract a 36-bit integer constant from X.  A 32-bit host cannot represent
+   PDP-10 byte-pointer P,S bits in a CONST_INT, so static byte-pointer
+   initializers use CONST_DOUBLE offsets when necessary.  */
+static int
+pdp10_extract_word36_constant (x, valuep)
+     rtx x;
+     pdp10_word36 *valuep;
+{
+  if (GET_CODE (x) == CONST_INT)
+    {
+      *valuep = ((pdp10_word36) (unsigned HOST_WIDE_INT) INTVAL (x)
+                 & PDP10_WORD36_MASK);
+      return 1;
+    }
+
+  if (GET_CODE (x) == CONST_DOUBLE)
+    {
+#if HOST_BITS_PER_WIDE_INT >= 36
+      *valuep = ((pdp10_word36) (unsigned HOST_WIDE_INT)
+                 CONST_DOUBLE_LOW (x)) & PDP10_WORD36_MASK;
+#else
+      pdp10_word36 low = (pdp10_word36) (unsigned HOST_WIDE_INT)
+        CONST_DOUBLE_LOW (x);
+      pdp10_word36 high = (pdp10_word36) (unsigned HOST_WIDE_INT)
+        CONST_DOUBLE_HIGH (x);
+      *valuep = ((high << HOST_BITS_PER_WIDE_INT) | low)
+        & PDP10_WORD36_MASK;
+#endif
+      return 1;
+    }
+
+  return 0;
+}
+
+static rtx
+pdp10_gen_word36_constant (value)
+     pdp10_word36 value;
+{
+  value &= PDP10_WORD36_MASK;
+#if HOST_BITS_PER_WIDE_INT >= 36
+  return GEN_INT ((HOST_WIDE_INT) value);
+#else
+  {
+    HOST_WIDE_INT low = (HOST_WIDE_INT)
+      (value & ((((pdp10_word36) 1) << HOST_BITS_PER_WIDE_INT) - 1));
+    HOST_WIDE_INT high = (HOST_WIDE_INT)
+      (value >> HOST_BITS_PER_WIDE_INT);
+    return immed_double_const (low, high, Pmode);
+  }
+#endif
+}
+
+static rtx
+pdp10_plus_constant_word36 (x, value)
+     rtx x;
+     pdp10_word36 value;
+{
+  value &= PDP10_WORD36_MASK;
+
+  if (GET_CODE (x) == MEM)
+    {
+      rtx mem = copy_rtx (x);
+      XEXP (mem, 0) = pdp10_plus_constant_word36 (XEXP (x, 0), value);
+      return mem;
+    }
+
+  if (CONSTANT_P (x))
+    return gen_rtx_CONST (Pmode,
+                          gen_rtx_PLUS (Pmode, x,
+                                        pdp10_gen_word36_constant (value)));
+
+  return plus_constant (x, trunc_int_for_mode ((HOST_WIDE_INT) value,
+                                               Pmode));
+}
+
+static int
+pdp10_decompose_symbolic_word36 (x, basep, offsetp)
+     rtx x;
+     rtx *basep;
+     pdp10_word36 *offsetp;
+{
+  rtx base0, base1;
+  pdp10_word36 off0, off1;
+
+  if (x == NULL_RTX)
+    return 0;
+
+  if (GET_CODE (x) == CONST)
+    x = XEXP (x, 0);
+
+  switch (GET_CODE (x))
+    {
+    case SYMBOL_REF:
+    case LABEL_REF:
+      *basep = x;
+      *offsetp = 0;
+      return 1;
+
+    case CONST_INT:
+    case CONST_DOUBLE:
+      *basep = NULL_RTX;
+      return pdp10_extract_word36_constant (x, offsetp);
+
+    case PLUS:
+      if (!pdp10_decompose_symbolic_word36 (XEXP (x, 0), &base0, &off0)
+          || !pdp10_decompose_symbolic_word36 (XEXP (x, 1), &base1, &off1))
+        return 0;
+      if (base0 != NULL_RTX && base1 != NULL_RTX)
+        return 0;
+      *basep = base0 != NULL_RTX ? base0 : base1;
+      *offsetp = (off0 + off1) & PDP10_WORD36_MASK;
+      return 1;
+
+    default:
+      return 0;
+    }
+}
+
+static int
+pdp10_const_word36_byte_pointer_p (x)
+     rtx x;
+{
+  rtx base;
+  pdp10_word36 offset;
+  pdp10_word36 ps;
+
+  if (!pdp10_decompose_symbolic_word36 (x, &base, &offset)
+      || base == NULL_RTX)
+    return 0;
+
+  ps = TARGET_EXTENDED ? ((offset >> 30) & 077)
+    : ((offset >> 24) & 07777);
+  return ps != 0;
+}
+
+static void
+pdp10_print_word36_decimal (stream, value)
+     FILE *stream;
+     pdp10_word36 value;
+{
+  fprintf (stream, "%llu", value & PDP10_WORD36_MASK);
+}
+
+static void
+pdp10_print_raw_word36_constant (stream, x)
+     FILE *stream;
+     rtx x;
+{
+  rtx base;
+  pdp10_word36 offset;
+
+  if (!pdp10_decompose_symbolic_word36 (x, &base, &offset))
+    abort ();
+
+  if (base != NULL_RTX)
+    {
+      print_symbolic_ref (stream, base);
+      if (offset != 0)
+        {
+          fputc ('+', stream);
+          pdp10_print_word36_decimal (stream, offset);
+        }
+    }
+  else
+    pdp10_print_word36_decimal (stream, offset);
+}
+
+/* Print a word constant without decoding PDP-10 byte-pointer selector
+   bits.  This is for data initializers: a local byte pointer such as
+   Q+02200000000 must be emitted as one .long word, not as POINT syntax.  */
+static void
+pdp10_print_raw_word_constant (stream, x)
+     FILE *stream;
+     rtx x;
+{
+  HOST_WIDE_INT offset;
+  rtx base;
+
+  switch (GET_CODE (x))
+    {
+    case CONST:
+    case PLUS:
+    case SYMBOL_REF:
+    case LABEL_REF:
+      if (!pdp10_decompose_symbolic_constant (x, &base, &offset))
+	abort ();
+
+      if (base == NULL_RTX)
+	pdp10_print_word_decimal (stream, offset);
+      else
+	{
+	  print_symbolic_ref (stream, base);
+	  if (offset < 0)
+	    {
+	      fputc ('-', stream);
+	      pdp10_print_word_decimal (stream, -offset);
+	    }
+	  else if (offset > 0)
+	    {
+	      fputc ('+', stream);
+	      pdp10_print_word_decimal (stream, offset);
+	    }
+	}
+      break;
+
+    case CONST_INT:
+      pdp10_print_word_decimal (stream, INTVAL (x));
+      break;
+
+    default:
+      abort ();
+    }
+}
+
 /* Called by the PRINT_OPERAND_ADDRESS macro.
 
    Output to the stdio stream STREAM the assembler syntax for an
@@ -2538,6 +3226,8 @@ pdp10_print_operand_address (stream, x, mode, flags)
      int flags;
 {
   int byte_pointer = BYTE_MODE_P (mode);
+
+  x = pdp10_output_unwrap_address (x);
 
   if (!pdp10_legitimate_address_p (mode, x, 1))
     {
@@ -2564,22 +3254,50 @@ pdp10_print_operand_address (stream, x, mode, flags)
 
 	if (GET_CODE (x) == CONST)
 	  {
-	    sym = XEXP (XEXP (x, 0), 0);
-	    offset = INTVAL (XEXP (XEXP (x, 0), 1));
-	    ps = (offset >> 24) & 07700;
-	    offset &= ADDRESS_MASK;
+	    rtx plus = XEXP (x, 0);
+	    rtx addend;
+	    pdp10_word36 word36;
+
+	    if (GET_CODE (plus) != PLUS)
+	      abort ();
+
+	    sym = XEXP (plus, 0);
+	    addend = XEXP (plus, 1);
+	    if (GET_CODE (addend) == CONST_INT)
+	      {
+		offset = INTVAL (addend);
+		ps = (offset >> 24) & (TARGET_EXTENDED ? 07700 : 07777);
+		offset &= ADDRESS_MASK;
+	      }
+	    else if (pdp10_extract_word36_constant (addend, &word36))
+	      {
+		ps = (word36 >> 24) & (TARGET_EXTENDED ? 07700 : 07777);
+		offset = (HOST_WIDE_INT) (word36 & (pdp10_word36) ADDRESS_MASK);
+	      }
+	    else
+	      abort ();
 	  }
 
 	if (ps != 0 && byte_pointer)
 	  {
 	    int bitpos, bitsize;
+	    rtx addr;
 
 	    if (decode_ps (ps, &bitpos, &bitsize) == -1)
 	      abort ();
 
+	    /* Print the Y part of POINT from the stripped base address, not
+	       from the full CONST that still contains the PDP-10 P,S selector.
+	       Stack component byte pointers can arrive here as
+		 CONST (PLUS (frame-address, word36-P,S-addend)).
+	       Passing that full CONST back through %W makes the word-address
+	       printer decode the same selector again, and on non-symbolic frame
+	       bases it can fall off the old SYMBOL_REF-only path.  */
+	    addr = pdp10_output_add_address_offset (sym, offset);
+
 	    if (indirect)
 	      fputc ('[', stream);
-	    print_byte_pointer (stream, x, bitsize, bitpos);
+	    print_byte_pointer (stream, addr, bitsize, bitpos);
 	    if (indirect)
 	      fputc (']', stream);
 	  }
@@ -2587,7 +3305,25 @@ pdp10_print_operand_address (stream, x, mode, flags)
 	  {
 	    if (indirect)
 	      flags |= PRINT_OP_INDIRECT;
-	    print_word_pointer (stream, x, flags);
+	    if (GET_CODE (sym) == SYMBOL_REF
+		|| GET_CODE (sym) == LABEL_REF
+		|| GET_CODE (sym) == CONST
+		|| GET_CODE (sym) == CONST_INT)
+	      print_word_pointer (stream, x, flags);
+	    else
+	      {
+		rtx addr = sym;
+		if (offset != 0)
+		  {
+		    if (GET_CODE (addr) == UNSPEC
+			&& XINT (addr, 1) == UNSPEC_ADDRESS)
+		      addr = gen_ADDRESS (plus_constant (XVECEXP (addr, 0, 0),
+						      offset));
+		    else
+		      addr = plus_constant (addr, offset);
+		  }
+		pdp10_print_operand_address (stream, addr, word_mode, flags);
+	      }
 	  }
 
 	break;
@@ -2618,8 +3354,25 @@ pdp10_print_operand_address (stream, x, mode, flags)
       if (GET_CODE (XEXP (x, 1)) == CONST_INT)
 	{
 	  HOST_WIDE_INT offset = INTVAL (XEXP (x, 1));
+
+	  /* PDP-10: when an indexed word address is based on an object whose
+	     declaration carries DATA_PADDING byte-pointer P,S bits, the symbolic
+	     offset can still contain those high P,S bits here.  A word address
+	     ignores them; only the PDP-10 address field is relevant.  Do this
+	     normalization before deciding whether the address needs a GIW.
+
+	     Keep ordinary small negative displacements negative.  The mask is
+	     only applied when the high bits are neither zero nor sign-extension,
+	     i.e. when they are real selector/extra address bits.  */
+	  if (! byte_pointer)
+	    {
+	      HOST_WIDE_INT high = offset & ~ADDRESS_MASK;
+	      if (high != 0 && high != ~ADDRESS_MASK)
+		offset &= ADDRESS_MASK;
+	    }
+
 	  if (offset >= -0400000 && offset <= 0377777)
-	    pdp10_print_offset (stream, INTVAL (XEXP (x, 1)));
+	    pdp10_print_offset (stream, offset);
 	  else
 	    {
 	      fputs ("@[%EXIND(0,", stream);
@@ -2635,18 +3388,39 @@ pdp10_print_operand_address (stream, x, mode, flags)
       else if (GET_CODE (XEXP (x, 1)) == CONST)
 	{
 	  rtx y = XEXP (XEXP (x, 1), 0);
+	  HOST_WIDE_INT offset;
+
 	  if (GET_CODE (y) != PLUS
 	      || GET_CODE (XEXP (y, 0)) != SYMBOL_REF
 	      || GET_CODE (XEXP (y, 1)) != CONST_INT)
 	    abort ();
-	  output_addr_const (stream, XEXP (y, 0));
-	  if (INTVAL (XEXP (y, 1)) >= 0)
-	    fputc ('+', stream);
-	  pdp10_print_offset (stream, INTVAL (XEXP (y, 1)));
+
+	  offset = INTVAL (XEXP (y, 1));
+
+	  /* Same normalization as above, but for SYMBOL+OFFSET indexed
+	     addresses.  This is the path that printed e.g.
+
+	         b6a+pdp10.c:...:TOOBIG:(1)
+
+	     for word-mode accesses through a packed aggregate base.  */
+	  if (! byte_pointer)
+	    {
+	      HOST_WIDE_INT high = offset & ~ADDRESS_MASK;
+	      if (high != 0 && high != ~ADDRESS_MASK)
+		offset &= ADDRESS_MASK;
+	    }
+
+	  print_symbolic_ref (stream, XEXP (y, 0));
+	  if (offset > 0)
+	    {
+	      fputc ('+', stream);
+	      pdp10_print_offset (stream, offset);
+	    }
+	  else if (offset < 0)
+	    pdp10_print_offset (stream, offset);
 	}
       else
-	output_addr_const (stream, XEXP (x, 1));
-
+	print_symbolic_ref (stream, XEXP (x, 1));
       fputc ('(', stream);
       print_reg (stream, REGNO (XEXP (x, 0)));
       fputc (')', stream);
@@ -3060,15 +3834,18 @@ no_long_long_callback (pfile)
      cpp_reader *pfile ATTRIBUTE_UNUSED;
 {
   target_flags &= ~CPU_71BIT;
+  target_flags &= ~OPT_LONG_LONG_71BIT;
+  target_flags |= OPT_LONG_LONG_72BIT;
   warning ("#pragma no_long_long doesn't work properly.  "
-	   "Use -mno-long-long instead.");
+	   "Use -mlong-long-72bit instead.");
 }
 
 static void
 long_long_71bit_callback (pfile)
      cpp_reader *pfile ATTRIBUTE_UNUSED;
 {
-  target_flags |= CPU_71BIT;
+  target_flags |= CPU_71BIT | OPT_LONG_LONG_71BIT;
+  target_flags &= ~OPT_LONG_LONG_72BIT;
   warning ("#pragma long_long_71bit doesn't work properly.  "
 	   "Use -mlong-long-71bit instead.");
 }
@@ -3229,7 +4006,22 @@ pdp10_pointer_alignment (x)
       return 1;
     case CONST:
       if (!TARGET_EXTENDED)
-	abort ();
+	{
+	  HOST_WIDE_INT offset;
+	  int ps, position, bytesize;
+
+	  offset = INTVAL (XEXP (XEXP (x, 0), 1));
+	  ps = (offset >> 24) & 07777;
+	  if (ps == 0)
+	    return UNITS_PER_WORD;
+	  if (decode_ps (ps, &position, &bytesize) == -1)
+	    abort ();
+	  if (position == 0)
+	    return UNITS_PER_WORD;
+	  if (position == 18)
+	    return UNITS_PER_WORD / 2;
+	  return 1;
+	}
       switch ((int)(INTVAL (XEXP (XEXP (x, 0), 1)) >> 30) & 077)
 	{
 	case 0:
@@ -3351,6 +4143,222 @@ pdp10_maybe_volatile_memory_operand (op, mode)
   result = memory_operand (op, mode);
   volatile_ok = saved;
   return result;
+}
+
+/* Return nonzero if X is an address based on one of the frame
+   registers.  Stack scalar slots often reach recognition as plain
+   QI/HI memory references through the frame pointer, without
+   MEM_SCALAR_P set and without useful MEM_ALIGN information.  */
+static int
+pdp10_frame_address_p (x)
+     rtx x;
+{
+  switch (GET_CODE (x))
+    {
+    case REG:
+      {
+	unsigned int regno = REGNO (x);
+
+	/* REGNO_PTR_FRAME_P does not include the real stack pointer on
+	   this GCC, but stack slots have been eliminated to SP by the
+	   time the old peephole pass and final output see them.  Accept
+	   both the real frame/stack registers and the virtual frame
+	   registers used before elimination.  */
+	return regno == STACK_POINTER_REGNUM
+	       || regno == HARD_FRAME_POINTER_REGNUM
+	       || regno == FRAME_POINTER_REGNUM
+	       || regno == ARG_POINTER_REGNUM
+	       || REGNO_PTR_FRAME_P (regno);
+      }
+
+    case SUBREG:
+      return pdp10_frame_address_p (SUBREG_REG (x));
+
+    case ADDRESSOF:
+      if (GET_CODE (XEXP (x, 0)) == MEM)
+	return pdp10_frame_address_p (XEXP (XEXP (x, 0), 0));
+      return pdp10_frame_address_p (XEXP (x, 0));
+
+    case PLUS:
+      return pdp10_frame_address_p (XEXP (x, 0))
+	     || pdp10_frame_address_p (XEXP (x, 1));
+
+    case CONST:
+      x = XEXP (x, 0);
+      if (GET_CODE (x) == PLUS)
+	return pdp10_frame_address_p (XEXP (x, 0))
+	       || pdp10_frame_address_p (XEXP (x, 1));
+      return 0;
+
+    default:
+      return 0;
+    }
+}
+
+/* Strip output-only address wrappers that can legitimately survive to final
+   in old GCC RTL, and normalize the few virtual frame-register addresses that
+   the generic instantiator can leave inside target-specific address values.
+
+   This routine is deliberately for printing only.  It does not claim a new
+   addressing mode; it merely exposes the address already carried by
+   ADDRESSOF/MEM wrappers and converts virtual-stack-vars to the same
+   frame-pointer-plus-starting-offset form used by instantiate_virtual_regs.  */
+static rtx
+pdp10_output_unwrap_address (x)
+     rtx x;
+{
+  if (x == NULL_RTX)
+    return x;
+
+  switch (GET_CODE (x))
+    {
+    case REG:
+      if (x == virtual_stack_vars_rtx)
+	return plus_constant (frame_pointer_rtx, pdp10_starting_frame_offset ());
+      return x;
+
+    case ADDRESSOF:
+      if (GET_CODE (XEXP (x, 0)) == MEM)
+	return pdp10_output_unwrap_address (XEXP (XEXP (x, 0), 0));
+      return x;
+
+    case PLUS:
+      {
+	rtx op0 = pdp10_output_unwrap_address (XEXP (x, 0));
+	rtx op1 = pdp10_output_unwrap_address (XEXP (x, 1));
+
+	if (op0 == XEXP (x, 0) && op1 == XEXP (x, 1))
+	  return x;
+
+	if (GET_CODE (op1) == CONST_INT)
+	  return plus_constant (op0, INTVAL (op1));
+	return gen_rtx_PLUS (GET_MODE (x), op0, op1);
+      }
+
+    case UNSPEC:
+      if (XINT (x, 1) == UNSPEC_ADDRESS)
+	{
+	  rtx inner = pdp10_output_unwrap_address (XVECEXP (x, 0, 0));
+	  if (inner != XVECEXP (x, 0, 0))
+	    return gen_ADDRESS (inner);
+	}
+      return x;
+
+    default:
+      return x;
+    }
+}
+
+/* Return address X plus word-address OFFSET for final-output printing.
+   X may still contain old GCC output wrappers such as ADDRESSOF or the
+   PDP-10 UNSPEC_ADDRESS effective-address wrapper.  Keep UNSPEC_ADDRESS
+   wrapped around the adjusted inner address; otherwise ordinary final
+   address printing sees PLUS(UNSPEC_ADDRESS, CONST_INT), which is not a
+   PDP-10 addressing form.  */
+static rtx
+pdp10_output_add_address_offset (x, offset)
+     rtx x;
+     HOST_WIDE_INT offset;
+{
+  x = pdp10_output_unwrap_address (x);
+
+  if (x == NULL_RTX)
+    return GEN_INT (offset);
+
+  if (offset == 0)
+    return x;
+
+  if (GET_CODE (x) == UNSPEC && XINT (x, 1) == UNSPEC_ADDRESS)
+    return gen_ADDRESS (plus_constant (XVECEXP (x, 0, 0), offset));
+
+  return plus_constant (x, offset);
+}
+
+/* Return the source integer precision for MEM if MEM still carries
+   a useful tree expression.  GCC can represent small target-specific scalar
+   integer types such as char9 and short16 in HImode even though their C
+   precision is smaller than 18 bits.  Final-output code needs the C precision
+   to choose the correct byte pointer and sign extension.  */
+static int
+pdp10_mem_integer_precision (mem)
+     rtx mem;
+{
+  tree expr, type;
+
+  if (GET_CODE (mem) != MEM || MEM_EXPR (mem) == 0)
+    return 0;
+
+  expr = MEM_EXPR (mem);
+  type = TREE_TYPE (expr);
+
+  if (type != 0 && TREE_CODE (type) == INTEGER_TYPE)
+    return TYPE_PRECISION (type);
+
+  return 0;
+}
+
+/* Return a conservative precision hint for a scalar memory object when
+   MEM_EXPR has been lost before final output.  This happens for signed
+   char9 volatile globals after reload: the final pattern is just
+
+       (sign_extend:SI (mem:HI SYMBOL))
+
+   and the old HRRE fast path sign-extends bit 17 instead of the scalar
+   sign bit.  GCC still tends to preserve the target scalar alignment
+   (for example A9 for char9, A16 for short16), so use that as a final
+   fallback for aligned scalar HImode MEMs.  Do not guess for full
+   halfword objects; A18 and word-aligned objects should keep the normal
+   HRRE path.  */
+static int
+pdp10_mem_scalar_precision_hint (mem)
+     rtx mem;
+{
+  int align;
+
+  if (GET_CODE (mem) != MEM || GET_MODE (mem) != HImode)
+    return 0;
+
+  align = MEM_ALIGN (mem);
+  if (align > 0 && align < 18)
+    return align;
+
+  return 0;
+}
+
+/* Return nonzero if OP is a scalar QI/HI object stored in a full
+   PDP-10 word.  MEM_SCALAR_P catches named scalar objects.  Automatic
+   scalar variables can lose that bit.
+
+   A second wrinkle is visible in early RTL for stack locals: GCC has
+   already represented the storage as an SImode stack slot, while
+   keeping the source scalar size in the MEM attributes, e.g.
+
+        (mem/v/f:SI (reg/f:SI virtual-stack-vars) [x+0 S1 A9])
+
+   Such MEMs are scalar stack slots too.  Accept SImode frame MEMs only
+   when their recorded alignment is smaller than a word; ordinary int
+   stack slots have word alignment and must not be mistaken for scalar
+   byte/halfword storage.  */
+int
+pdp10_scalar_mem_p (op)
+     rtx op;
+{
+  if (GET_CODE (op) != MEM)
+    return 0;
+
+  if (MEM_SCALAR_P (op))
+    return 1;
+
+  if (!pdp10_frame_address_p (XEXP (op, 0)))
+    return 0;
+
+  if (GET_MODE (op) == QImode || GET_MODE (op) == HImode)
+    return 1;
+
+  if (GET_MODE (op) == SImode && MEM_ALIGN (op) < BITS_PER_WORD)
+    return 1;
+
+  return 0;
 }
 
 /* Return nonzero if OP is a memory operand with a constant address.  */
@@ -3504,6 +4512,9 @@ pdp10_halfword_source (op, mode)
 **********************************************************************/
 
 static rtx	expand_builtin_jffo PARAMS ((tree arglist, rtx target));
+static rtx	expand_builtin_pdp10_jffo PARAMS ((tree arglist, rtx target));
+static rtx	pdp10_direct_label_operand PARAMS ((rtx x));
+static int	pdp10_emit_jffo_word_branch PARAMS ((rtx word, rtx label));
 static rtx	expand_builtin_fsc PARAMS ((tree arglist, rtx target,
 					    enum rtx_code code));
 
@@ -3524,6 +4535,7 @@ pdp10_init_builtins ()
 #define VOID		void_type_node
 #define VOIDP		ptr_type_node
 #define INT		integer_type_node
+#define UINT		unsigned_type_node
 #define CHAR		char_type_node
 #define LONGLONG	long_long_integer_type_node
 #define FLOAT		float_type_node
@@ -3548,6 +4560,12 @@ pdp10_init_builtins ()
 			PDP10_BUILTIN_JFFO,
 			BUILT_IN_MD,
 			0);
+
+      builtin_function ("__builtin_pdp10_jffo",
+			FUNTYPE1 (INT, UINT),
+			PDP10_BUILTIN_JFFO,
+			BUILT_IN_MD,
+			0);
     }
 
 #undef PTRTYPE
@@ -3559,20 +4577,100 @@ pdp10_init_builtins ()
 #undef VOID
 #undef VOIDP
 #undef INT
+#undef UINT
 #undef CHAR
 #undef LONGLONG
 #undef FLOAT
 #undef DOUBLE
 }
 
-/* Expand a call to __builtin_jffo.  */
+/* Return the CODE_LABEL referred to by X, if X is a direct label
+   value.  GCC may represent &&label either as a plain LABEL_REF or as
+   a PDP-10 pointer constant such as CONST (PLUS (LABEL_REF label)
+   byte-pointer-bits).  The JFFO generators wrap their label operand
+   in LABEL_REF themselves, so callers must pass the raw CODE_LABEL.  */
+static rtx
+pdp10_direct_label_operand (x)
+     rtx x;
+{
+  rtx y;
+
+  if (x == NULL_RTX)
+    return NULL_RTX;
+
+  if (GET_CODE (x) == LABEL_REF)
+    {
+      y = XEXP (x, 0);
+      return GET_CODE (y) == CODE_LABEL ? y : NULL_RTX;
+    }
+
+  if (GET_CODE (x) == CONST)
+    {
+      y = XEXP (x, 0);
+
+      if (GET_CODE (y) == LABEL_REF)
+	{
+	  y = XEXP (y, 0);
+	  return GET_CODE (y) == CODE_LABEL ? y : NULL_RTX;
+	}
+
+      if (GET_CODE (y) == PLUS
+	  && GET_CODE (XEXP (y, 0)) == LABEL_REF
+	  && GET_CODE (XEXP (XEXP (y, 0), 0)) == CODE_LABEL
+	  && GET_CODE (XEXP (y, 1)) == CONST_INT)
+	return XEXP (XEXP (y, 0), 0);
+    }
+
+  return NULL_RTX;
+}
+
+/* Emit a JFFO branch testing one 36-bit word for nonzero.
+
+   JFFO writes AC+1 when the tested AC is nonzero.  Use a fresh DImode
+   pseudo for the hardware pair so that clobber cannot corrupt the
+   original DImode value being tested.  */
+static int
+pdp10_emit_jffo_word_branch (word, label)
+     rtx word;
+     rtx label;
+{
+  rtx pair;
+  rtx pat;
+
+  pair = gen_reg_rtx (DImode);
+  emit_move_insn (gen_rtx_SUBREG (SImode, pair, 0), word);
+
+  pat = gen_JFFO_branch (pair, label, GEN_NE);
+  if (!pat)
+    return 0;
+
+  emit_jump_insn (pat);
+  return 1;
+}
+
+/* Expand a call to __builtin_jffo or __builtin_pdp10_jffo.  */
 static rtx
 expand_builtin_jffo (arglist, target)
      tree arglist;
      rtx target;
 {
   tree arg0, arg1;
-  rtx op0, op1, pat;
+  rtx op0, op1;
+  rtx label, taken, done;
+
+  /* The historical builtin is the jump-form primitive:
+
+       void __builtin_jffo (long long value, void *label)
+
+     DAIMON tests and C code also use a value-returning convenience
+     builtin:
+
+       int __builtin_pdp10_jffo (unsigned int value)
+
+     Both are registered with the same machine builtin code; dispatch
+     on the argument count here.  */
+  if (arglist != NULL_TREE && TREE_CHAIN (arglist) == NULL_TREE)
+    return expand_builtin_pdp10_jffo (arglist, target);
 
   arg0 = TREE_VALUE (arglist);
   arg1 = TREE_VALUE (TREE_CHAIN (arglist));
@@ -3580,13 +4678,82 @@ expand_builtin_jffo (arglist, target)
   op1 = expand_expr (arg1, NULL_RTX, VOIDmode, 0);
 
   op0 = force_reg (DImode, op0);
+
+  label = pdp10_direct_label_operand (op1);
+  if (label != NULL_RTX)
+    {
+      if (!pdp10_emit_jffo_word_branch
+	  (gen_rtx_SUBREG (SImode, op0, 0), label))
+	return 0;
+      if (!pdp10_emit_jffo_word_branch
+	  (gen_rtx_SUBREG (SImode, op0, UNITS_PER_WORD), label))
+	return 0;
+      return target;
+    }
+
   if (!address_operand (op1, Pmode))
     op1 = force_reg (Pmode, op1);
-  pat = gen_JFFO (op0, op1);
+
+  /* Computed label value.  GCC's CFG cannot safely represent a single
+     conditional computed jump with fallthrough here.  Branch to a local
+     block with real JFFO tests, then do the indirect jump there.  */
+  taken = gen_label_rtx ();
+  done = gen_label_rtx ();
+
+  if (!pdp10_emit_jffo_word_branch
+      (gen_rtx_SUBREG (SImode, op0, 0), taken))
+    return 0;
+  if (!pdp10_emit_jffo_word_branch
+      (gen_rtx_SUBREG (SImode, op0, UNITS_PER_WORD), taken))
+    return 0;
+
+  emit_jump (done);
+
+  emit_label (taken);
+  emit_jump_insn (gen_indirect_jump (op1));
+  emit_barrier ();
+
+  emit_label (done);
+  return target;
+}
+
+/* Expand int __builtin_pdp10_jffo (unsigned int).
+
+   Return the JFFO bit number, or -1 when the input word is zero.
+   JFFO writes the bit number to AC+1 only when AC is nonzero, so the
+   zero case must be supplied explicitly.  */
+static rtx
+expand_builtin_pdp10_jffo (arglist, target)
+     tree arglist;
+     rtx target;
+{
+  tree arg0;
+  rtx op0, pair, label, done, pat;
+
+  arg0 = TREE_VALUE (arglist);
+  op0 = expand_expr (arg0, NULL_RTX, VOIDmode, 0);
+  op0 = force_reg (SImode, op0);
+
+  if (target == 0 || !REG_P (target) || GET_MODE (target) != SImode)
+    target = gen_reg_rtx (SImode);
+
+  pair = gen_reg_rtx (DImode);
+  label = gen_label_rtx ();
+  done = gen_label_rtx ();
+
+  emit_move_insn (gen_rtx_SUBREG (SImode, pair, 0), op0);
+  pat = gen_JFFO (pair, label);
   if (!pat)
     return 0;
   emit_jump_insn (pat);
 
+  emit_move_insn (target, GEN_INT (-1));
+  emit_jump (done);
+
+  emit_label (label);
+  emit_move_insn (target, gen_rtx_SUBREG (SImode, pair, 4));
+
+  emit_label (done);
   return target;
 }
 
@@ -3594,21 +4761,29 @@ expand_builtin_jffo (arglist, target)
 static rtx
 expand_builtin_fsc (arglist, target, code)
      tree arglist;
-     rtx target ATTRIBUTE_UNUSED;
+     rtx target;
      enum pdp10_builtins code;
 {
   tree arg0, arg1;
   rtx op0, op1, pat;
+  enum machine_mode mode;
+
+  if (code == PDP10_BUILTIN_FSC)
+    mode = SFmode;
+  else if (code == PDP10_BUILTIN_DFSC)
+    mode = DFmode;
+  else
+    abort ();
 
   arg0 = TREE_VALUE (arglist);
   arg1 = TREE_VALUE (TREE_CHAIN (arglist));
   op0 = expand_expr (arg0, NULL_RTX, VOIDmode, 0);
   op1 = expand_expr (arg1, NULL_RTX, VOIDmode, 0);
-  op0 = force_reg (DFmode, op0);
+  op0 = force_reg (mode, op0);
   op1 = force_not_mem (op1);
 
-  if (!target)
-    target = gen_reg_rtx (code == PDP10_BUILTIN_FSC ? SFmode : DFmode);
+  if (target == 0 || !REG_P (target) || GET_MODE (target) != mode)
+    target = gen_reg_rtx (mode);
 
   if (code == PDP10_BUILTIN_FSC)
     pat = gen_FSC (target, op0, op1);
@@ -3655,6 +4830,16 @@ pdp10_expand_builtin (exp, target, subtarget, mode, ignore)
     }
 }
 
+static int
+pdp10_pad_varargs_down_p (size)
+     HOST_WIDE_INT size;
+{
+  /* Stack argument slots are word-aligned.  Objects that occupy less
+     than one word are placed in the low-addressed padding area's far
+     end, matching the ordinary big-endian PDP-10 argument layout.  */
+  return size > 0 && size < PARM_BOUNDARY / BITS_PER_UNIT;
+}
+
 tree
 pdp10_build_va_list_type ()
 {
@@ -3692,12 +4877,16 @@ pdp10_expand_builtin_va_arg (valist, type)
 {
   tree addr_tree, t;
   HOST_WIDE_INT align;
+  HOST_WIDE_INT size;
   HOST_WIDE_INT rounded_size;
   rtx addr;
 
   /* Compute the rounded size of the type.  */
   align = PARM_BOUNDARY / BITS_PER_UNIT;
-  rounded_size = (((int_size_in_bytes (type) + align - 1) / align) * align);
+  size = int_size_in_bytes (type);
+  if (size < 0)
+    abort ();
+  rounded_size = (((size + align - 1) / align) * align);
 
   /* Get AP.  */
   addr_tree = valist;
@@ -3705,16 +4894,16 @@ pdp10_expand_builtin_va_arg (valist, type)
   /* Compute new value for AP.  */
   t = build (MODIFY_EXPR, TREE_TYPE (valist), valist,
 	     build (PLUS_EXPR, TREE_TYPE (valist), valist,
-		    build_int_2 (-rounded_size / 4, 0)));
+		    build_int_2 (-rounded_size / UNITS_PER_WORD, 0)));
   TREE_SIDE_EFFECTS (t) = 1;
   expand_expr (t, const0_rtx, VOIDmode, EXPAND_NORMAL);
 
-  if (1) /* FIXME: was PAD_VARARGS_DOWN) */
+  if (pdp10_pad_varargs_down_p (size))
     {
-      /* Small args are padded downward.  */
+      /* Small args are padded downward within their stack word.  */
 
       HOST_WIDE_INT adj
-	= rounded_size > align ? rounded_size : int_size_in_bytes (type);
+	= rounded_size > align ? rounded_size : size;
 
       addr_tree = build (PLUS_EXPR, TREE_TYPE (addr_tree), addr_tree,
 			 build_int_2 (rounded_size - adj, 0));
@@ -4075,7 +5264,7 @@ pdp10_output_byte (stream, exp, byte_size)
     }
   else
     {
-      extern char *dw2_assemble_string[5];
+      extern const char *dw2_assemble_string[5];
       extern int dw2_assemble_integer_size[5];
       extern rtx dw2_assemble_integer_x[5];
       extern int dw2_assemble_integer_n;
@@ -4267,6 +5456,25 @@ pdp10_assemble_integer (x, size, aligned_p)
      unsigned int size;
      int aligned_p;
 {
+  if (GET_CODE (x) == UNSPEC && XINT (x, 1) == UNSPEC_ADJBP)
+    {
+      rtx folded = pdp10_simplify_unspec (x, NULL_RTX);
+      if (folded != NULL_RTX)
+	x = folded;
+    }
+
+  if (aligned_p
+      && size == 4
+      && pdp10_const_word36_byte_pointer_p (x))
+    {
+      pdp10_output_byte (asm_out_file, 0, 0);
+      fputc ('\t', asm_out_file);
+      pdp10_print_raw_word36_constant (asm_out_file, x);
+      fputc ('\n', asm_out_file);
+      pdp10_byte_count += size;
+      return true;
+    }
+
   if (!aligned_p && size > 1)
     return false;
 
@@ -4297,6 +5505,237 @@ pdp10_assemble_integer (x, size, aligned_p)
 }
 
 #endif /* !__PDP10_GAS_H__ */
+
+#ifdef __PDP10_GAS_H__
+/* GAS-mode stubs: these symbols are defined in the !GAS block above but
+   are also referenced unconditionally from varasm.c, dwarf2asm.c, and
+   tops20dbgout.c.  Provide simple versions for the GAS/custom assembler
+   build.  */
+
+/* Switch to an arbitrary section NAME with attributes as specified by
+   FLAGS.  The old MACRO path also emits .PSECT directives; the
+   GCC/GAS-ish DAIMOS bring-up assembler accepts the same small subset.
+   Do not use the MACRO-only section_name variable here, because it is
+   intentionally not compiled in GAS mode.  */
+static void
+pdp10_asm_named_section (name, flags)
+     const char *name;
+     unsigned int flags;
+{
+  fputs ("\t.PSECT\t", asm_out_file);
+  fputs (name, asm_out_file);
+
+  if (flags & SECTION_WRITE)
+    fputs ("/rwrite", asm_out_file);
+  else
+    fputs ("/ronly", asm_out_file);
+
+  if (flags & (SECTION_CODE | SECTION_WRITE | SECTION_DEBUG | SECTION_BSS
+               | SECTION_SMALL | SECTION_LINKONCE | SECTION_FORGET))
+    {
+      fputs ("\t;", asm_out_file);
+      if (flags & SECTION_CODE)
+        fputs (" code", asm_out_file);
+      if (flags & SECTION_DEBUG)
+        fputs (" debug", asm_out_file);
+      if (flags & SECTION_LINKONCE)
+        fputs (" linkonce", asm_out_file);
+      if (flags & SECTION_SMALL)
+        fputs (" small", asm_out_file);
+      if (flags & SECTION_BSS)
+        fputs (" bss", asm_out_file);
+      if (flags & SECTION_FORGET)
+        fputs (" forget", asm_out_file);
+    }
+
+  fputc ('\n', asm_out_file);
+}
+
+int pdp10_byte_count = 0;
+int pdp10_bits_per_unit = BITS_PER_UNIT;
+
+/* GAS-mode byte packing state.  The generic varasm code calls
+   targetm.asm_out.integer once per array element.  For PDP-10 byte
+   arrays, those elements are 6, 7, 8, or 9 bit target bytes packed into
+   36-bit words, so the GAS/custom-assembler path needs the same packing
+   service that the MACRO path gets from BYTE pseudo output.  */
+static HOST_WIDE_INT gas_byte_word;
+static int gas_bits_in_word;
+
+void
+pdp10_output_byte (stream, exp, byte_size)
+     FILE *stream;
+     rtx exp;
+     int byte_size;
+{
+  HOST_WIDE_INT mask;
+  HOST_WIDE_INT value;
+
+  if (exp == NULL_RTX || byte_size == 0)
+    {
+      if (gas_bits_in_word > 0)
+	{
+	  gas_byte_word <<= BITS_PER_WORD - gas_bits_in_word;
+	  fputs ("\t.word\t", stream);
+	  pdp10_print_unsigned (stream, gas_byte_word);
+	  fputc ('\n', stream);
+	  gas_byte_word = 0;
+	  gas_bits_in_word = 0;
+	}
+      return;
+    }
+
+  if (GET_CODE (exp) != CONST_INT)
+    abort ();
+
+  if (byte_size <= 0 || byte_size > BITS_PER_WORD)
+    abort ();
+
+  if (gas_bits_in_word + byte_size > BITS_PER_WORD)
+    pdp10_output_byte (stream, NULL_RTX, 0);
+
+  mask = ((HOST_WIDE_INT) 1 << byte_size) - 1;
+  value = INTVAL (exp) & mask;
+  gas_byte_word = (gas_byte_word << byte_size) | value;
+  gas_bits_in_word += byte_size;
+
+  if (gas_bits_in_word == BITS_PER_WORD)
+    pdp10_output_byte (stream, NULL_RTX, 0);
+}
+
+void
+pdp10_gas_output_ascii (stream, ptr, len)
+     FILE *stream;
+     const char *ptr;
+     int len;
+{
+  HOST_WIDE_INT word;
+  int byte_size;
+  int bits;
+
+  byte_size = pdp10_string_literal_byte_size;
+  word = 0;
+  bits = 0;
+
+  while (len-- > 0)
+    {
+      int c = (unsigned char) *ptr++;
+      int mask;
+
+      if (byte_size == 6)
+	{
+	  c = TOUPPER (c) - 040;
+	  if (c < 0 || c > 077)
+	    c = 0;
+	}
+
+      mask = (1 << byte_size) - 1;
+      c &= mask;
+
+      if (bits + byte_size > BITS_PER_WORD)
+	{
+	  word <<= BITS_PER_WORD - bits;
+	  fputs ("\t.word\t", stream);
+	  pdp10_print_unsigned (stream, word);
+	  fputc ('\n', stream);
+	  word = 0;
+	  bits = 0;
+	}
+
+      word = (word << byte_size) | c;
+      bits += byte_size;
+      pdp10_byte_count++;
+
+      if (bits == BITS_PER_WORD)
+	{
+	  fputs ("\t.word\t", stream);
+	  pdp10_print_unsigned (stream, word);
+	  fputc ('\n', stream);
+	  word = 0;
+	  bits = 0;
+	}
+    }
+
+  if (bits > 0)
+    {
+      word <<= BITS_PER_WORD - bits;
+      fputs ("\t.word\t", stream);
+      pdp10_print_unsigned (stream, word);
+      fputc ('\n', stream);
+    }
+}
+
+static bool
+pdp10_assemble_integer (x, size, aligned_p)
+     rtx x;
+     unsigned int size;
+     int aligned_p;
+{
+  rtx base;
+  HOST_WIDE_INT offset;
+
+  if (GET_CODE (x) == UNSPEC && XINT (x, 1) == UNSPEC_ADJBP)
+    {
+      rtx folded = pdp10_simplify_unspec (x, NULL_RTX);
+      if (folded != NULL_RTX)
+	x = folded;
+    }
+
+  if (aligned_p
+      && size == 4
+      && pdp10_const_word36_byte_pointer_p (x))
+    {
+      pdp10_output_byte (asm_out_file, NULL_RTX, 0);
+      fputs ("	.long	", asm_out_file);
+      pdp10_print_raw_word36_constant (asm_out_file, x);
+      fputc ('\n', asm_out_file);
+      pdp10_byte_count += size;
+      return true;
+    }
+
+  if (aligned_p
+      && size == 4
+      && (pdp10_const_byte_pointer_p (x)
+	  || (!TARGET_EXTENDED
+	      && pdp10_decompose_symbolic_constant (x, &base, &offset))))
+    {
+      pdp10_output_byte (asm_out_file, NULL_RTX, 0);
+
+      if (TARGET_EXTENDED)
+	{
+	  fputc ('	', asm_out_file);
+	  pdp10_print_operand (asm_out_file, x, PRINT_OP_GIW);
+	}
+      else
+	{
+	  fputs ("	.long	", asm_out_file);
+	  pdp10_print_raw_word_constant (asm_out_file, x);
+	}
+
+      fputc ('\n', asm_out_file);
+      pdp10_byte_count += size;
+      return true;
+    }
+
+  if ((size == 1 || size == 2) && GET_CODE (x) == CONST_INT)
+    {
+      pdp10_output_byte (asm_out_file, x, pdp10_bits_per_unit * size);
+      pdp10_byte_count += size;
+      return true;
+    }
+
+  return false;
+}
+
+int
+pdp10_align_with_pad (pad)
+     int pad ATTRIBUTE_UNUSED;
+{
+  pdp10_output_byte (asm_out_file, NULL_RTX, 0);
+  return 0;
+}
+#endif /* __PDP10_GAS_H__ */
+
 
 
 /**********************************************************************
@@ -4578,8 +6017,45 @@ pdp10_output_store_byte (insn, operands)
 	  pos = p;
 	  size = s;
 	}
-      else if (MEM_ALIGN (operands[0]) == BITS_PER_WORD)
-	pos = 0;
+      else
+	{
+	  /* struct-subword-packed-qi-mem-bytepos-v21:
+	     Packed struct QImode fields can reach final as a plain MEM whose
+	     address is only the containing word address, while the field identity
+	     survives only in MEM_EXPR.  Emitting "DPB reg,mem" for that shape uses
+	     the data word itself as a byte pointer.  Recover the byte position from
+	     the COMPONENT_REF FIELD_DECL and force output_bitfield_move() to print a
+	     literal POINT byte pointer, e.g. [POINT 9,packed_rec,29].  */
+	  if (GET_MODE (operands[0]) == QImode && MEM_EXPR (operands[0]) != 0)
+	    {
+	      tree expr = MEM_EXPR (operands[0]);
+	      tree field = NULL_TREE;
+	      HOST_WIDE_INT bitpos;
+	      int bytepos;
+
+	      if (TREE_CODE (expr) == COMPONENT_REF)
+		field = TREE_OPERAND (expr, 1);
+	      else if (TREE_CODE (expr) == ARRAY_REF
+		       && TREE_CODE (TREE_OPERAND (expr, 0)) == COMPONENT_REF)
+		field = TREE_OPERAND (TREE_OPERAND (expr, 0), 1);
+
+	      if (field != NULL_TREE && TREE_CODE (field) == FIELD_DECL)
+		{
+		  bitpos = int_bit_position (field);
+		  bytepos = (int) (bitpos % BITS_PER_WORD);
+		  if (bytepos < 0)
+		    bytepos += BITS_PER_WORD;
+		  if (bytepos + 9 <= BITS_PER_WORD)
+		    {
+		      pos = bytepos;
+		      size = 9;
+		    }
+		}
+	    }
+
+	  if (pos == -1 && MEM_ALIGN (operands[0]) == BITS_PER_WORD)
+	    pos = 0;
+	}
     }
 
   return output_bitfield_move (asm_out_file, insn, 1, 0, operands[1],
@@ -4739,6 +6215,77 @@ pdp10_output_movhi (operands, sign_extend)
     {
       rtx reg = store ? operands[1] : operands[0];
       int mem_right = 1;
+
+      /* Target-specific scalar integer types such as signed char9 and
+         signed short16 can be represented as HImode by the generic middle
+         end, but their C precision is smaller than a PDP-10 halfword.  Do
+         not use HRRE/HRRZ for those loads: HRRE sign-extends bit 17, while
+         char9's sign bit is bit 8.  Load the right-justified scalar field
+         with the actual precision and then extend that value.  */
+      if (!store && GET_CODE (x) == MEM && GET_MODE (x) == HImode)
+        {
+          int precision = pdp10_mem_integer_precision (x);
+
+          if (precision <= 0 || precision >= 18)
+            precision = pdp10_mem_scalar_precision_hint (x);
+
+          if (precision > 0 && precision < 18)
+            {
+              rtx ops[2];
+              int shift = BITS_PER_WORD - precision;
+
+              output_bitfield_move (asm_out_file, NULL_RTX, 0, 0,
+                                    reg, x, precision, shift);
+              if (sign_extend)
+                {
+                  ops[0] = reg;
+                  ops[1] = GEN_INT (shift);
+                  output_asm_insn ("lsh %0,%1", ops);
+                  ops[1] = GEN_INT (-shift);
+                  output_asm_insn ("ash %0,%1", ops);
+                }
+              return "";
+            }
+        }
+
+      /* struct-subword-packed-hi-mem-bytepos-v22:
+	 Packed struct HImode fields may reach here as a plain MEM whose
+	 address is the containing word.  If we blindly use the halfword move
+	 fast path, HRLM/HRRM can store into the wrong halfword and clobber an
+	 adjacent packed field.  Recover the field bit position from MEM_EXPR
+	 and use an explicit POINT 18 byte pointer for non-halfword-aligned
+	 18-bit fields, e.g. DPB r,[POINT 18,packed_rec+1,33].  */
+      if (store
+	  && GET_CODE (x) == MEM
+	  && GET_MODE (x) == HImode
+	  && MEM_EXPR (x) != 0)
+	{
+	  tree expr = MEM_EXPR (x);
+	  tree field = NULL_TREE;
+	  HOST_WIDE_INT bitpos;
+	  int bytepos;
+
+	  if (TREE_CODE (expr) == COMPONENT_REF)
+	    field = TREE_OPERAND (expr, 1);
+	  else if (TREE_CODE (expr) == ARRAY_REF
+		   && TREE_CODE (TREE_OPERAND (expr, 0)) == COMPONENT_REF)
+	    field = TREE_OPERAND (TREE_OPERAND (expr, 0), 1);
+
+	  if (field != NULL_TREE && TREE_CODE (field) == FIELD_DECL)
+	    {
+	      bitpos = int_bit_position (field);
+	      bytepos = (int) (bitpos % BITS_PER_WORD);
+	      if (bytepos < 0)
+		bytepos += BITS_PER_WORD;
+
+	      if (bytepos != 0
+		  && bytepos != 18
+		  && bytepos + 18 <= BITS_PER_WORD)
+		return output_bitfield_move (asm_out_file, NULL_RTX,
+					     1, 0, reg, x, 18, bytepos);
+	    }
+	}
+
       mem_right = 0;
       if (GET_CODE (x) == MEM
 	  && GET_CODE (XEXP (x, 0)) == CONST
@@ -4901,6 +6448,142 @@ pdp10_find_last_value (x, pinsn)
    : GET_CODE (X) == NEG						\
      && GET_CODE (XEXP ((X), 0)) == CONST_INT ? -INTVAL (XEXP ((X), 0))	\
    : (Y))
+
+
+static int
+pdp10_same_regno_p (x, regno)
+     rtx x;
+     unsigned int regno;
+{
+  /* Final/reload halfword patterns often address a hard register through
+     a SUBREG or STRICT_LOW_PART.  Treat those as the underlying hard
+     register here; all callers of this small helper are already looking
+     at final-output/reload-local shapes, not doing general aliasing.  */
+  while (x && (GET_CODE (x) == SUBREG || GET_CODE (x) == STRICT_LOW_PART))
+    x = GET_CODE (x) == SUBREG ? SUBREG_REG (x) : XEXP (x, 0);
+
+  return x && REG_P (x) && REGNO (x) == regno;
+}
+
+static int
+pdp10_const_int_p (x, value)
+     rtx x;
+     HOST_WIDE_INT value;
+{
+  return GET_CODE (x) == CONST_INT && INTVAL (x) == value;
+}
+
+static int
+pdp10_zero_extract_right_half_of_reg_p (x, regno)
+     rtx x;
+     unsigned int regno;
+{
+  return (GET_CODE (x) == ZERO_EXTRACT
+	  && pdp10_same_regno_p (XEXP (x, 0), regno)
+	  && pdp10_const_int_p (XEXP (x, 1), 18)
+	  && pdp10_const_int_p (XEXP (x, 2), 18));
+}
+
+static int
+pdp10_set_reg_from_right_half_p (set, dstno, srcno)
+     rtx set;
+     unsigned int dstno;
+     unsigned int srcno;
+{
+  rtx dest, src, a, b;
+
+  if (!set)
+    return 0;
+
+  dest = SET_DEST (set);
+  src = SET_SRC (set);
+
+  /* The right-half load we need to remember may appear either as a normal
+     value-producing set,
+
+         (set DST (and SRC RIGHT_HALF))
+
+     or as another generic *insv_reg operation,
+
+         (set (zero_extract DST 18 18) SRC)
+
+     The latter is exactly what the halfword torture test prints as
+     "hrrz DST,SRC" before the bad signed recomposition.  */
+  if (pdp10_zero_extract_right_half_of_reg_p (dest, dstno)
+      && pdp10_same_regno_p (src, srcno))
+    return 1;
+
+  if (!pdp10_same_regno_p (dest, dstno))
+    return 0;
+
+  /* Some final/reload shapes spell HRRZ through an HI subreg.  */
+  if (GET_CODE (src) == SUBREG
+      && SUBREG_BYTE (src) == UNITS_PER_WORD / 2
+      && pdp10_same_regno_p (SUBREG_REG (src), srcno))
+    return 1;
+
+  if (GET_CODE (src) != AND)
+    return 0;
+
+  a = XEXP (src, 0);
+  b = XEXP (src, 1);
+
+  return ((pdp10_same_regno_p (a, srcno)
+	   && pdp10_const_int_p (b, RIGHT_HALF))
+	  || (pdp10_same_regno_p (b, srcno)
+	      && pdp10_const_int_p (a, RIGHT_HALF)));
+}
+
+/* Return nonzero if, before INSN, DEST was last assigned the right half
+   of SRC, and DEST has not been touched since.  This is intentionally
+   based on the hard register numbers visible after reload.  The halfword
+   recomposition bug reaches final through the generic *insv_reg path as
+
+       HRRZ  dest,src
+       ... modify src into a sign-half mask ...
+       HRLZ  dest,src       ; emitted by generic left-half insert
+
+   The actual insert must preserve DEST's live right half, so
+   pdp10_output_insv emits HRL instead of allowing output_bitfield_move to
+   choose HRLZ.  */
+static int
+pdp10_dest_last_set_from_right_half_p (destno, srcno, insn)
+     unsigned int destno;
+     unsigned int srcno;
+     rtx insn;
+{
+  rtx p;
+
+  for (p = PREV_INSN (insn); p; p = PREV_INSN (p))
+    {
+      enum rtx_code code = GET_CODE (p);
+      rtx set;
+
+      if (code == CODE_LABEL || code == BARRIER
+	  || code == JUMP_INSN || code == CALL_INSN)
+	return 0;
+
+      if (code != INSN)
+	continue;
+
+      set = single_set (p);
+      if (!set)
+	{
+	  if (reg_set_p (gen_rtx_REG (SImode, destno), p))
+	    return 0;
+	  continue;
+	}
+
+      if (pdp10_set_reg_from_right_half_p (set, destno, srcno))
+	return 1;
+
+      if (pdp10_same_regno_p (SET_DEST (set), destno)
+	  || reg_set_p (gen_rtx_REG (SImode, destno), p))
+	return 0;
+    }
+
+  return 0;
+}
 
 /* Return nonzero iff the last value X was set to before INSN had
    BITS zero-extended bits.  */
@@ -5188,6 +6871,11 @@ pdp10_output_extv_sequence (operands)
 {
   int len = INTVAL (operands[2]);
   int pos = INTVAL (operands[3]);
+  int rshift;
+  int same_reg;
+
+  if (len <= 0 || pos < 0 || len + pos > BITS_PER_WORD)
+    abort ();
 
   if (len == 9)
     pdp10_output_ldbe_9++;
@@ -5198,35 +6886,69 @@ pdp10_output_extv_sequence (operands)
   else if (len == 32)
     output_extv_32++;
 
-  operands[3] = GEN_INT (len - BITS_PER_WORD);
+  if (len == BITS_PER_WORD && pos == 0)
+    return (GET_CODE (operands[0]) == REG
+	    && SAME_REG (operands[0], operands[1])) ? "" : "move %0,%W1";
+
+  if (len == 18 && pos == 0)
+    return "hlre %0,%W1";
+
+  /* Small target-specific signed scalar integer objects, for example
+     char9 and short16, can arrive here as a generic 18-bit right-half
+     extraction from memory.  HRRE would sign-extend bit 17, but the C
+     scalar's sign bit is smaller, e.g. bit 8 for char9.  If MEM_EXPR
+     still records the true integer precision, reissue the extraction with
+     that precision so the normal shift sequence sign-extends the right
+     bit.  */
+  if (len == 18 && pos == 18
+      && GET_CODE (operands[1]) == MEM)
+    {
+      int precision = pdp10_mem_integer_precision (operands[1]);
+
+      if (precision <= 0 || precision >= 18)
+        precision = pdp10_mem_scalar_precision_hint (operands[1]);
+
+      /* v30: Some signed 9-bit scalar reloads reach this hook as
+	 sign_extract(..., 18, 18) from a QImode MEM with no useful
+	 MEM_EXPR precision left.  The old HRRE fast path sign-extended
+	 bit 17, leaving a raw char9 value such as 0401 positive.  QImode
+	 MEMs are PDP-10 9-bit scalar quantities here, so force the generic
+	 shift/ash sequence to sign-extend bit 8.  */
+      if ((precision <= 0 || precision >= 18)
+	  && GET_MODE (operands[1]) == QImode)
+	precision = 9;
+
+      if (precision > 0 && precision < 18)
+	{
+	  operands[2] = GEN_INT (precision);
+	  operands[3] = GEN_INT (BITS_PER_WORD - precision);
+	  len = precision;
+	  pos = BITS_PER_WORD - precision;
+	}
+    }
+
+  if (len == 18 && pos == 18)
+    return "hrre %0,%W1";
+
+  same_reg = GET_CODE (operands[0]) == REG && SAME_REG (operands[0], operands[1]);
+  rshift = BITS_PER_WORD - len;
+  operands[3] = GEN_INT (-rshift);
+
   if (pos == 0)
     {
-      if (len == 18)
-	return "hlre %0,%W1";
-      else if (SAME_REG (operands[0], operands[1]))
+      if (same_reg)
 	return "ash %0,%3";
       else
 	return "move %0,%W1\n\tash %0,%3";
     }
-  else if (pos == 18)
-    {
-      if (len == 18)
-	return "hrre %0,%W1";
-      else
-	{
-	  operands[2] = GEN_INT (len - 18);
-	  return "hrre %0,%W1\n\tash %0,%2";
-	}
-    }
+
+  operands[2] = GEN_INT (pos);
+  if (same_reg)
+    return "lsh %0,%2\n\tash %0,%3";
   else
-    {
-      operands[2] = GEN_INT (pos);
-      if (SAME_REG (operands[0], operands[1]))
-	return "lsh %0,%2\n\tash %0,%3";
-      else
-	return "move %0,%W1\n\tlsh %0,%2\n\tash %0,%3";
-    }
+    return "move %0,%W1\n\tlsh %0,%2\n\tash %0,%3";
 }
+
 
 /* Return or output a sequence of at most three instructions to load a
    register from an unsigned bit-field.  Called to output an extzv
@@ -5237,62 +6959,86 @@ pdp10_output_extzv_sequence (operands)
 {
   int len = INTVAL (operands[2]);
   int pos = INTVAL (operands[3]);
+  int rshift;
+  int same_reg;
+  unsigned HOST_WIDE_INT mask;
 
-  operands[2] = GEN_INT (len + pos - BITS_PER_WORD);
+  if (len <= 0 || pos < 0 || len + pos > BITS_PER_WORD)
+    abort ();
+
+  if (len == 16 && pos == 0)
+    output_extzv_16_0++;
+  else if (len == 16)
+    output_extzv_16_1++;
+  else if (len == 32)
+    output_extzv_32++;
+
+  if (len == BITS_PER_WORD && pos == 0)
+    return (GET_CODE (operands[0]) == REG
+	    && SAME_REG (operands[0], operands[1])) ? "" : "move %0,%W1";
+
+  if (len == 18 && pos == 0)
+    return "hlrz %0,%W1";
+
+  if (len == 18 && pos == 18)
+    return "hrrz %0,%W1";
+
+  same_reg = GET_CODE (operands[0]) == REG && SAME_REG (operands[0], operands[1]);
+  rshift = BITS_PER_WORD - len - pos;
+
   if (pos == 0)
     {
-      if (len == 16)
-	output_extzv_16_0++;
-
-      if (len == 18)
-	return "hlrz %0,%W1";
-      else if (SAME_REG (operands[0], operands[1]))
+      operands[2] = GEN_INT (-rshift);
+      if (same_reg)
 	return "lsh %0,%2";
       else
 	return "move %0,%W1\n\tlsh %0,%2";
     }
-  else if (pos == 18)
-    {
-      if (len == 18)
-	return "hrrz %0,%W1";
-      else
-	{
-	  operands[2] = GEN_INT (len - 18);
-	  return "hrrz %0,%W1\n\tlsh %0,%2";
-	}
-    }
+
+  mask = len == BITS_PER_WORD ? WORD_MASK : ((HOST_WIDE_INT) 1 << len) - 1;
+  if (len <= 18)
+    operands[3] = gen_int_mode (mask, SImode);
   else
+    operands[3] = gen_int_mode ((~mask & WORD_MASK) >> 18, SImode);
+
+  /* When extzv feeds a QI/HI/SImode SUBREG destination, GCC can
+     follow this instruction with a normal zero_extend into SImode.
+     For right-aligned fields, that following zero_extend emits the
+     visible mask.  Do not print the same ANDI here as well, or code
+     like
+
+         MOVE r,mem
+         ANDI r,mask
+         ANDI r,mask
+
+     is produced for right-aligned unsigned fields.  Direct SImode
+     extzv still reaches the normal path below and keeps its mask.  */
+  if (GET_CODE (operands[0]) == SUBREG
+      && len <= 18
+      && len + pos == BITS_PER_WORD)
+    return "move %0,%W1";
+
+  if (rshift == 0)
     {
-      unsigned HOST_WIDE_INT mask;
-
-      if (len == 16)
-	output_extzv_16_1++;
-
-      mask = ((HOST_WIDE_INT)1 << len) - 1;
-      if (len <= 18)
-	operands[3] = gen_int_mode (mask, SImode);
+      if (same_reg)
+	return len <= 18 ? "andi %0,%3" : "tlz %0,%3";
       else
-	operands[3] = gen_int_mode ((~mask & WORD_MASK) >> 18, SImode);
-
-      if (SAME_REG (operands[0], operands[1]))
-	{
-	  if (len + pos == 36)
-	    return len <= 18 ? "andi %0,%3" : "tlz %0,%3";
-	  else
-	    return len <= 18
-	      ? "lsh %0,%2\n\tandi %0,%3"
-	      : "lsh %0,%2\n\ttlz %0,%3";
-	}
-      else if (len + pos == 36)
 	return len <= 18
 	  ? "move %0,%W1\n\tandi %0,%3"
 	  : "move %0,%W1\n\ttlz %0,%3";
-      else
-	return len <= 18
-	  ? "move %0,%W1\n\tlsh %0,%2\n\tandi %0,%3"
-	  : "move %0,%W1\n\tlsh %0,%2\n\ttlz %0,%3";
     }
+
+  operands[2] = GEN_INT (-rshift);
+  if (same_reg)
+    return len <= 18
+      ? "lsh %0,%2\n\tandi %0,%3"
+      : "lsh %0,%2\n\ttlz %0,%3";
+  else
+    return len <= 18
+      ? "move %0,%W1\n\tlsh %0,%2\n\tandi %0,%3"
+      : "move %0,%W1\n\tlsh %0,%2\n\ttlz %0,%3";
 }
+
 
 /* Return or output a single instruction to load a register from an
    unsigned bit-field.  Called to output an extzv pattern.  */
@@ -5346,16 +7092,149 @@ pdp10_output_insv (insn, operands)
      rtx insn;
      rtx *operands;
 {
+  int len = INTVAL (operands[1]);
+  int pos = INTVAL (operands[2]);
+
+  if (len <= 0 || pos < 0 || len + pos > BITS_PER_WORD)
+    abort ();
+
+  if (len == BITS_PER_WORD && pos == 0)
+    {
+      if (GET_CODE (operands[0]) == REG && SAME_REG (operands[0], operands[3]))
+	return "";
+      if (GET_CODE (operands[0]) == MEM)
+	return "movem %3,%W0";
+      return "move %0,%3";
+    }
+
+  /* A register-to-register insert of a complete halfword normally goes
+     through output_bitfield_move, which can choose HRLZ/HRRZ when it is
+     building a fresh zero-extended result.  That is correct for cases like
+
+         x.l = y.r; x.r = 0
+
+     but not for the signed bitfield recomposition used by rre3/lre3:
+
+         HRRZ d,s        ; d's right half is already the wanted value
+         ...             ; make a sign mask in s
+         HRLZ d,s        ; wrong: zeros d's right half
+
+     At this point we are still in the real *insv_reg output path, so fix
+     the actual insert: replace the left half with HRL and preserve the
+     live right half.  */
+  if (len == 18
+      && pos == 0
+      && REG_P (operands[0])
+      && REG_P (operands[3])
+      && pdp10_dest_last_set_from_right_half_p (REGNO (operands[0]),
+						   REGNO (operands[3]),
+						   insn))
+    return "hrl %0,%3";
+
   return output_bitfield_move (asm_out_file, insn, 1, 0, operands[3],
-			       operands[0], INTVAL (operands[1]),
-			       INTVAL (operands[2]));
+			       operands[0], len, pos);
 }
+
+
+/* Return nonzero if X is a constant local/global byte pointer rather
+   than a plain word address.  Such constants must not be loaded with
+   MOVEI/XMOVEI: the P,S byte-position bits live outside the effective
+   address field and would be lost.  */
+static int
+pdp10_const_byte_pointer_p (x)
+     rtx x;
+{
+  HOST_WIDE_INT offset;
+  HOST_WIDE_INT ps;
+  rtx base;
+
+  if (pdp10_const_word36_byte_pointer_p (x))
+    return 1;
+
+  if (!pdp10_decompose_symbolic_constant (x, &base, &offset)
+      || base == NULL_RTX)
+    return 0;
+
+  if ((offset & ~ADDRESS_MASK) == (((HOST_WIDE_INT)-1) & ~ADDRESS_MASK))
+    return 0;
+
+  ps = (offset >> 24) & (TARGET_EXTENDED ? 07700 : 07777);
+  return ps != 0;
+}
+
 
 const char *
 pdp10_output_movsi (insn, which_alternative)
      rtx insn;
      int which_alternative;
 {
+  /* struct-subword-packed-si-mem-byte-store-v23:
+     A packed SImode component can arrive at final as an ordinary word store,
+     e.g. MOVEM r,packed_rec+2, even though the laid-out C object is a
+     four-byte, 9-bit-unit field.  That full-word MOVEM clobbers adjacent
+     packed fields that share the containing PDP-10 word.  For static object
+     component stores, recover the FIELD_DECL byte offset from MEM_EXPR and
+     store the source word as four explicit 9-bit bytes.  AC0 is fixed as a
+     scratch register by the PDP-10 backend.  */
+  if (which_alternative == 10
+      && GET_CODE (PATTERN (insn)) == SET
+      && GET_CODE (SET_DEST (PATTERN (insn))) == MEM
+      && GET_MODE (SET_DEST (PATTERN (insn))) == SImode
+      && REG_P (SET_SRC (PATTERN (insn)))
+      && MEM_EXPR (SET_DEST (PATTERN (insn))) != 0
+      && MEM_ALIGN (SET_DEST (PATTERN (insn))) < BITS_PER_WORD)
+    {
+      rtx dest = SET_DEST (PATTERN (insn));
+      rtx src = SET_SRC (PATTERN (insn));
+      tree expr = MEM_EXPR (dest);
+      tree object = NULL_TREE;
+      tree field = NULL_TREE;
+
+      if (TREE_CODE (expr) == COMPONENT_REF)
+        {
+          object = TREE_OPERAND (expr, 0);
+          field = TREE_OPERAND (expr, 1);
+        }
+
+      if (object != NULL_TREE
+          && field != NULL_TREE
+          && TREE_CODE (object) == VAR_DECL
+          && TREE_CODE (field) == FIELD_DECL
+          && int_size_in_bytes (TREE_TYPE (field)) == 4
+          && DECL_RTL (object) != 0
+          && GET_CODE (DECL_RTL (object)) == MEM)
+        {
+          HOST_WIDE_INT byteoff = int_byte_position (field);
+          rtx base = XEXP (DECL_RTL (object), 0);
+          rtx scratch = gen_rtx_REG (SImode, 0);
+          rtx ops[2];
+          rtx mem;
+
+          ops[0] = scratch;
+          ops[1] = src;
+
+          output_asm_insn ("move %0,%1", ops);
+          output_asm_insn ("lsh %0,-33", ops);
+          mem = gen_rtx_MEM (QImode, plus_constant (base, byteoff));
+          output_bitfield_move (asm_out_file, insn, 1, 0, scratch, mem, 9, 0);
+
+          output_asm_insn ("move %0,%1", ops);
+          output_asm_insn ("lsh %0,-22", ops);
+          mem = gen_rtx_MEM (QImode, plus_constant (base, byteoff + 1));
+          output_bitfield_move (asm_out_file, insn, 1, 0, scratch, mem, 9, 0);
+
+          output_asm_insn ("move %0,%1", ops);
+          output_asm_insn ("lsh %0,-11", ops);
+          mem = gen_rtx_MEM (QImode, plus_constant (base, byteoff + 2));
+          output_bitfield_move (asm_out_file, insn, 1, 0, scratch, mem, 9, 0);
+
+          mem = gen_rtx_MEM (QImode, plus_constant (base, byteoff + 3));
+          output_bitfield_move (asm_out_file, insn, 1, 0, src, mem, 9, 0);
+
+          return "";
+        }
+    }
+
   static const char *insns[] =
   {
     "move %0,%1",
@@ -5372,13 +7251,17 @@ pdp10_output_movsi (insn, which_alternative)
     "move %0,[%1]"
   };
 
-  if (which_alternative == 2 && TARGET_EXTENDED)
+  if ((which_alternative == 1 || which_alternative == 2)
+      && GET_CODE (PATTERN (insn)) == SET
+      && pdp10_const_byte_pointer_p (SET_SRC (PATTERN (insn))))
+    return "move %0,[%1]";
+  else if (which_alternative == 2 && TARGET_EXTENDED)
     /* ADDRESS: Alternative 2 is used to load a the value of a symbol
        stored in the immediate field.  In extended mode, use XMOVEI to
        create an extended address.  */
     return "xmovei %0,%1";
   else if (which_alternative == 7 && get_attr_length (insn) == 2)
-    return "skipa %0,.+1\n\t%_%1";
+    return "skipa %0,.+1\n\t %1";
   else
     return insns[which_alternative];
 }
@@ -5396,11 +7279,18 @@ pdp10_expand_dmove (destination, source)
   enum machine_mode mode1 = SImode;
 
   /* Many moves can be done in a single RTX insn that expands to two
-     machine instructions.  */
-  if ((GET_CODE (destination) != MEM ||
-       GET_CODE (XEXP (destination, 0)) != MEM)
-      && (GET_CODE (source) != MEM ||
-	  GET_CODE (XEXP (source, 0)) != MEM))
+     machine instructions.  Non-KI10 targets, however, lower DImode
+     memory moves as two ordinary word moves using %Z for the second
+     word.  That requires an offsettable memory operand.  If reload has
+     produced a legitimate but non-offsettable address such as
+     SYMBOL(REG), split the double move here so each word gets its own
+     normal SImode address.  */
+  if ((GET_CODE (destination) != MEM
+       || (GET_CODE (XEXP (destination, 0)) != MEM
+	   && offsettable_memref_p (destination)))
+      && (GET_CODE (source) != MEM
+	  || (GET_CODE (XEXP (source, 0)) != MEM
+	      && offsettable_memref_p (source))))
     return 0;
 
   if (GET_CODE (destination) == MEM)
@@ -5419,19 +7309,10 @@ pdp10_expand_dmove (destination, source)
     {
       unsigned HOST_WIDE_INT high, low;
 
-      if (GET_CODE (source) == CONST_INT)
-	{
-	  high = (INTVAL (source) >> 36) & WORD_MASK;
-	  low = INTVAL (source) & WORD_MASK;
-	}
-      else if (GET_MODE (source) == VOIDmode)
-	{
-	  high =
-	    ((CONST_DOUBLE_HIGH (source) << (HOST_BITS_PER_WIDE_INT - 36))
-	     + ((CONST_DOUBLE_LOW (source) >> 36)
-		& ((HWINT (1) << (HOST_BITS_PER_WIDE_INT - 36)) - 1)));
-	  low = CONST_DOUBLE_LOW (source) & WORD_MASK;
-	}
+      if (GET_CODE (source) == CONST_INT
+	  || (GET_CODE (source) == CONST_DOUBLE
+	      && GET_MODE (source) == VOIDmode))
+	pdp10_split_integer_double (source, &high, &low);
       else
 	{
 	  REAL_VALUE_TYPE r;
@@ -5503,17 +7384,10 @@ pdp10_expand_move_4 (destination, source)
     {
       unsigned HOST_WIDE_INT high, low;
 
-      if (GET_CODE (source) == CONST_INT)
-	{
-	  high = (INTVAL (source) >> 36) & 0777777777777ULL;
-	  low = INTVAL (source) & 0777777777777ULL;
-	}
-      else if (GET_MODE (source) == VOIDmode)
-	{
-	  high = ((CONST_DOUBLE_HIGH (source) << 28)
-		  + ((CONST_DOUBLE_LOW (source) >> 36) & 01777777777ULL));
-	  low = CONST_DOUBLE_LOW (source) & 0777777777777ULL;
-	}
+      if (GET_CODE (source) == CONST_INT
+	  || (GET_CODE (source) == CONST_DOUBLE
+	      && GET_MODE (source) == VOIDmode))
+	pdp10_split_integer_double (source, &high, &low);
       else
 	{
 	  REAL_VALUE_TYPE r;
@@ -5590,34 +7464,34 @@ expand_blt (destination, source, length)
      rtx source;
      rtx length;
 {
+  HOST_WIDE_INT words;
+  HOST_WIDE_INT last;
   rtx ac, e;
 
   if (GET_CODE (length) != CONST_INT
       || INTVAL (length) % UNITS_PER_WORD != 0)
     return 0;
 
+  words = INTVAL (length) / UNITS_PER_WORD;
+  if (words == 0)
+    return 1;
+  last = words - 1;
+
   ac = gen_reg_rtx (Pmode);
-  if (CONSTANT_ADDRESS_P (destination)
-      && CONSTANT_ADDRESS_P (source))
-    {
-      emit_insn (gen_move_two_halves (ac, source, destination));
-    }
+
+  /* Build the BLT AC as one target operation.  Do not use a loose
+     MOVEI;HRLI pair here: when SOURCE is a register, the halfword insert
+     can be rewritten as HRLZ, which zeroes the destination half.  That
+     makes BLT copy to address zero and can clobber the AC/low-core area.  */
+  emit_insn (gen_pdp10_blt_setup (ac, source, destination));
+
+  if (CONSTANT_ADDRESS_P (destination))
+    e = plus_constant (destination, last);
   else
     {
-      emit_insn (gen_MOVEI (ac, destination));
-      emit_insn (gen_HRLI (ac, source));
+      e = gen_reg_rtx (Pmode);
+      emit_insn (gen_addsi3 (e, destination, GEN_INT (last)));
     }
-
-  {
-    HOST_WIDE_INT len = INTVAL (length) - UNITS_PER_WORD;
-    if (CONSTANT_ADDRESS_P (destination))
-      e = plus_constant (destination, len);
-    else
-      {
-	e = gen_reg_rtx (Pmode);
-	emit_insn (gen_addsi3 (e, destination, GEN_INT (len)));
-      }
-  }
 
   /* Beginning at the location addressed by the left half-word of AC,
      move words to another area beginning at the location addressed by
@@ -5788,31 +7662,34 @@ expand_blt_clear (destination, length)
      rtx destination;
      rtx length;
 {
-  HOST_WIDE_INT len;
+  HOST_WIDE_INT words;
+  HOST_WIDE_INT last;
   rtx ac, e;
 
   if (GET_CODE (length) != CONST_INT
       || INTVAL (length) % UNITS_PER_WORD != 0)
     return 0;
 
-  len = INTVAL (length);
+  words = INTVAL (length) / UNITS_PER_WORD;
+  if (words == 0)
+    return 1;
+  last = words - 1;
+
   ac = gen_reg_rtx (Pmode);
 
+  /* Build the clear BLT AC with the same protected setup used by
+     expand_blt: source starts at DESTINATION and destination starts at
+     DESTINATION+1.  */
+  emit_insn (gen_pdp10_blt_setup (ac,
+				  destination,
+				  plus_constant (destination, 1)));
+
   if (CONSTANT_ADDRESS_P (destination))
-    {
-      emit_insn (gen_move_two_halves (ac,
-				      destination,
-				      plus_constant (destination,
-						     UNITS_PER_WORD)));
-      e = plus_constant (destination, len - UNITS_PER_WORD);
-    }
+    e = plus_constant (destination, last);
   else
     {
-      emit_insn (gen_MOVSI (ac, destination));
-      emit_insn (gen_HRRI (ac, plus_constant (destination, UNITS_PER_WORD)));
       e = gen_reg_rtx (Pmode);
-      emit_insn (gen_addsi3 (e, destination,
-			     GEN_INT (len - UNITS_PER_WORD)));
+      emit_insn (gen_addsi3 (e, destination, GEN_INT (last)));
     }
 
   emit_move_insn (gen_rtx_MEM (SImode, destination), const0_rtx);
@@ -5974,6 +7851,10 @@ pdp10_expand_cmpstrsi (operands)
 
 **********************************************************************/
 
+static void	emit_cmp_and_jump_insn_1 PARAMS ((rtx x, rtx y,
+					  enum machine_mode mode,
+					  enum rtx_code comparison,
+					  int unsignedp, rtx label));
 static rtx	expand_adjust_byte_pointer PARAMS ((tree type, rtx target,
 						    rtx op1, rtx op2));
 static void	avoid_reg_equal PARAMS ((rtx op0, rtx op1));
@@ -5996,11 +7877,39 @@ pdp10_bytesize (type)
 {
   int size;
 
-  if (TREE_CODE (type) == RECORD_TYPE)
-    return 36;
-
   if (TREE_CODE (type) == ARRAY_TYPE)
     type = TREE_TYPE (type);
+
+  if (TREE_CODE (type) == RECORD_TYPE)
+    {
+      tree field;
+      int field_size;
+      int best_size = 0;
+
+      /* A record containing any word-sized field is addressed as a
+         word object.  If all fields are PDP-10 byte objects, keep the
+         largest field byte size as the record pointer byte size.
+
+         This is needed not only for explicitly packed records such as
+         struct { char9 x[3]; }, but also for ordinary small records
+         that fit into a single word, e.g. struct { short a; char b; }.
+         Their local addresses must carry the local byte-pointer P,S
+         field; treating them as plain word pointers loses that state.  */
+      for (field = TYPE_FIELDS (type); field; field = TREE_CHAIN (field))
+	{
+	  if (TREE_CODE (field) != FIELD_DECL)
+	    continue;
+
+	  field_size = pdp10_bytesize (TREE_TYPE (field));
+	  if (field_size >= 36)
+	    return 36;
+	  if (field_size > best_size)
+	    best_size = field_size;
+	}
+
+      return best_size ? best_size : 36;
+    }
+
   if (VOID_TYPE_P (type))
     size = 9;
   else
@@ -6008,7 +7917,11 @@ pdp10_bytesize (type)
   if (size > 36)
     size = 36;
 
-  return size == 16 ? 18 : size == 32 ? 36 : size;
+  /* Do not collapse explicit 16-bit PDP-10 byte types into 18-bit
+     halfword pointer types.  short16 arrays are stored with POINT 16
+     fields, and pointer arithmetic must therefore use 16-bit byte
+     pointers/IBP stepping.  short18 remains the normal halfword case.  */
+  return size == 32 ? 36 : size;
 }
 
 /* Emit a dummy move instruction which will be optimized away later.
@@ -6047,64 +7960,121 @@ expand_adjust_byte_pointer (type, target, op0, op1)
 {
   int bytes_per_word;
   int byte_size;
-  rtx mod;
+  int shift;
+  int i;
+  rtx words, rem;
+  rtx loop_label, nonpos_label, neg_loop_label, done_label;
 
   byte_size = pdp10_bytesize (type);
   bytes_per_word = BITS_PER_WORD / byte_size;
 
-  {
-    /* This is unfinished.  Besides, the KCC source code hints about a
-       better way to do this.  See comment after simsubbp in ccout.c.  */
-    abort ();
+  /* This is the non-KL10up fallback for dynamic byte-pointer
+     adjustment.  KL10up targets use ADJBP instead.
 
-    /* char9:
-       MOVE target,op0
-       MOVE op3,op1
-       ANDI op3,3
-       ASH op1,-2
-       ADD target,op1
-       TRZE op3,1	op3=0 => 2 insns
-       IBP target	op3=1 => 3 insns
-       JUMPE op3,.+3	op3=2 => 4 insns
-       IBP target	op3=3 => 5 insns
-       IBP target
+     For power-of-two byte counts per word, decompose the byte count N
+     as:
 
-       char7:
-       MOVE target,op0
-       IDIV op1,5	op3=0 => 2 insns
-       ADD target,op1	op3=1 => 4 insns
-       JRST .+2		op3=2 => 6 insns
-       IBP target
-       SOJGE op3,.-1 */
+       words = floor (N / bytes_per_word)
+       rem   = N mod bytes_per_word
 
-    /* Move the source to the destination.  */
-    target = force_reg (Pmode, target);
-    emit_move_insn (target, op0);
+     using an arithmetic right shift and a low-bit mask.  This is also
+     correct for negative N in two's complement; for example, with
+     9-bit bytes, -1 becomes words = -1 and rem = 3, i.e. back one
+     word and then IBP forward three byte positions.
 
-    /* Divide the increment by the number of bytes per word.  */
-    mod = gen_reg_rtx (Pmode);
+     Non-power-of-two byte counts, such as 6-bit and 7-bit PDP-10 byte
+     pointers, cannot use a cheap shift/mask split.  Do those with a
+     correctness-first byte-step loop.  This avoids depending on IDIV
+     while the integer division patterns are still being stabilized.  */
+  switch (bytes_per_word)
+    {
+    case 2:
+      shift = 1;
+      break;
+    case 4:
+      shift = 2;
+      break;
+    default:
+      shift = 0;
+      break;
+    }
+
+  if (!target || !register_operand (target, Pmode)
+      || reg_overlap_mentioned_p (target, op1))
+    target = gen_reg_rtx (Pmode);
+
+  if (!general_operand (op0, Pmode))
+    op0 = force_reg (Pmode, op0);
+  if (!register_operand (op1, Pmode))
     op1 = force_reg (Pmode, op1);
-    switch (byte_size)
-      {
-      case 6:
-	abort ();
-      case 7:
-	emit_insn (gen_IDIVM (op1, op1, GEN_INT (5)));
-	break;
-      case 8:
-      case 9:
-	emit_insn (gen_ashrsi3_pointer (op1, op1, GEN_INT (2)));
-	break;
-      case 16:
-      case 18:
-	emit_insn (gen_ashrsi3_pointer (op1, op1, GEN_INT (1)));
-	break;
-      default:
-	abort ();
-      }
 
-    emit_insn (gen_addsi3 (target, target, op1));
-  }
+  emit_move_insn (target, op0);
+
+  if (shift != 0)
+    {
+      words = gen_reg_rtx (Pmode);
+      rem = gen_reg_rtx (Pmode);
+      emit_move_insn (words, op1);
+      emit_move_insn (rem, op1);
+
+      emit_insn (gen_andsi3 (rem, rem, GEN_INT (bytes_per_word - 1)));
+      emit_insn (gen_ashrsi3_pointer (words, words, GEN_INT (shift)));
+      emit_insn (gen_addsi3 (target, target, words));
+
+      loop_label = gen_label_rtx ();
+      done_label = gen_label_rtx ();
+
+      emit_cmp_and_jump_insn_1 (rem, CONST0_RTX (SImode), SImode, EQ, 0,
+				done_label);
+      emit_label (loop_label);
+      emit_insn (gen_IBP (target, target));
+      emit_insn (gen_addsi3 (rem, rem, constm1_rtx));
+      emit_cmp_and_jump_insn_1 (rem, CONST0_RTX (SImode), SImode, NE, 0,
+				loop_label);
+      emit_label (done_label);
+
+      return target;
+    }
+
+  /* Slow but general fallback for 5-, 6-, and other non-power-of-two
+     byte counts per word.  Positive N is just N applications of IBP.
+
+     Negative N is implemented as repeated one-byte decrements.  A
+     single one-byte decrement is:
+       word address -= 1
+       IBP byte_pointer, repeated bytes_per_word - 1 times
+     which lands on the previous byte while preserving the byte-pointer
+     P/S fields.  */
+  rem = gen_reg_rtx (Pmode);
+  emit_move_insn (rem, op1);
+
+  loop_label = gen_label_rtx ();
+  nonpos_label = gen_label_rtx ();
+  neg_loop_label = gen_label_rtx ();
+  done_label = gen_label_rtx ();
+
+  emit_cmp_and_jump_insn_1 (rem, CONST0_RTX (SImode), SImode, LE, 0,
+			    nonpos_label);
+
+  emit_label (loop_label);
+  emit_insn (gen_IBP (target, target));
+  emit_insn (gen_addsi3 (rem, rem, constm1_rtx));
+  emit_cmp_and_jump_insn_1 (rem, CONST0_RTX (SImode), SImode, GT, 0,
+			    loop_label);
+
+  emit_label (nonpos_label);
+  emit_cmp_and_jump_insn_1 (rem, CONST0_RTX (SImode), SImode, EQ, 0,
+			    done_label);
+
+  emit_label (neg_loop_label);
+  emit_insn (gen_addsi3 (target, target, constm1_rtx));
+  for (i = 1; i < bytes_per_word; i++)
+    emit_insn (gen_IBP (target, target));
+  emit_insn (gen_addsi3 (rem, rem, GEN_INT (1)));
+  emit_cmp_and_jump_insn_1 (rem, CONST0_RTX (SImode), SImode, LT, 0,
+			    neg_loop_label);
+
+  emit_label (done_label);
 
   return target;
 }
@@ -6121,7 +8091,7 @@ maybe_expand_ibp (byte_size, op0, op1, increment)
   if (increment == 0)
     return 1;
 
-  if (HAVE_ADJBP && increment != 1)
+  if (TARGET_KL10up && increment != 1)
     return 0;
 
   {
@@ -6164,30 +8134,62 @@ pdp10_expand_addbp3 (type, target, op0, op1)
      rtx op0;
      rtx op1;
 {
-  int bytes_per_word = 36 / pdp10_bytesize (type);
+  int byte_size = pdp10_bytesize (type);
+  int bytes_per_word = 36 / byte_size;
+  int units_per_byte = (byte_size + BITS_PER_UNIT - 1) / BITS_PER_UNIT;
   HOST_WIDE_INT increment;
 
-  /* First, try to use ADDI or SUBI.  */
-  if (GET_CODE (op1) == CONST_INT
-      && (increment = INTVAL (op1)) % bytes_per_word == 0)
+  /* Some constant pointer adjustments arrive from GCC already scaled in
+     addressable C storage units rather than PDP-10 byte-pointer units.  For
+     short16/short18, TYPE_SIZE_UNIT is 2 while one array element occupies
+     one PDP-10 byte.  Fold those constant multiples back to a PDP-10 byte
+     count before doing IBP/ADJBP decomposition.
+
+     Do not apply the same division blindly to dynamic OP1.  Dynamic ARRAY_REF
+     expansion for short18 fields such as p->h[i] reaches this routine with
+     OP1 as the element/byte index i, not as i * TYPE_SIZE_UNIT.  Shifting the
+     dynamic value here makes the later halfword decomposition shift it a
+     second time, so i=0 and i=1 address the same halfword.  The regression is
+     visible as h[0] being read back as h[1].  */
+  if (units_per_byte > 1 && GET_CODE (op1) == CONST_INT)
     {
-      int n = increment / bytes_per_word;
-      if (CONSTANT_P (op0))
-	return plus_constant (op0, n);
-      else
-	emit_insn (gen_addsi3 (target, op0, GEN_INT (n)));
-      return target;
+      HOST_WIDE_INT n = INTVAL (op1);
+
+      if (n % units_per_byte == 0)
+	op1 = GEN_INT (n / units_per_byte);
     }
 
-  /* Second, try to use IBP.  */
-  if (GET_CODE (op1) == CONST_INT
-      && maybe_expand_ibp (pdp10_bytesize (type), target, op0, increment))
-    return target;
+  /* First, try to use ADDI or SUBI.  On KS10/KL10-class machines,
+     prefer ADJBP for non-one byte-pointer increments, even when the
+     increment is a whole number of PDP-10 words.  Adding to the word
+     address part of a byte pointer is only a local optimization; ADJBP
+     is the canonical and fully general byte-pointer operation there.  */
+  if (GET_CODE (op1) == CONST_INT)
+    {
+      increment = INTVAL (op1);
+
+      if (!(TARGET_KL10up && increment != 0 && increment != 1)
+	  && increment % bytes_per_word == 0)
+	{
+	  int n = increment / bytes_per_word;
+	  if (CONSTANT_P (op0))
+	    return plus_constant (op0, n);
+	  else
+	    emit_insn (gen_addsi3 (target, op0, GEN_INT (n)));
+	  return target;
+	}
+
+      /* Second, try to use IBP.  For KS10/KL10 this deliberately
+	 accepts only the single-byte case; larger constant adjustments
+	 fall through to ADJBP below.  */
+      if (maybe_expand_ibp (byte_size, target, op0, increment))
+	return target;
+    }
 
   /* If we get here, either the increment is not a constant, or a
      sequence of IBP instructions is too costly.  */
 
-  if (HAVE_ADJBP)
+  if (TARGET_KL10up)
     {
       if (target == op0)
 	target = gen_reg_rtx (Pmode);
@@ -6355,7 +8357,7 @@ expand_subtract_pointers (mode, target, op0, type0, op1, type1)
 	  if (!register_operand (op0, Pmode))
 	    op0 = force_reg (Pmode, op0);
 	  if (!reg_or_mem_operand (op1, Pmode))
-	    op1 = force_reg (Pmode, op0);
+	    op1 = force_reg (Pmode, op1);
 	  emit_insn (gen_SUBBP (target, op0, op1));
 	}
       else
@@ -6421,7 +8423,7 @@ expand_subtract_pointers (mode, target, op0, type0, op1, type1)
 	  if (GET_MODE (op0) != Pmode)
 	    op0 = convert_to_mode (Pmode, op0, 1);
 	  if (GET_MODE (op1) != Pmode)
-	    op1 = convert_to_mode (Pmode, op0, 1);
+	    op1 = convert_to_mode (Pmode, op1, 1);
 
 	  emit_insn (gen_subsi3 (a, op0, op1));
 	  emit_insn (gen_MUL (temp, a, GEN_INT (mul)));
@@ -6779,7 +8781,7 @@ expand_save_or_restore_regs (save, clobbered, clobbered_size, single)
 
       /* If a single PUSH or POP instruction can be used, do so and
 	 return.  */
-      if (single)
+      if (single && !TARGET_EXTENDED)
 	{
 	  rtx stack;
 	  if (save)
@@ -6845,8 +8847,7 @@ expand_save_or_restore_regs (save, clobbered, clobbered_size, single)
 	    }
 
 #define REG0 gen_rtx_REG (Pmode, 0)
-	  emit_frame_insn (gen_MOVEI (REG0, to_start));
-	  emit_frame_insn (gen_HRLI (REG0, from_start));
+	  emit_frame_insn (gen_pdp10_blt_setup (REG0, from_start, to_start));
 	  emit_frame_insn (gen_BLT (REG0, to_end));
 #undef REG0
 	}
@@ -6933,7 +8934,7 @@ pdp10_expand_prologue ()
      single PUSH instruction.  */
   single_push =
     clobbered_size == UNITS_PER_WORD
-    && (optimize_size || !TARGET_EXTENDED)
+    && !TARGET_EXTENDED
     && current_function_outgoing_args_size == 0
     && current_function_pretend_args_size == 0
     && get_frame_size () == 0;
@@ -6968,7 +8969,7 @@ pdp10_expand_epilogue (popj)
      single POP instruction.  */
   single_pop =
     clobbered_size == UNITS_PER_WORD
-    && (optimize_size || !TARGET_EXTENDED)
+    && !TARGET_EXTENDED
     && current_function_outgoing_args_size == 0
     && current_function_pretend_args_size == 0
     && get_frame_size () == 0;
@@ -7005,6 +9006,28 @@ pdp10_output_return ()
 
 **********************************************************************/
 
+static int	pdp10_normalize_pointer_bytesize PARAMS ((int size));
+static int	pdp10_global_ps_for_conversion PARAMS ((int ps, int to,
+							 int byte, int *fromp));
+static int	pdp10_local_ps_for_conversion PARAMS ((int ps, int from,
+						int to, int byte,
+						int *psp, int *fromp));
+static int	pdp10_initializer_type_bitsize PARAMS ((tree type,
+						  pdp10_word36 *bitsp));
+static int	pdp10_initializer_record_field_bitpos PARAMS ((tree type,
+							    tree wanted,
+							    pdp10_word36 *bitposp));
+static int	pdp10_initializer_ref_bitpos PARAMS ((tree exp, tree *basep,
+					       pdp10_word36 *bitposp));
+static int	pdp10_dynamic_ref_bitpos PARAMS ((tree exp,
+					      pdp10_word36 *bitposp));
+static int	pdp10_addr_expr_array_byte PARAMS ((tree exp, int bytesize,
+					       int *bytep));
+static int	pdp10_dynamic_ref_base_bitpos PARAMS ((tree exp, tree *basep,
+						    pdp10_word36 *bitposp));
+static rtx	pdp10_dynamic_addr_expr_byte_pointer PARAMS ((tree exp, int bytesize));
+static rtx	pdp10_strip_byte_pointer_address PARAMS ((rtx x));
+static rtx	pdp10_initializer_byte_pointer PARAMS ((tree exp));
 static rtx	convert_local_pointer PARAMS ((rtx op0, int from,
 					       int to, int stack));
 static rtx	convert_global_pointer PARAMS ((rtx op0, int from,
@@ -7184,6 +9207,322 @@ pdp10_expand_binop (mode, binoptab, op0, op1, target, unsignedp, methods, exp)
   return expand_binop (mode, binoptab, op0, op1, target, unsignedp, methods);
 }
 
+
+/* Normalize the source-language byte sizes used by the front end to the
+   pointer byte sizes that the PDP-10 backend actually encodes.  */
+static int
+pdp10_normalize_pointer_bytesize (size)
+     int size;
+{
+  /* Do not normalize 16-bit scalar byte pointers to 18-bit halfword
+     pointers.  short16 arrays are laid out with POINT 16 byte fields;
+     using an 18-bit byte pointer for &array[i] makes IBP/LDB fetch the
+     wrong bit slice.  Keep 32-bit scalar pointers normalized to word
+     pointers for now.  */
+  if (size == 32)
+    return 36;
+  return size;
+}
+
+/* Convert the one-word global byte-pointer P/S selector PS to byte size TO.
+   BYTE is used when converting a word address to a byte pointer.  Store the
+   decoded source byte size in *FROMP if FROMP is non-NULL.  */
+static int
+pdp10_global_ps_for_conversion (ps, to, byte, fromp)
+     int ps;
+     int to;
+     int byte;
+     int *fromp;
+{
+  int from;
+
+  to = pdp10_normalize_pointer_bytesize (to);
+  from = bytesize_for_ps (ps);
+  if (fromp)
+    *fromp = from;
+
+  if (from == to)
+    return ps;
+
+  switch (from)
+    {
+    case 6:
+      {
+	int b = ps - 046;
+	if (b < 0)
+	  b = 0;
+	if (b > 5)
+	  b = 5;
+
+	switch (to)
+	  {
+	  case 6:
+	    break;
+	  case 7:
+	    ps = 062 + (b > 4 ? 4 : b);
+	    break;
+	  case 8:
+	    ps = 055 + (b > 3 ? 3 : b);
+	    break;
+	  case 9:
+	    ps = 070 + (b > 3 ? 3 : b);
+	    break;
+	  case 18:
+	    ps = 075 + b / 3;
+	    break;
+	  case 36:
+	    ps = 0;
+	    break;
+	  default:
+	    abort ();
+	  }
+      }
+      break;
+
+    case 7:
+      switch (to)
+	{
+	case 6:
+	  ps = 046 + (ps - 062);
+	  break;
+	case 7:
+	  break;
+	case 8:
+	  if (ps == 066)
+	    ps = 060;
+	  else
+	    ps = 055 + (ps - 062);
+	  break;
+	case 9:
+	  if (ps == 066)
+	    ps = 073;
+	  else
+	    ps = 070 + (ps - 062);
+	  break;
+	case 18:
+	  if (ps < 064)
+	    ps = 075;
+	  else
+	    ps = 076;
+	  break;
+	case 36:
+	  ps = 0;
+	  break;
+	default:
+	  abort ();
+	}
+      break;
+
+    case 8:
+      switch (to)
+	{
+	case 6:
+	  ps = 046 + (ps - 055);
+	  break;
+	case 7:
+	  ps = 062 + (ps - 055);
+	  break;
+	case 8:
+	  break;
+	case 9:
+	  ps = 070 + (ps - 055);
+	  break;
+	case 18:
+	  ps = 075 + (ps - 055) / 2;
+	  break;
+	case 36:
+	  ps = 0;
+	  break;
+	default:
+	  abort ();
+	}
+      break;
+
+    case 9:
+      switch (to)
+	{
+	case 6:
+	  ps = 046 + (ps - 070);
+	  break;
+	case 7:
+	  ps = 062 + (ps - 070);
+	  break;
+	case 8:
+	  ps = 055 + (ps - 070);
+	  break;
+	case 9:
+	  break;
+	case 18:
+	  ps = 075 + (ps - 070) / 2;
+	  break;
+	case 36:
+	  ps = 0;
+	  break;
+	default:
+	  abort ();
+	}
+      break;
+
+    case 18:
+      switch (to)
+	{
+	case 6:
+	  ps = 046 + (ps - 075) * 2;
+	  break;
+	case 7:
+	  ps = 062 + (ps - 075) * 2;
+	  break;
+	case 8:
+	  ps = 055 + (ps - 075) * 2;
+	  break;
+	case 9:
+	  ps = 070 + (ps - 075) * 2;
+	  break;
+	case 18:
+	  break;
+	case 36:
+	  ps = 0;
+	  break;
+	default:
+	  abort ();
+	}
+      break;
+
+    case 36:
+      switch (to)
+	{
+	case 6:
+	  ps = 046 + byte;
+	  break;
+	case 7:
+	  ps = 062 + byte;
+	  break;
+	case 8:
+	  ps = 055 + byte;
+	  break;
+	case 9:
+	  ps = 070 + byte;
+	  break;
+	case 18:
+	  ps = 075 + byte;
+	  break;
+	case 36:
+	  ps = 0;
+	  break;
+	default:
+	  abort ();
+	}
+      break;
+
+    default:
+      abort ();
+    }
+
+  return ps;
+}
+
+/* Convert a local byte-pointer P/S selector.  Return nonzero if the
+   conversion can be folded as a constant.  The converted selector is
+   stored in *PSP, and the decoded source byte size in *FROMP when FROMP
+   is non-NULL.  */
+static int
+pdp10_local_ps_for_conversion (ps, from, to, byte, psp, fromp)
+     int ps;
+     int from;
+     int to;
+     int byte;
+     int *psp;
+     int *fromp;
+{
+  int p, s;
+
+  from = pdp10_normalize_pointer_bytesize (from);
+  to = pdp10_normalize_pointer_bytesize (to);
+
+  if (from == 36)
+    {
+      switch (to)
+	{
+	case 6:
+	case 7:
+	case 8:
+	case 9:
+	case 16:
+	case 18:
+	  if (byte == PDP10_SCALAR_RIGHT_BYTE)
+	    {
+	      /* Standalone scalar slots are right-justified in their
+	         PDP-10 word.  This is not the same as the last canonical
+	         array byte for 16-bit quantities: a short16 scalar uses
+	         POINT 16,word,35, while byte 1 of a short16 array ends at
+	         bit 31.  */
+	      ps = to;
+	    }
+	  else
+	    ps = ((BITS_PER_WORD - to * byte - to) << 6) + to;
+	  break;
+	case 36:
+	  ps = 0;
+	  break;
+	default:
+	  abort ();
+	}
+
+      if (psp)
+	*psp = ps;
+      if (fromp)
+	*fromp = from;
+      return 1;
+    }
+
+  if (ps == 0 || decode_ps (ps, &p, &s) != 0)
+    return 0;
+
+  from = s;
+  if (fromp)
+    *fromp = from;
+
+  if (from == to)
+    {
+      if (psp)
+	*psp = ps;
+      return 1;
+    }
+
+  switch (to)
+    {
+    case 6:
+    case 7:
+    case 8:
+    case 9:
+    case 16:
+    case 18:
+      /* Preserve the exact source bit position.  Local PDP-10 P,S
+	 selectors are not limited to canonical byte-array positions;
+	 rounding through p / to changes valid pointers such as a 7-bit
+	 byte at bit position 24 or an 8-bit byte at bit position 12.
+
+	 If the new byte size would cross the word boundary, this cannot be
+	 folded as a simple local P,S selector.  Let the runtime conversion
+	 path handle it.  */
+      if (p + to > BITS_PER_WORD)
+	return 0;
+      ps = ((BITS_PER_WORD - p - to) << 6) + to;
+      break;
+
+    case 36:
+      ps = 0;
+      break;
+
+    default:
+      abort ();
+    }
+
+  if (psp)
+    *psp = ps;
+  return 1;
+}
+
 #define emit_TLZ(X, Y, Z) \
   emit_insn (gen_andsi3 (X, Y, gen_int_mode (~(HWINT (Z) << 18), SImode)))
 #define emit_TLO(X, Y, Z) \
@@ -7200,6 +9539,769 @@ pdp10_expand_binop (mode, binoptab, op0, op1, target, unsignedp, methods, exp)
   emit_jump_insn (gen_test_and_skip (GEN_NE, X, gen_int_mode (HWINT (Y)<<18, SImode), L))
 #define emit_TLZN(X, Y, L) \
   emit_jump_insn (gen_TLZN (X, gen_int_mode (HWINT (Y) << 18, SImode), L))
+
+/* Return the size, in PDP-10 object bits, of TYPE when it is used as a
+   component of a byte-packed object.  For scalar PDP-10 byte types this is
+   their logical byte size.  For records and arrays, use the laid-out type
+   size; array and record fields occupy their whole object, not just one
+   element-byte selected by pdp10_bytesize.  */
+static int
+pdp10_initializer_type_bitsize (type, bitsp)
+     tree type;
+     pdp10_word36 *bitsp;
+{
+  int bytesize;
+
+  if (type == error_mark_node)
+    return 0;
+
+  if ((TREE_CODE (type) == RECORD_TYPE || TREE_CODE (type) == ARRAY_TYPE)
+      && TYPE_SIZE (type) != 0
+      && host_integerp (TYPE_SIZE (type), 1))
+    {
+      *bitsp = (pdp10_word36) tree_low_cst (TYPE_SIZE (type), 1);
+      return 1;
+    }
+
+  bytesize = pdp10_normalize_pointer_bytesize (pdp10_bytesize (type));
+  if (bytesize <= 0)
+    return 0;
+
+  *bitsp = (pdp10_word36) bytesize;
+  return 1;
+}
+
+/* Compute the PDP-10 byte-packed bit offset of WANTED inside record TYPE.
+
+   Do not use int_bit_position here.  GCC's generic record layout measures
+   offsets in its abstract 9-bit storage units and can assign repeated or
+   otherwise unsuitable bit positions for PDP-10 sub-word scalar fields.  The
+   ordinary load/store expanders ultimately treat homogeneous char6/uchar6
+   records like packed PDP-10 bytes, e.g.
+
+       c0..c5 => POINT 6,record,5/11/17/23/29/35
+       u0..u5 => POINT 6,record+1,5/11/17/23/29/35
+
+   Static address constants such as &b6.c1 must use the same packed PDP-10
+   byte numbering, otherwise they point at the wrong byte even if the
+   initializer is accepted.  */
+static int
+pdp10_initializer_record_field_bitpos (type, wanted, bitposp)
+     tree type;
+     tree wanted;
+     pdp10_word36 *bitposp;
+{
+  tree field;
+  pdp10_word36 bitpos;
+
+  if (TREE_CODE (type) != RECORD_TYPE)
+    return 0;
+
+  bitpos = 0;
+  for (field = TYPE_FIELDS (type); field; field = TREE_CHAIN (field))
+    {
+      tree ftype;
+      pdp10_word36 fbits;
+      int bytesize;
+
+      if (TREE_CODE (field) != FIELD_DECL)
+        continue;
+
+      if (field == wanted)
+        {
+          *bitposp = bitpos;
+          return 1;
+        }
+
+      ftype = TREE_TYPE (field);
+      bytesize = pdp10_normalize_pointer_bytesize (pdp10_bytesize (ftype));
+      if (!pdp10_initializer_type_bitsize (ftype, &fbits))
+        return 0;
+
+      /* struct-subword-packed-array-field-v19:
+         Word-sized fields and nested RECORD_TYPE fields are addressed on
+         whole PDP-10 words.  Do not force every ARRAY_TYPE field to a word
+         boundary: arrays of PDP-10 subword scalar elements are part of the
+         same packed byte run.  Otherwise &record.halfword_array[0] loses a
+         starting right-half position and word->18-bit pointer conversion
+         emits POINT 18,word,17 instead of POINT 18,word,35.  */
+      if (bytesize >= BITS_PER_WORD
+          || TREE_CODE (ftype) == RECORD_TYPE)
+        {
+          pdp10_word36 rem = bitpos % BITS_PER_WORD;
+
+          if (rem != 0)
+            bitpos += BITS_PER_WORD - rem;
+          bitpos += ((fbits + BITS_PER_WORD - 1) / BITS_PER_WORD)
+            * BITS_PER_WORD;
+        }
+      else
+        {
+          pdp10_word36 rem = bitpos % BITS_PER_WORD;
+
+          if (rem + (pdp10_word36) bytesize > BITS_PER_WORD)
+            bitpos += BITS_PER_WORD - rem;
+          bitpos += fbits;
+        }
+    }
+
+  return 0;
+}
+
+static int
+pdp10_initializer_ref_bitpos (exp, basep, bitposp)
+     tree exp;
+     tree *basep;
+     pdp10_word36 *bitposp;
+{
+  switch (TREE_CODE (exp))
+    {
+    case VAR_DECL:
+      *basep = exp;
+      *bitposp = 0;
+      return 1;
+
+    case ARRAY_REF:
+      {
+        tree array = TREE_OPERAND (exp, 0);
+        tree index = TREE_OPERAND (exp, 1);
+        pdp10_word36 base_bits;
+        pdp10_word36 elem_bits;
+        HOST_WIDE_INT idx;
+
+        if (!host_integerp (index, 0))
+          return 0;
+        if (!pdp10_initializer_ref_bitpos (array, basep, &base_bits))
+          return 0;
+        idx = tree_low_cst (index, 0);
+        if (idx < 0)
+          return 0;
+        if (!pdp10_initializer_type_bitsize (TREE_TYPE (exp), &elem_bits))
+          return 0;
+        *bitposp = base_bits + (pdp10_word36) idx * elem_bits;
+        return 1;
+      }
+
+    case COMPONENT_REF:
+      {
+        tree object = TREE_OPERAND (exp, 0);
+        tree field = TREE_OPERAND (exp, 1);
+        pdp10_word36 base_bits;
+        pdp10_word36 field_bits;
+
+        if (!pdp10_initializer_ref_bitpos (object, basep, &base_bits))
+          return 0;
+        if (!pdp10_initializer_record_field_bitpos (TREE_TYPE (object),
+                                                    field, &field_bits))
+          return 0;
+        *bitposp = base_bits + field_bits;
+        return 1;
+      }
+
+    default:
+      return 0;
+    }
+}
+
+
+/* Compute the bit position of EXP relative to the beginning of its
+   containing PDP-10 object.  Unlike pdp10_initializer_ref_bitpos, this
+   deliberately stops at any dynamic base object, such as *p, because the
+   caller only needs the byte position inside the addressed word.
+
+   This is used for dynamic ADDR_EXPR of ARRAY_REF.  GCC may expand
+   &p->h[0] as the word address of the storage word containing h[0], losing
+   the fact that h starts in the right half of that word.  We recover the
+   byte number from the tree shape and feed it to the normal word-pointer to
+   byte-pointer conversion.  */
+static int
+pdp10_dynamic_ref_bitpos (exp, bitposp)
+     tree exp;
+     pdp10_word36 *bitposp;
+{
+  switch (TREE_CODE (exp))
+    {
+    case NOP_EXPR:
+    case CONVERT_EXPR:
+      return pdp10_dynamic_ref_bitpos (TREE_OPERAND (exp, 0), bitposp);
+
+    case VAR_DECL:
+    case PARM_DECL:
+    case INDIRECT_REF:
+      *bitposp = 0;
+      return 1;
+
+    case ARRAY_REF:
+      {
+        tree array = TREE_OPERAND (exp, 0);
+        tree index = TREE_OPERAND (exp, 1);
+        pdp10_word36 base_bits;
+        pdp10_word36 elem_bits;
+        HOST_WIDE_INT idx;
+
+        if (!host_integerp (index, 0))
+          return 0;
+        if (!pdp10_dynamic_ref_bitpos (array, &base_bits))
+          return 0;
+        idx = tree_low_cst (index, 0);
+        if (idx < 0)
+          return 0;
+        if (!pdp10_initializer_type_bitsize (TREE_TYPE (exp), &elem_bits))
+          return 0;
+        *bitposp = base_bits + (pdp10_word36) idx * elem_bits;
+        return 1;
+      }
+
+    case COMPONENT_REF:
+      {
+        tree object = TREE_OPERAND (exp, 0);
+        tree field = TREE_OPERAND (exp, 1);
+        pdp10_word36 base_bits;
+        pdp10_word36 field_bits;
+
+        if (!pdp10_dynamic_ref_bitpos (object, &base_bits))
+          return 0;
+        if (!pdp10_initializer_record_field_bitpos (TREE_TYPE (object),
+                                                    field, &field_bits))
+          return 0;
+        *bitposp = base_bits + field_bits;
+        return 1;
+      }
+
+    default:
+      return 0;
+    }
+}
+
+/* Return the byte number within a word for dynamic ADDR_EXPR of a
+   sub-word ARRAY_REF or COMPONENT_REF.
+
+   This is the dynamic counterpart of the static initializer byte-pointer
+   path.  It keeps address-taking of sub-word array/field objects from being
+   flattened into a generic word address whose conversion always starts at
+   byte zero.  The conversion expander may see either ADDR_EXPR directly or a
+   NOP_EXPR/CONVERT_EXPR around it, so strip harmless conversions here.  */
+static int
+pdp10_addr_expr_array_byte (exp, bytesize, bytep)
+     tree exp;
+     int bytesize;
+     int *bytep;
+{
+  tree object;
+  pdp10_word36 bitpos;
+  pdp10_word36 byte_pos;
+
+  if (exp == NULL_TREE)
+    return 0;
+
+  while (TREE_CODE (exp) == NOP_EXPR || TREE_CODE (exp) == CONVERT_EXPR)
+    exp = TREE_OPERAND (exp, 0);
+
+  if (TREE_CODE (exp) != ADDR_EXPR)
+    return 0;
+  object = TREE_OPERAND (exp, 0);
+  if (TREE_CODE (object) != ARRAY_REF
+      && TREE_CODE (object) != COMPONENT_REF)
+    return 0;
+
+  bytesize = pdp10_normalize_pointer_bytesize (bytesize);
+  if (!VALID_OWGBP_BYTE_SIZE_P (bytesize) || bytesize >= BITS_PER_WORD)
+    return 0;
+
+  /* struct-subword-dynamic-arrayref-generic-fieldpos-v20:
+     For dynamic address-taking of an array field, the normal load/store
+     expanders already use GCC's laid-out field position.  The custom packed
+     initializer walker is not always the right truth source here: if it
+     returns the beginning of the containing word, word->18-bit conversion
+     emits POINT 18,word,17 and one IBP stores into the previous halfword.
+
+     Keep this fallback narrow: ARRAY_REF whose array operand is a
+     COMPONENT_REF, with a constant index.  Use the enclosing object bit
+     position from the existing dynamic walker, but use int_bit_position for
+     the array field itself so address-taking agrees with generated loads and
+     stores of the same field.  */
+  if (TREE_CODE (object) == ARRAY_REF)
+    {
+      tree array = TREE_OPERAND (object, 0);
+      tree index = TREE_OPERAND (object, 1);
+
+      if (TREE_CODE (array) == COMPONENT_REF
+          && host_integerp (index, 0))
+        {
+          tree record_object = TREE_OPERAND (array, 0);
+          tree field = TREE_OPERAND (array, 1);
+          pdp10_word36 base_bits;
+          pdp10_word36 elem_bits;
+          HOST_WIDE_INT idx = tree_low_cst (index, 0);
+
+          if (idx >= 0
+              && pdp10_dynamic_ref_bitpos (record_object, &base_bits)
+              && pdp10_initializer_type_bitsize (TREE_TYPE (object),
+                                                 &elem_bits))
+            {
+              bitpos = base_bits
+                + (pdp10_word36) int_bit_position (field)
+                + (pdp10_word36) idx * elem_bits;
+
+              byte_pos = bitpos % BITS_PER_WORD;
+              if (byte_pos + (pdp10_word36) bytesize <= BITS_PER_WORD
+                  && byte_pos % (pdp10_word36) bytesize == 0)
+                {
+                  *bytep = (int) (byte_pos / (pdp10_word36) bytesize);
+                  return 1;
+                }
+            }
+        }
+    }
+
+  if (!pdp10_dynamic_ref_bitpos (object, &bitpos))
+    return 0;
+
+  byte_pos = bitpos % BITS_PER_WORD;
+  if (byte_pos + (pdp10_word36) bytesize > BITS_PER_WORD)
+    return 0;
+
+  /* convert_local_pointer() converts from a word pointer using a byte
+     number, so only canonical byte-array positions can use this shortcut.
+     Noncanonical local byte starts need the ZERO_EXTRACT based path.  */
+  if (byte_pos % (pdp10_word36) bytesize != 0)
+    return 0;
+
+  *bytep = (int) (byte_pos / (pdp10_word36) bytesize);
+  return 1;
+}
+
+static rtx
+pdp10_strip_byte_pointer_address (x)
+     rtx x;
+{
+  if (GET_CODE (x) == CONST)
+    {
+      rtx y = XEXP (x, 0);
+      if (GET_CODE (y) == PLUS)
+        return XEXP (y, 0);
+    }
+  return x;
+}
+
+static rtx
+pdp10_initializer_byte_pointer (exp)
+     tree exp;
+{
+  tree object;
+  tree base_tree;
+  tree ptr_type;
+  pdp10_word36 bitpos;
+  pdp10_word36 word_offset;
+  pdp10_word36 byte_pos;
+  pdp10_word36 encoded;
+  int bytesize;
+  int ps;
+  rtx base_rtx;
+  rtx base_addr;
+  rtx offset_rtx;
+
+  /* Static initializers and function returns often reach the target as
+     a NOP_EXPR/CONVERT_EXPR around ADDR_EXPR.  The destination pointer
+     type still tells us which PDP-10 byte pointer to build, but the
+     actual byte position lives in the inner ADDR_EXPR.  */
+  ptr_type = TREE_TYPE (exp);
+  while (TREE_CODE (exp) == NOP_EXPR || TREE_CODE (exp) == CONVERT_EXPR)
+    exp = TREE_OPERAND (exp, 0);
+
+  if (TREE_CODE (exp) != ADDR_EXPR)
+    return NULL_RTX;
+  object = TREE_OPERAND (exp, 0);
+  if (TREE_CODE (object) != ARRAY_REF
+      && TREE_CODE (object) != COMPONENT_REF)
+    return NULL_RTX;
+
+  /* For ARRAY_REF, the destination pointer type is the most reliable
+     description of the byte pointer to build.  For COMPONENT_REF, however,
+     use the selected field type itself.  Address-taking of packed PDP-10
+     record fields can otherwise be routed through generic field-position
+     arithmetic before the final pointer type has enough information to
+     recover the correct sub-word field.  */
+  if (TREE_CODE (object) == COMPONENT_REF)
+    bytesize = pdp10_normalize_pointer_bytesize
+      (pdp10_bytesize (TREE_TYPE (object)));
+  else
+    {
+      if (!POINTER_TYPE_P (ptr_type))
+        return NULL_RTX;
+      bytesize = pdp10_normalize_pointer_bytesize
+        (pdp10_bytesize (TREE_TYPE (ptr_type)));
+    }
+  if (!VALID_OWGBP_BYTE_SIZE_P (bytesize))
+    return NULL_RTX;
+
+  /* struct-subword-packed-component-addr-bytepos-v24:
+     For direct address-taking of a packed QImode component, use GCC's laid-out
+     field position.  The older custom static initializer walker packs by
+     subword value width, which is correct for some homogeneous PDP-10 byte
+     records, but it puts heterogeneous packed fields such as
+     c6,c7,c8,c9 at bit 21.  The actual load/store paths place c9 in the
+     fourth 9-bit storage unit, bit 27, so &packed_rec.c9 must build a byte
+     pointer equivalent to [POINT 9,packed_rec,35], not ...29.  */
+  if (TREE_CODE (object) == COMPONENT_REF && bytesize == 9)
+    {
+      tree record_object = TREE_OPERAND (object, 0);
+      tree field = TREE_OPERAND (object, 1);
+      tree record_type = TREE_TYPE (record_object);
+      pdp10_word36 base_bits;
+      tree computed_base = NULL_TREE;
+
+      if (field != NULL_TREE
+          && TREE_CODE (field) == FIELD_DECL
+          && (DECL_PACKED (field)
+              || (record_type != NULL_TREE
+                  && TREE_CODE (record_type) == RECORD_TYPE
+                  && TYPE_PACKED (record_type)))
+          && pdp10_initializer_ref_bitpos (record_object,
+                                           &computed_base, &base_bits))
+        {
+          base_tree = computed_base;
+          bitpos = base_bits + (pdp10_word36) int_bit_position (field);
+        }
+      else if (!pdp10_initializer_ref_bitpos (object, &base_tree, &bitpos))
+        return NULL_RTX;
+    }
+  else if (!pdp10_initializer_ref_bitpos (object, &base_tree, &bitpos))
+    return NULL_RTX;
+
+  byte_pos = bitpos % BITS_PER_WORD;
+
+  /* Local PDP-10 byte pointers carry an explicit P,S selector.
+     They can represent noncanonical byte starts, such as a 7-bit
+     byte at bit position 24 or an 8-bit byte at bit position 12.
+     Only reject fields that actually run past the end of the word.
+
+     Extended one-word global byte pointers, on the other hand, encode
+     a byte number rather than an arbitrary local P value, so keep the
+     canonical-alignment check there.  */
+  if (byte_pos + (pdp10_word36) bytesize > BITS_PER_WORD)
+    return NULL_RTX;
+  if (TARGET_EXTENDED && byte_pos % bytesize != 0)
+    return NULL_RTX;
+  word_offset = bitpos / BITS_PER_WORD;
+  base_rtx = expand_expr (base_tree, NULL_RTX, VOIDmode,
+                          EXPAND_CONST_ADDRESS);
+  if (GET_CODE (base_rtx) == MEM)
+    base_addr = XEXP (base_rtx, 0);
+  else if (CONSTANT_ADDRESS_P (base_rtx))
+    base_addr = base_rtx;
+  else
+    return NULL_RTX;
+  base_addr = pdp10_strip_byte_pointer_address (base_addr);
+
+  /* Do not build literal byte pointers to automatic/frame objects here.
+     For stack locals, expand_expr(..., EXPAND_CONST_ADDRESS) can leave a
+     virtual frame address such as <fp> inside the literal.  Such a literal is
+     not a real run-time address after frame/stack elimination, and using it
+     for &struct.subbyte_array[0] makes later IDPB store through a stale
+     frame placeholder instead of the actual stack slot.  Let the normal
+     dynamic ADDR_EXPR path emit MOVEI plus PDP-10 local P,S conversion for
+     frame-based objects.  Static/global aggregate fields still use this
+     initializer path.  */
+  if (pdp10_frame_address_p (base_addr))
+    return NULL_RTX;
+
+  if (TARGET_EXTENDED)
+    ps = ps_base_for_bytesize (bytesize) + byte_pos / bytesize;
+  else
+    ps = ((BITS_PER_WORD - byte_pos - bytesize) << 6) + bytesize;
+  encoded = (((pdp10_word36) ps) << (TARGET_EXTENDED ? 30 : 24));
+  encoded = (encoded + word_offset) & PDP10_WORD36_MASK;
+  offset_rtx = pdp10_gen_word36_constant (encoded);
+  return gen_rtx_CONST (Pmode, gen_rtx_PLUS (Pmode, base_addr, offset_rtx));
+}
+
+/* Build a byte pointer address from a ZERO_EXTRACT produced by the generic
+   COMPONENT_REF/ARRAY_REF expander.
+
+   GCC's component expansion for PDP-10 sub-word fields represents a field as
+
+       (subreg (zero_extract (mem ADDR) BITSIZE BITPOS) ...)
+
+   when the object is in memory.  The address-taking path must not simply drop
+   the ZERO_EXTRACT and keep ADDR, because BITPOS is the only place where the
+   selected PDP-10 byte position is still recorded.  Doing so makes &b6.c1 look
+   like &b6.c0, and similar duplicates show up in static byte-pointer
+   initializers.
+
+   ADDR may already contain a byte-pointer P,S field from DATA_PADDING.  Strip
+   that P,S field but keep the word address, then install the P,S field selected
+   by BITPOS and BITSIZE.  */
+static rtx
+pdp10_address_from_zero_extract (zx, exp)
+     rtx zx;
+     tree exp;
+{
+  rtx mem;
+  rtx addr;
+  rtx base;
+  pdp10_word36 offset;
+  pdp10_word36 word_addr;
+  pdp10_word36 encoded;
+  int bitsize;
+  int bitpos;
+  int bytesize;
+  int ps;
+
+  if (GET_CODE (zx) != ZERO_EXTRACT)
+    return NULL_RTX;
+
+  mem = XEXP (zx, 0);
+  if (GET_CODE (mem) != MEM)
+    return NULL_RTX;
+
+  if (GET_CODE (XEXP (zx, 1)) != CONST_INT
+      || GET_CODE (XEXP (zx, 2)) != CONST_INT)
+    return NULL_RTX;
+
+  bitsize = INTVAL (XEXP (zx, 1));
+  bitpos = INTVAL (XEXP (zx, 2));
+
+  if (bitsize <= 0 || bitsize >= BITS_PER_WORD)
+    return NULL_RTX;
+
+  bytesize = pdp10_normalize_pointer_bytesize
+    (pdp10_bytesize (TREE_TYPE (TREE_TYPE (exp))));
+  if (bytesize != bitsize || !VALID_OWGBP_BYTE_SIZE_P (bytesize))
+    return NULL_RTX;
+
+  if (bitpos < 0 || bitpos >= BITS_PER_WORD
+      || bitpos + bytesize > BITS_PER_WORD)
+    return NULL_RTX;
+  if (TARGET_EXTENDED && bitpos % bytesize != 0)
+    return NULL_RTX;
+
+  addr = XEXP (mem, 0);
+
+  /* The ZERO_EXTRACT shortcut is safe for static/global addresses, but not for
+     automatic objects whose apparent address still contains a virtual frame
+     placeholder.  If we return a CONST byte pointer containing <fp>, final
+     output cannot repair it into the real stack address.  Fall back to the
+     dynamic ADDR_EXPR path, which emits a real run-time address and converts
+     that to a local byte pointer.  */
+  if (pdp10_frame_address_p (addr))
+    return NULL_RTX;
+
+  if (!pdp10_decompose_symbolic_word36 (addr, &base, &offset))
+    return NULL_RTX;
+
+  word_addr = offset & ADDRESS_MASK;
+
+  if (TARGET_EXTENDED)
+    ps = ps_base_for_bytesize (bytesize) + bitpos / bytesize;
+  else
+    ps = ((BITS_PER_WORD - bitpos - bytesize) << 6) + bytesize;
+
+  encoded = (word_addr + (((pdp10_word36) ps)
+                          << (TARGET_EXTENDED ? 30 : 24)))
+    & PDP10_WORD36_MASK;
+
+  return base != NULL_RTX
+    ? pdp10_plus_constant_word36 (base, encoded)
+    : pdp10_gen_word36_constant (encoded);
+}
+
+/* Compute both the dynamic base object and the PDP-10 bit position of EXP.
+   This is the address-producing sibling of pdp10_dynamic_ref_bitpos().  The
+   old ADDR_EXPR path expanded the selected sub-word field itself, which may
+   materialize a temporary.  For address-taking we instead need the address of
+   the containing object plus the selected packed byte position.
+
+   Stop at VAR_DECL/PARM_DECL/INDIRECT_REF: those are the objects whose word
+   address can be expanded directly.  */
+static int
+pdp10_dynamic_ref_base_bitpos (exp, basep, bitposp)
+     tree exp;
+     tree *basep;
+     pdp10_word36 *bitposp;
+{
+  switch (TREE_CODE (exp))
+    {
+    case NOP_EXPR:
+    case CONVERT_EXPR:
+      return pdp10_dynamic_ref_base_bitpos (TREE_OPERAND (exp, 0),
+                                            basep, bitposp);
+
+    case VAR_DECL:
+    case PARM_DECL:
+    case INDIRECT_REF:
+      *basep = exp;
+      *bitposp = 0;
+      return 1;
+
+    case ARRAY_REF:
+      {
+        tree array = TREE_OPERAND (exp, 0);
+        tree index = TREE_OPERAND (exp, 1);
+        pdp10_word36 base_bits;
+        pdp10_word36 elem_bits;
+        HOST_WIDE_INT idx;
+
+        /* Match the dynamic ARRAY_REF special case in
+           pdp10_addr_expr_array_byte(): for an array field inside a record,
+           use GCC's laid-out field bit position for the array field itself.
+           The custom packed initializer walk is useful for some homogeneous
+           records, but it can put heterogeneous fields such as c6/u7/c8 at a
+           different bit position than the generated DPB/LDB field accesses. */
+        if (TREE_CODE (array) == COMPONENT_REF
+            && host_integerp (index, 0))
+          {
+            tree record_object = TREE_OPERAND (array, 0);
+            tree field = TREE_OPERAND (array, 1);
+            tree record_base = NULL_TREE;
+
+            idx = tree_low_cst (index, 0);
+            if (idx < 0)
+              return 0;
+            if (!pdp10_dynamic_ref_base_bitpos (record_object,
+                                                &record_base, &base_bits))
+              return 0;
+            if (!pdp10_initializer_type_bitsize (TREE_TYPE (exp), &elem_bits))
+              return 0;
+
+            *basep = record_base;
+            *bitposp = base_bits
+              + (pdp10_word36) int_bit_position (field)
+              + (pdp10_word36) idx * elem_bits;
+            return 1;
+          }
+
+        if (!host_integerp (index, 0))
+          return 0;
+        if (!pdp10_dynamic_ref_base_bitpos (array, basep, &base_bits))
+          return 0;
+        idx = tree_low_cst (index, 0);
+        if (idx < 0)
+          return 0;
+        if (!pdp10_initializer_type_bitsize (TREE_TYPE (exp), &elem_bits))
+          return 0;
+        *bitposp = base_bits + (pdp10_word36) idx * elem_bits;
+        return 1;
+      }
+
+    case COMPONENT_REF:
+      {
+        tree object = TREE_OPERAND (exp, 0);
+        tree field = TREE_OPERAND (exp, 1);
+        pdp10_word36 base_bits;
+        pdp10_word36 field_bits;
+
+        if (!pdp10_dynamic_ref_base_bitpos (object, basep, &base_bits))
+          return 0;
+        if (!pdp10_initializer_record_field_bitpos (TREE_TYPE (object),
+                                                    field, &field_bits))
+          return 0;
+        *bitposp = base_bits + field_bits;
+        return 1;
+      }
+
+    default:
+      return 0;
+    }
+}
+
+/* Build a run-time local byte pointer for ADDR_EXPR of a sub-word field or
+   array element.  This is deliberately dynamic: it uses the word address of
+   the containing object, preserves the computed word offset, and installs the
+   exact local P,S selector.  It avoids the generic ADDR_EXPR path that can
+   take the address of a temporary copy of a sub-word field.
+
+   This helper is for non-extended PDP-6/KA10-style local pointers.  Leave
+   extended/global byte-pointer construction to the older constant paths.  */
+static rtx
+pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
+     tree exp;
+     int bytesize;
+{
+  tree object;
+  tree base_tree = NULL_TREE;
+  rtx base_rtx;
+  rtx base_addr;
+  rtx addr;
+  rtx reg;
+  pdp10_word36 bitpos;
+  pdp10_word36 byte_pos;
+  pdp10_word36 word_offset;
+  int ps;
+
+  if (TARGET_EXTENDED)
+    return NULL_RTX;
+
+  if (exp == NULL_TREE)
+    return NULL_RTX;
+
+  while (TREE_CODE (exp) == NOP_EXPR || TREE_CODE (exp) == CONVERT_EXPR)
+    exp = TREE_OPERAND (exp, 0);
+
+  if (TREE_CODE (exp) != ADDR_EXPR)
+    return NULL_RTX;
+
+  object = TREE_OPERAND (exp, 0);
+  if (TREE_CODE (object) != ARRAY_REF
+      && TREE_CODE (object) != COMPONENT_REF)
+    return NULL_RTX;
+
+  bytesize = pdp10_normalize_pointer_bytesize (bytesize);
+  if (!VALID_OWGBP_BYTE_SIZE_P (bytesize) || bytesize >= BITS_PER_WORD)
+    return NULL_RTX;
+
+  if (!pdp10_dynamic_ref_base_bitpos (object, &base_tree, &bitpos))
+    return NULL_RTX;
+
+  byte_pos = bitpos % BITS_PER_WORD;
+  if (byte_pos + (pdp10_word36) bytesize > BITS_PER_WORD)
+    return NULL_RTX;
+
+  word_offset = bitpos / BITS_PER_WORD;
+  ps = ((BITS_PER_WORD - byte_pos - bytesize) << 6) + bytesize;
+
+  base_rtx = expand_expr (base_tree, NULL_RTX, VOIDmode, EXPAND_CONST_ADDRESS);
+  if (GET_CODE (base_rtx) == MEM)
+    base_addr = XEXP (base_rtx, 0);
+  else if (CONSTANT_ADDRESS_P (base_rtx) || GET_CODE (base_rtx) == REG)
+    base_addr = base_rtx;
+  else
+    return NULL_RTX;
+
+  if (word_offset != 0 && GET_CODE (base_addr) != REG)
+    addr = plus_constant (base_addr, (HOST_WIDE_INT) word_offset);
+  else
+    addr = base_addr;
+
+  /* Static/global addresses can still be returned as constants here.  Frame
+     addresses and register-held pointers must be materialized at run time. */
+  if (CONSTANT_ADDRESS_P (addr) && !pdp10_frame_address_p (addr))
+    return pdp10_plus_constant_word36 (addr,
+                                      ((pdp10_word36) ps) << 24);
+
+  reg = gen_reg_rtx (Pmode);
+  if (GET_CODE (base_addr) == REG && !REGNO_PTR_FRAME_P (REGNO (base_addr)))
+    {
+      emit_move_insn (reg, base_addr);
+      if (word_offset != 0)
+        emit_insn (gen_addsi3 (reg, reg, GEN_INT ((HOST_WIDE_INT) word_offset)));
+    }
+  else
+    {
+      if (word_offset != 0)
+        addr = plus_constant (base_addr, (HOST_WIDE_INT) word_offset);
+      emit_insn (gen_MOVEI (reg, addr));
+    }
+
+  /* emit_TLO takes the left-half immediate, not the compact 12-bit
+     P,S selector.  A literal POINT word stores P,S in the high 12 bits
+     of the left half, so the TLO immediate must be PS<<6.  Passing PS
+     directly generates e.g. TLO ...,1210 instead of TLO ...,121000,
+     which leaves IDPB/ILDB pointing at nonsense and misses packed struct
+     fields. */
+  emit_TLO (reg, reg, ps << 6);
+  return reg;
+}
 
 /* Convert a global pointer in OP0 with byte size FROM to a global
    pointer with byte size TO.  Byte size 36 means word pointer.
@@ -7368,6 +10470,12 @@ convert_local_pointer (op0, from, to, byte)
 	  emit_TLO  (reg, reg, 0040000);
 	  emit_label (label);
 	  break;
+	case 18:
+	  /* 18-bit local byte pointer -> 6-bit local byte pointer.
+	     Preserve the source bit position by changing only P,S:
+	     delta = ((18 - 6) << 6) + (6 - 18).  */
+	  emit_ADD (reg, op0, 0136400);
+	  break;
 	case 36:
 	  emit_TLO (reg, op0, 0360600 - byte * 0060000);
 	  break;
@@ -7379,6 +10487,12 @@ convert_local_pointer (op0, from, to, byte)
     case 7:
       switch (from)
 	{
+	case 6:
+	  /* 6-bit local byte pointer -> 7-bit local byte pointer.
+	     Preserve the exact source bit position by changing P,S by
+	     ((6 - 7) << 6) + (7 - 6).  */
+	  emit_SUB (reg, op0, 007700);
+	  break;
 	case 8:
 	  emit_TLC (reg, op0, 0001700);
 	  emit_TLZ (reg, op0, 0070000);
@@ -7394,6 +10508,10 @@ convert_local_pointer (op0, from, to, byte)
 	  emit_TLC (reg, op0, 0071600);
 	  emit_ADD (reg, reg, 0010000);
 	  break;
+	case 18:
+	  /* 18-bit local byte pointer -> 7-bit local byte pointer. */
+	  emit_ADD (reg, op0, 0126500);
+	  break;
 	case 36:
 	  emit_TLO (reg, op0, 0350700 - byte * 0070000);
 	  break;
@@ -7405,6 +10523,14 @@ convert_local_pointer (op0, from, to, byte)
     case 8:
       switch (from)
 	{
+	case 6:
+	  /* 6-bit local byte pointer -> 8-bit local byte pointer. */
+	  emit_SUB (reg, op0, 017600);
+	  break;
+	case 7:
+	  /* 7-bit local byte pointer -> 8-bit local byte pointer. */
+	  emit_SUB (reg, op0, 007700);
+	  break;
 	case 9:
 	  emit_TLO (reg, op0, 0040000);
 	  emit_TLZ (reg, reg, 0030100);
@@ -7424,6 +10550,21 @@ convert_local_pointer (op0, from, to, byte)
     case 9:
       switch (from)
 	{
+	case 6:
+	  /* 6-bit local byte pointer -> 9-bit local byte pointer.
+	     For positions that remain within the same word, this changes
+	     P,S by ((-3 << 6) + 3).  emit_SUB takes the left-half
+	     selector value, so subtract octal 027500.  This is the
+	     missing aggregate/block-store conversion path hit by
+	     store_before_char6_7.  */
+	  emit_SUB (reg, op0, 027500);
+	  break;
+	case 7:
+	  /* 7-bit local byte pointer -> 9-bit local byte pointer.
+	     This is the same local P,S-size conversion class as the
+	     6-bit case above, but with delta ((-2 << 6) + 2).  */
+	  emit_SUB (reg, op0, 017600);
+	  break;
 	case 8:
 	  emit_TLC  (reg, op0, 0040100);
 	  emit_TLNE (reg, 0100000, label = gen_label_rtx ());
@@ -7447,6 +10588,15 @@ convert_local_pointer (op0, from, to, byte)
     case 18:
       switch (from)
 	{
+	case 6:
+	  /* 6-bit local byte pointer -> 18-bit local byte pointer.
+	     This fills the matrix hole hit by convert_char6_short18.  */
+	  emit_SUB (reg, op0, 0136400);
+	  break;
+	case 7:
+	  /* 7-bit local byte pointer -> 18-bit local byte pointer. */
+	  emit_SUB (reg, op0, 0126500);
+	  break;
 	case 8:
 	  emit_TLZ  (reg, op0, 0141000);
 	  emit_TLO  (reg, reg, 0002200);
@@ -7460,6 +10610,30 @@ convert_local_pointer (op0, from, to, byte)
 	  break;
 	case 36:
 	  emit_TLO (reg, op0, 0222200 - byte * 0220000);
+	  break;
+	default:
+	  abort ();
+	}
+      break;
+
+    case 16:
+      switch (from)
+	{
+	case 18:
+	  /* 18-bit local byte pointer -> 16-bit local byte pointer.
+	     Preserve the current bit position; change only P,S.  */
+	  emit_ADD (reg, op0, 017600);
+	  break;
+	case 36:
+	  /* Word pointer -> 16-bit local byte pointer.  BYTE is normally the
+	     canonical 16-bit byte number within the PDP-10 word.  A standalone
+	     short16 scalar is different: it lives right-justified in the full
+	     scalar word, so &scalar must become POINT 16,word,35 rather than
+	     the canonical array byte ending at bit 31.  */
+	  if (byte == PDP10_SCALAR_RIGHT_BYTE)
+	    emit_TLO (reg, op0, 002000);
+	  else
+	    emit_TLO (reg, op0, 0242000 - byte * 0200000);
 	  break;
 	default:
 	  abort ();
@@ -7556,8 +10730,10 @@ pdp10_convert_pointer (exp, op0, target, mod, stack, not_null)
   if (stack)
     not_null = 1;
 
-  if (modifier == EXPAND_INITIALIZER)
-    return NULL_RTX;
+  /* Do not return immediately for EXPAND_INITIALIZER.  Constant
+     pointer conversions, such as a string object's word address to a
+     local byte pointer, must still be folded here.  Non-constant
+     initializer conversions are rejected later before emitting code.  */
 
 #ifdef ASM_NETBSD
   if (TREE_CODE (TREE_TYPE (exp)) == INTEGER_TYPE
@@ -7630,6 +10806,38 @@ pdp10_convert_pointer (exp, op0, target, mod, stack, not_null)
 	 && (stack || POINTER_TYPE_P (TREE_TYPE (TREE_OPERAND (exp, 0))))))
     return NULL_RTX;
 
+  {
+    rtx init_addr = pdp10_initializer_byte_pointer (exp);
+    if (init_addr != NULL_RTX)
+      return init_addr;
+  }
+
+  /* A word pointer cast through a byte pointer and immediately back to
+     a word pointer is a no-op.  Recognize this before expanding the
+     inner conversion, otherwise (int *)(char *)x emits a useless
+     word -> byte -> word conversion sequence, and worse, can skip the
+     initializing move on the null path.
+
+     Keep this deliberately narrow.  The opposite byte -> word -> byte
+     sequence is not necessarily an identity on a PDP-10, because the
+     intermediate word pointer discards the original byte position.  */
+  if (!stack
+      && (TREE_CODE (exp) == NOP_EXPR || TREE_CODE (exp) == CONVERT_EXPR)
+      && (TREE_CODE (TREE_OPERAND (exp, 0)) == NOP_EXPR
+	  || TREE_CODE (TREE_OPERAND (exp, 0)) == CONVERT_EXPR)
+      && POINTER_TYPE_P (TREE_TYPE (TREE_OPERAND (exp, 0)))
+      && POINTER_TYPE_P (TREE_TYPE (TREE_OPERAND (TREE_OPERAND (exp, 0), 0))))
+    {
+      tree inner = TREE_OPERAND (exp, 0);
+      tree base = TREE_OPERAND (inner, 0);
+      int to_size = pdp10_bytesize (TREE_TYPE (TREE_TYPE (exp)));
+      int inner_size = pdp10_bytesize (TREE_TYPE (TREE_TYPE (inner)));
+      int base_size = pdp10_bytesize (TREE_TYPE (TREE_TYPE (base)));
+
+      if (base_size == 36 && inner_size != 36 && to_size == 36)
+	return expand_expr (base, target, Pmode, modifier);
+    }
+
   if (target_flags & OPT_VOIDP)
     {
       /* The XKL people want conversions to or from void * to do
@@ -7656,17 +10864,34 @@ pdp10_convert_pointer (exp, op0, target, mod, stack, not_null)
       || (to <= 9 && noconv_charp (from, TREE_OPERAND (exp, 0))))
     return NULL_RTX;
 
-  /* When taking the address of a scalar variable, refer to the
-     right-most byte.  */
-  if (TREE_CODE (exp) == ADDR_EXPR
-      && !AGGREGATE_TYPE_P (TREE_TYPE (TREE_OPERAND (exp, 0))))
-    {
-      /* Scalar char variables of all sizes are referred to as the
-	 right half of a word.  */
-      if (to <= 9)
-	to = 18;
-      byte = BITS_PER_WORD / to - 1;
-    }
+  /* Dynamic sub-word addresses may start in the middle of a PDP-10 word
+     even when the conversion expression is wrapped in NOP/CONVERT nodes.
+     Try to recover the original byte position before falling back to the
+     scalar right-byte rule.  */
+  {
+    int subword_byte;
+
+    if (pdp10_addr_expr_array_byte (exp, to, &subword_byte))
+      byte = subword_byte;
+    else if (TREE_CODE (exp) == ADDR_EXPR
+	     && !AGGREGATE_TYPE_P (TREE_TYPE (TREE_OPERAND (exp, 0))))
+      {
+	/* Scalar char variables of all sub-9-bit sizes occupy one
+	   9-bit C storage unit when addressed as standalone scalar
+	   objects.  Build a pointer to the rightmost 9-bit byte, not
+	   an 18-bit right-half pointer.  The 18-bit form can read stale
+	   neighbouring bits from a reused stack word.  */
+	if (to <= 9)
+	  {
+	    to = 9;
+	    byte = BITS_PER_WORD / to - 1;
+	  }
+	else if (to == 16)
+	  byte = PDP10_SCALAR_RIGHT_BYTE;
+	else
+	  byte = BITS_PER_WORD / to - 1;
+      }
+  }
 
   if (!op0)
     op0 = expand_expr (TREE_OPERAND (exp, 0), NULL_RTX, Pmode, 0);
@@ -7676,172 +10901,54 @@ pdp10_convert_pointer (exp, op0, target, mod, stack, not_null)
 
   if (CONSTANT_ADDRESS_P (op0))
     {
-      HOST_WIDE_INT offset = 0, ps;
-      rtx x = op0;
+      pdp10_word36 offset = 0;
+      pdp10_word36 addr;
+      pdp10_word36 new_offset;
+      int ps;
+      rtx base;
 
-      /* ADDRESS: Support for local addressing not yet done.  */
-      if (!TARGET_EXTENDED)
-	abort ();
-
-      if (GET_CODE (x) == CONST)
-	x = XEXP (x, 0);
-
-      if (GET_CODE (x) == PLUS)
+      if (!pdp10_decompose_symbolic_word36 (op0, &base, &offset))
 	{
-	  offset = INTVAL (XEXP (x, 1));
-	  x = XEXP (x, 0);
+	  if (modifier == EXPAND_INITIALIZER)
+	    return NULL_RTX;
 	}
-
-      ps = (offset >> 30) & 077;
-      offset &= ADDRESS_MASK;
-
-      from = bytesize_for_ps (ps);
-
-      maybe_warn_about_pointer_conversion (exp, from, to);
-
-      switch (from)
+      else if (!TARGET_EXTENDED)
 	{
-	case 7:
-	  switch (to)
-	    {
-	    case 6:
-	      ps = 046 + (ps - 062);
-	      break;
-	    case 7:
-	      break;
-	    case 8:
-	      if (ps == 066)
-		ps = 060;
-	      else
-		ps = 055 + (ps - 062);
-	      break;
-	    case 9:
-	      if (ps == 066)
-		ps = 073;
-	      else
-		ps = 070 + (ps - 062);
-	      break;
-	    case 18:
-	      if (ps < 064)
-		ps = 075;
-	      else
-		ps = 076;
-	      break;
-	    case 36:
-	      ps = 0;
-	      break;
-	    default:
-	      abort ();
-	    }
-	  break;
+	  ps = (offset >> 24) & 07777;
+	  addr = offset & ADDRESS_MASK;
 
-	case 8:
-	  switch (to)
+	  if (pdp10_local_ps_for_conversion (ps, from, to, byte,
+					       &ps, &from))
 	    {
-	    case 6:
-	      ps = 046 + (ps - 055);
-	      break;
-	    case 7:
-	      ps = 062 + (ps - 055);
-	      break;
-	    case 8:
-	      break;
-	    case 9:
-	      ps = 070 + (ps - 055);
-	      break;
-	    case 18:
-	      ps = 075 + (ps - 055) / 2;
-	      break;
-	    case 36:
-	      ps = 0;
-	      break;
-	    default:
-	      abort ();
+	      maybe_warn_about_pointer_conversion (exp, from, to);
+	      new_offset = ((((pdp10_word36) ps) << 24) + addr)
+		& PDP10_WORD36_MASK;
+	      return base != NULL_RTX
+		? pdp10_plus_constant_word36 (base, new_offset)
+		: pdp10_gen_word36_constant (new_offset);
 	    }
-	  break;
 
-	case 9:
-	  switch (to)
-	    {
-	    case 6:
-	      ps = 046 + (ps - 070);
-	      break;
-	    case 7:
-	      ps = 062 + (ps - 070);
-	      break;
-	    case 8:
-	      ps = 055 + (ps - 070);
-	      break;
-	    case 9:
-	      break;
-	    case 18:
-	      ps = 075 + (ps - 070) / 2;
-	      break;
-	    case 36:
-	      ps = 0;
-	      break;
-	    default:
-	      abort ();
-	    }
-	  break;
-
-	case 18:
-	  switch (to)
-	    {
-	    case 6:
-	      ps = 046 + (ps - 075) * 2;
-	      break;
-	    case 7:
-	      ps = 062 + (ps - 075) * 2;
-	      break;
-	    case 8:
-	      ps = 055 + (ps - 075) * 2;
-	      break;
-	    case 9:
-	      ps = 070 + (ps - 075) * 2;
-	      break;
-	    case 18:
-	      break;
-	    case 36:
-	      ps = 0;
-	      break;
-	    default:
-	      abort ();
-	    }
-	  break;
-
-	case 36:
-	  switch (to)
-	    {
-	    case 6:
-	      ps = 046 + byte;
-	      break;
-	    case 7:
-	      ps = 062 + byte;
-	      break;
-	    case 8:
-	      ps = 055 + byte;
-	      break;
-	    case 9:
-	      ps = 070 + byte;
-	      break;
-	    case 18:
-	      ps = 075 + byte;
-	      break;
-	    case 36:
-	      break;
-	    default:
-	      abort ();
-	    }
-	  break;
-
-	default:
-	  abort ();
+	  if (modifier == EXPAND_INITIALIZER)
+	    return NULL_RTX;
 	}
+      else
+	{
+	  ps = (offset >> 30) & 077;
+	  addr = offset & ADDRESS_MASK;
 
-      return
-	plus_constant (x, trunc_int_for_mode (offset + (ps << 30), Pmode));
+	  ps = pdp10_global_ps_for_conversion (ps, to, byte, &from);
+	  maybe_warn_about_pointer_conversion (exp, from, to);
+
+	  new_offset = ((((pdp10_word36) ps) << 30) + addr)
+	    & PDP10_WORD36_MASK;
+	  return base != NULL_RTX
+	    ? pdp10_plus_constant_word36 (base, new_offset)
+	    : pdp10_gen_word36_constant (new_offset);
+	}
     }
+
+  if (modifier == EXPAND_INITIALIZER)
+    return NULL_RTX;
 
   {
     rtx old = op0;
@@ -7888,15 +10995,36 @@ pdp10_convert_ptr (exp, op0, target, from, to, not_null)
   int byte = 0, emit_jump;
   rtx label = gen_label_rtx ();
 
-  /* When taking the address of a scalar variable, refer to the
-     right-most byte.  */
-  if (exp && TREE_CODE (exp) == ADDR_EXPR
-      && !AGGREGATE_TYPE_P (TREE_TYPE (TREE_OPERAND (exp, 0))))
+  if (exp)
     {
-      if (to == 9)
-	to = 18;
-      byte = BITS_PER_WORD / to - 1;
+      rtx init_addr = pdp10_initializer_byte_pointer (exp);
+      if (init_addr != NULL_RTX)
+        return init_addr;
     }
+
+  /* Dynamic sub-word addresses may start in the middle of a PDP-10 word
+     even when the conversion expression is wrapped in NOP/CONVERT nodes.
+     Try to recover the original byte position before falling back to the
+     scalar right-byte rule.  */
+  {
+    int subword_byte;
+
+    if (pdp10_addr_expr_array_byte (exp, to, &subword_byte))
+      byte = subword_byte;
+    else if (exp && TREE_CODE (exp) == ADDR_EXPR
+	     && !AGGREGATE_TYPE_P (TREE_TYPE (TREE_OPERAND (exp, 0))))
+      {
+	if (to <= 9)
+	  {
+	    to = 9;
+	    byte = BITS_PER_WORD / to - 1;
+	  }
+	else if (to == 16)
+	  byte = PDP10_SCALAR_RIGHT_BYTE;
+	else
+	  byte = BITS_PER_WORD / to - 1;
+      }
+  }
 
   if (!op0)
     op0 = expand_expr (TREE_OPERAND (exp, 0), NULL_RTX, Pmode, 0);
@@ -7904,167 +11032,53 @@ pdp10_convert_ptr (exp, op0, target, from, to, not_null)
   if (from == to)
     return op0;
 
-  if (from == 16)
-    from = 18;
-  else if (from == 32)
+  if (from == 32)
     from = 36;
 
-  if (to == 16)
-    to = 18;
-  else if (to == 32)
+  if (to == 32)
     to = 36;
 
   if (CONSTANT_ADDRESS_P (op0))
     {
-      HOST_WIDE_INT offset = 0, ps;
-      rtx x = op0;
+      pdp10_word36 offset = 0;
+      pdp10_word36 addr;
+      pdp10_word36 new_offset;
+      int ps;
+      rtx base;
 
-      /* ADDRESS: support for local addressing not yet done.  */
-      if (!TARGET_EXTENDED)
-	abort ();
-
-      if (GET_CODE (x) == CONST)
-	x = XEXP (x, 0);
-
-      if (GET_CODE (x) == PLUS)
+      if (pdp10_decompose_symbolic_word36 (op0, &base, &offset))
 	{
-	  offset = INTVAL (XEXP (x, 1));
-	  x = XEXP (x, 0);
+	  if (!TARGET_EXTENDED)
+	    {
+	      ps = (offset >> 24) & 07777;
+	      addr = offset & ADDRESS_MASK;
+
+	      if (pdp10_local_ps_for_conversion (ps, from, to, byte,
+					       &ps, &from))
+		{
+		  maybe_warn_about_pointer_conversion (exp, from, to);
+		  new_offset = ((((pdp10_word36) ps) << 24) + addr)
+		    & PDP10_WORD36_MASK;
+		  return base != NULL_RTX
+		    ? pdp10_plus_constant_word36 (base, new_offset)
+		    : pdp10_gen_word36_constant (new_offset);
+		}
+	    }
+	  else
+	    {
+	      ps = (offset >> 30) & 077;
+	      addr = offset & ADDRESS_MASK;
+
+	      ps = pdp10_global_ps_for_conversion (ps, to, byte, &from);
+	      maybe_warn_about_pointer_conversion (exp, from, to);
+
+	      new_offset = ((((pdp10_word36) ps) << 30) + addr)
+		& PDP10_WORD36_MASK;
+	      return base != NULL_RTX
+		? pdp10_plus_constant_word36 (base, new_offset)
+		: pdp10_gen_word36_constant (new_offset);
+	    }
 	}
-
-      ps = (offset >> 30) & 077;
-      offset &= ADDRESS_MASK;
-
-      from = bytesize_for_ps (ps);
-      if (from == to)
-	return op0;
-
-      maybe_warn_about_pointer_conversion (exp, from, to);
-
-      switch (from)
-	{
-	case 7:
-	  switch (to)
-	    {
-	    case 6:
-	      ps = 046 + (ps - 062);
-	      break;
-	    case 8:
-	      if (ps == 066)
-		ps = 060;
-	      else
-		ps = 055 + (ps - 062);
-	      break;
-	    case 9:
-	      if (ps == 066)
-		ps = 073;
-	      else
-		ps = 070 + (ps - 062);
-	      break;
-	    case 36:
-	      ps = 0;
-	      break;
-	    default:
-	      abort ();
-	    }
-	  break;
-
-	case 8:
-	  switch (to)
-	    {
-	    case 6:
-	      ps = 046 + (ps - 055);
-	      break;
-	    case 7:
-	      ps = 062 + (ps - 055);
-	      break;
-	    case 9:
-	      ps = 070 + (ps - 055);
-	      break;
-	    case 36:
-	      ps = 0;
-	      break;
-	    default:
-	      abort ();
-	    }
-	  break;
-
-	case 9:
-	  switch (to)
-	    {
-	    case 6:
-	      ps = 046 + (ps - 070);
-	      break;
-	    case 7:
-	      ps = 062 + (ps - 070);
-	      break;
-	    case 8:
-	      ps = 055 + (ps - 070);
-	      break;
-	    case 18:
-	      ps = 075 + (ps - 070) / 2;
-	      break;
-	    case 36:
-	      ps = 0;
-	      break;
-	    default:
-	      abort ();
-	    }
-	  break;
-
-	case 18:
-	  switch (to)
-	    {
-	    case 6:
-	      ps = 046 + (ps - 075) * 2;
-	      break;
-	    case 7:
-	      ps = 062 + (ps - 075) * 2;
-	      break;
-	    case 8:
-	      ps = 055 + (ps - 075) * 2;
-	      break;
-	    case 9:
-	      ps = 070 + (ps - 075) * 2;
-	      break;
-	    case 36:
-	      ps = 0;
-	      break;
-	    default:
-	      abort ();
-	    }
-	  break;
-
-	case 36:
-	  switch (to)
-	    {
-	    case 6:
-	      ps = 046 + byte;
-	      break;
-	    case 7:
-	      ps = 062 + byte;
-	      break;
-	    case 8:
-	      ps = 055 + byte;
-	      break;
-	    case 9:
-	      ps = 070 + byte;
-	      break;
-	    case 18:
-	      ps = 075 + byte;
-	      break;
-	    default:
-	      abort ();
-	    }
-	  break;
-
-	default:
-	  /* TODO: 6,7,8-bit bytes.  */
-	  abort ();
-	}
-
-      return
-	plus_constant (x, trunc_int_for_mode (offset + (ps << 30), Pmode));
     }
 
   {
@@ -8108,6 +11122,22 @@ pdp10_expand_ADDR_EXP (exp, type, target, ignore, mod)
   /* If nonzero, TEMP will be set to the address of something that might
      be a MEM corresponding to a stack slot.  */
   temp = 0;
+
+  {
+    rtx init_addr = pdp10_initializer_byte_pointer (exp);
+    if (init_addr != NULL_RTX)
+      return init_addr;
+  }
+
+  if (POINTER_TYPE_P (TREE_TYPE (exp))
+      && (TREE_CODE (TREE_OPERAND (exp, 0)) == ARRAY_REF
+          || TREE_CODE (TREE_OPERAND (exp, 0)) == COMPONENT_REF))
+    {
+      rtx dyn_addr = pdp10_dynamic_addr_expr_byte_pointer
+        (exp, pdp10_bytesize (TREE_TYPE (TREE_TYPE (exp))));
+      if (dyn_addr != NULL_RTX)
+        return dyn_addr;
+    }
 
   /* Are we taking the address of a nested function?  */
   if (TREE_CODE (TREE_OPERAND (exp, 0)) == FUNCTION_DECL
@@ -8178,7 +11208,14 @@ pdp10_expand_ADDR_EXP (exp, type, target, ignore, mod)
 	}
 
       if (GET_CODE (op0) == SUBREG && GET_CODE (XEXP (op0, 0)) == ZERO_EXTRACT)
-	op0 = XEXP (XEXP (op0, 0), 0);
+	{
+	  rtx addr = pdp10_address_from_zero_extract (XEXP (op0, 0), exp);
+
+	  if (addr != NULL_RTX)
+	    return addr;
+
+	  op0 = XEXP (XEXP (op0, 0), 0);
+	}
 
       if (GET_CODE (op0) != MEM)
 	abort ();
@@ -8186,7 +11223,15 @@ pdp10_expand_ADDR_EXP (exp, type, target, ignore, mod)
       op0 = XEXP (op0, 0);
 
       if (modifier == EXPAND_INITIALIZER || CONSTANT_ADDRESS_P (op0))
-	return op0;
+	{
+	  rtx temp2;
+
+	  temp2 = pdp10_convert_pointer (exp, op0, NULL_RTX,
+					   EXPAND_INITIALIZER, 1, 1);
+	  if (temp2)
+	    op0 = temp2;
+	  return op0;
+	}
     }
 
   switch (GET_CODE (op0))
@@ -8305,24 +11350,55 @@ adjust_ps (ps, adjust)
 	}
       ps += base;
       ps <<= 6;
+      *adjust /= n;
     }
   else
     {
       int p = ps >> 6;
+      int byte_pos;
+      int total;
+
       s = ps & 077;
 
-      if (!VALID_OWGBP_BYTE_SIZE_P (s)
-	  || p % s != 0)
+      if (!VALID_OWGBP_BYTE_SIZE_P (s))
+	return -1;
+
+      byte_pos = BITS_PER_WORD - p - s;
+      if (byte_pos < 0 || byte_pos + s > BITS_PER_WORD)
+	return -1;
+
+      /* Local P,S byte pointers use the actual bit position of the
+	 selected byte, not an extended byte-number code.  Seven- and
+	 eight-bit byte arrays therefore have perfectly valid positions
+	 whose P field is not divisible by S: POINT 7,foo,35 is the
+	 first 7-bit byte in a word, and POINT 8,foo,34 is the first
+	 8-bit byte.  The old p % s check made constant ADJBP folding
+	 fail for static 7/8-bit byte-pointer initializers.
+
+	 Only fold canonical byte-array slots here.  Direct address-of
+	 noncanonical fields is still handled by the initializer byte
+	 pointer builder; pointer arithmetic through ADJBP should not
+	 invent a guessed rollover rule for arbitrary bit positions.  */
+      if (byte_pos % s != 0)
 	return -1;
 
       n = BITS_PER_WORD / s;
-      p -= s * (*adjust % n);
-      if (p < 0)
-	p += s;
+      total = byte_pos / s + *adjust;
+      if (total >= 0)
+	{
+	  *adjust = total / n;
+	  total %= n;
+	}
+      else
+	{
+	  *adjust = - ((-total + n - 1) / n);
+	  total -= *adjust * n;
+	}
+
+      p = BITS_PER_WORD - total * s - s;
       ps = (p << 6) + s;
     }
 
-  *adjust /= n;
   return ps;
 }
 
@@ -8369,25 +11445,18 @@ pdp10_simplify_unspec (x, insn)
 	      break;
 	  }
 
-	if (GET_CODE (pointer) == CONST)
-	  pointer = XEXP (pointer, 0);
+	{
+	  rtx base;
+	  pdp10_word36 word36_offset;
 
-	/* The pointer should look like (plus ptr (const_int n)).
-	   Extract the PS field and offset from n.  */
-	if (GET_CODE (pointer) != PLUS
-	    || GET_CODE (XEXP (pointer, 1)) != CONST_INT)
-	  break;
-	offset = INTVAL (XEXP (pointer, 1));
-	ps = (offset >> 24) & (TARGET_EXTENDED ? 07700 : 07777);
-	offset &= ADDRESS_MASK;
-	pointer = XEXP (pointer, 0);
+	  if (!pdp10_decompose_symbolic_word36 (pointer, &base, &word36_offset)
+	      || base == NULL_RTX)
+	    break;
 
-	if (offset & ((HOST_WIDE_INT)1 << 29))
-	  {
-	    ps += 0100;
-	    offset ^= (HOST_WIDE_INT)1 << 29;
-	    offset -= (HOST_WIDE_INT)1 << 29;
-	  }
+	  ps = (word36_offset >> 24) & (TARGET_EXTENDED ? 07700 : 07777);
+	  offset = word36_offset & ADDRESS_MASK;
+	  pointer = base;
+	}
 
 	/* If the pointer inside the plus expression is a register,
 	   find the last value that register was set to.  */
@@ -8405,15 +11474,20 @@ pdp10_simplify_unspec (x, insn)
 	if (ps == -1)
 	  break;
 
-	/* If there was a word offset, add it to the pointer.  */
+	/* If there was a word offset, add it to the pointer.  Keep the
+	   PDP-10 P,S selector in full 36-bit form; HOST_WIDE_INT may be
+	   only 32 bits on the build host.  */
 	offset += adjust;
-	//offset &= ADDRESS_MASK;
-	if (offset)
-	  pointer = plus_constant (pointer, offset);
+	{
+	  pdp10_word36 new_offset;
 
-	return plus_constant (pointer,
-			      trunc_int_for_mode ((HOST_WIDE_INT)ps << 24,
-						  Pmode));
+	  new_offset = ((((pdp10_word36) ps) << 24)
+			+ ((pdp10_word36) offset & ADDRESS_MASK))
+	    & PDP10_WORD36_MASK;
+	  return gen_rtx_CONST (Pmode,
+				gen_rtx_PLUS (Pmode, pointer,
+					      pdp10_gen_word36_constant (new_offset)));
+	}
       }
       break;
     }
@@ -8726,10 +11800,25 @@ pdp10_compare_and_jump (exp, op0, op1, code, unsignedp, mode, size,
     }
 
   pdp10_emit_cmp_and_jump_insns (exp, op0, op1, code, size, mode, unsignedp,
-				 if_true_label);
+                                 if_true_label);
 
   if (if_false_label)
     emit_jump (if_false_label);
   if (dummy_true_label)
     emit_label (if_true_label);
-}
+  }
+
+  /* Called by the ASM_OUTPUT_ALIGN macro.  */
+  void
+  pdp10_asm_output_align (file, power)
+     FILE *file;
+     int power;
+  {
+#ifdef __PDP10_GAS_H__
+  pdp10_output_byte (file, NULL_RTX, 0);
+#endif
+  if (power == 2 && in_text_section ())
+    return;
+  fprintf (file, "\t.align\t%d\n", power);
+  }
+

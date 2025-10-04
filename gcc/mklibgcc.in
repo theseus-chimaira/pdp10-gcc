@@ -104,6 +104,21 @@ libgcc2_objs=""
 libgcc2_st_objs=""
 libgcc2_eh_objs=""
 
+# Target make fragments may exclude selected libgcc2.c members for
+# bare/no-runtime configurations.  This is deliberately applied after
+# LIB1ASMFUNCS removal and before emitting any libgcc2 rules.
+for name in $LIB2FUNCS_EXCLUDE; do
+  LIB2FUNCS_1=`echo $LIB2FUNCS_1 | sed -e 's/^'$name' //' \
+                                   -e 's/ '$name' / /' \
+                                   -e 's/ '$name'$//'`
+  LIB2FUNCS_2=`echo $LIB2FUNCS_2 | sed -e 's/^'$name' //' \
+                                   -e 's/ '$name' / /' \
+                                   -e 's/ '$name'$//'`
+  LIB2_DIVMOD_FUNCS=`echo $LIB2_DIVMOD_FUNCS | sed -e 's/^'$name' //' \
+                                             -e 's/ '$name' / /' \
+                                             -e 's/ '$name'$//'`
+done
+
 for name in $LIB2FUNCS_1 $LIB2FUNCS_2; do
   for ml in $MULTILIBS; do
     dir=`echo ${ml} | sed -e 's/;.*$//' -e 's/=/$(EQ)/g'`

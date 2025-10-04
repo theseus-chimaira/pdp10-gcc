@@ -1745,7 +1745,8 @@ cpp_define (pfile, str)
      cpp_reader *pfile;
      const char *str;
 {
-  char *buf, *p;
+  char *buf;
+  const char *p;
   size_t count;
 
   /* Copy the entire option so we can modify it. 
@@ -1944,3 +1945,4 @@ _cpp_init_directives (pfile)
       node->directive_index = i + 1;
     }
 }
+

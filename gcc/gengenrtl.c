@@ -26,6 +26,17 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "rtl.h"
 #undef abort
 
+/* gengenrtl is a build-host generator.  It includes real.h only to compute
+   the host-side CONST_DOUBLE format used by generated RTL constructors.
+   Some cross-generator configurations do not have the target tm.h defaults
+   available here, so provide conservative host-byte defaults needed by
+   real.h when building with modern host compilers.  */
+#ifndef BITS_PER_UNIT
+#define BITS_PER_UNIT 8
+#endif
+#ifndef MAX_LONG_DOUBLE_TYPE_SIZE
+#define MAX_LONG_DOUBLE_TYPE_SIZE 128
+#endif
 #include "real.h"
 
 /* Calculate the format for CONST_DOUBLE.  This depends on the relative

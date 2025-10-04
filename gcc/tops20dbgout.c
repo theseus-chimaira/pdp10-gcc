@@ -12192,7 +12192,7 @@ static void
 dwarf2out_finish (input_filename)
      const char *input_filename ATTRIBUTE_UNUSED;
 {
-  extern pdp10_outputting_debug_info;
+  extern int pdp10_outputting_debug_info;
   limbo_die_node *node, *next_node;
   dw_die_ref die = 0;
 

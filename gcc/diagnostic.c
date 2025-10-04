@@ -64,12 +64,10 @@ static void output_buffer_to_stream PARAMS ((output_buffer *));
 static void output_format PARAMS ((output_buffer *));
 static void output_indent PARAMS ((output_buffer *));
 
-static char *vbuild_message_string PARAMS ((const char *, va_list))
-     ATTRIBUTE_PRINTF (1, 0);
+static char *vbuild_message_string PARAMS ((const char *, va_list));
 static char *build_message_string PARAMS ((const char *, ...))
      ATTRIBUTE_PRINTF_1;
-static void output_do_printf PARAMS ((output_buffer *, const char *))
-     ATTRIBUTE_PRINTF (2, 0);
+static void output_do_printf PARAMS ((output_buffer *, const char *));
 static void format_with_decl PARAMS ((output_buffer *, tree));
 static void diagnostic_for_decl PARAMS ((tree, const char *, va_list *, int));
 static void set_real_maximum_length PARAMS ((output_buffer *));
@@ -1553,3 +1551,4 @@ warn_deprecated_use (node)
 	warning ("type is deprecated");
     }
 }
+

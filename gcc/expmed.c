@@ -363,7 +363,17 @@ store_bit_field (str_rtx, bitsize, bitnum, fieldmode, value, total_size)
             && byte_offset % GET_MODE_SIZE (fieldmode) == 0)
 	  : (! SLOW_UNALIGNED_ACCESS (fieldmode, MEM_ALIGN (op0))
 	     || (offset * BITS_PER_UNIT % bitsize == 0
-		 && MEM_ALIGN (op0) % GET_MODE_BITSIZE (fieldmode) == 0))))
+		 && MEM_ALIGN (op0) % GET_MODE_BITSIZE (fieldmode) == 0)))
+#if REAL_BITS_PER_UNIT == 36
+      /* PDP-10: QImode/HImode MEMs are backed by 36-bit words in this
+	 bring-up backend.  A simple subword move like SETZM 5(1) can
+	 clobber neighboring packed fields, as seen when u9[1] was stored
+	 correctly and then cleared by a following aligned 9-bit zero store.
+	 Keep full-word stores on this fast path; make smaller MEM fields use
+	 the bit-field insertion path.  */
+      && (GET_CODE (op0) != MEM || bitsize >= BITS_PER_WORD)
+#endif
+      )
     {
       if (GET_MODE (op0) != fieldmode)
 	{
@@ -412,6 +422,12 @@ store_bit_field (str_rtx, bitsize, bitnum, fieldmode, value, total_size)
       op0 = shallow_copy_rtx (op0);
       set_mem_alias_set (op0, 0);
       set_mem_expr (op0, 0);
+#if REAL_BITS_PER_UNIT == 36
+      /* PDP-10: this is a bit-field access, not an independent scalar
+	 QImode/HImode object.  Clear MEM_SCALAR_P so later md patterns do
+	 not turn a subword clear into a full-word SETZM/MOVEM.  */
+      MEM_SET_IN_STRUCT_P (op0, 1);
+#endif
     }
 
   /* If OP0 is a register, BITPOS must count within a word.
@@ -552,6 +568,21 @@ store_bit_field (str_rtx, bitsize, bitnum, fieldmode, value, total_size)
 
   /* Now OFFSET is nonzero only if OP0 is memory
      and is therefore always measured in bytes.  */
+
+  /* PDP-10: for MEM bitfields, the outer store_bit_field code counts
+     BITPOS within a real 36-bit memory word.  The normal insv/fixed
+     fallback path cannot insert a field that crosses that 36-bit word
+     boundary: insv rejects it, and then the fixed fallback historically
+     reinterpreted OFFSET as 9-bit GCC storage units.  Route such fields
+     directly through the split helper while OFFSET and BITPOS still
+     describe the original memory object.  */
+#if REAL_BITS_PER_UNIT == 36
+  if (GET_CODE (op0) == MEM && bitpos + bitsize > BITS_PER_WORD)
+    {
+      store_split_bit_field (op0, bitsize, offset * unit + bitpos, value);
+      return value;
+    }
+#endif
 
   if (HAVE_insv
       && GET_MODE (value) != BLKmode
@@ -768,6 +799,16 @@ store_fixed_bit_field (op0, offset, bitsize, bitpos, value)
 	  return;
 	}
 
+#if REAL_BITS_PER_UNIT == 36
+      /* PDP-10: QImode/HImode MEMs are not independently addressable
+	 containers during this bring-up.  They are byte-pointer views into a
+	 36-bit word, so the fixed bit-field fallback must still modify the
+	 containing word.  Otherwise a zero subword store degenerates into
+	 SETZM on the selected word and clobbers adjacent packed fields.  */
+      if (GET_MODE_BITSIZE (mode) < BITS_PER_WORD)
+	mode = word_mode;
+#endif
+
       total_bits = GET_MODE_BITSIZE (mode);
 
       /* Make sure bitpos is valid for the chosen mode.  Adjust BITPOS to
@@ -798,6 +839,41 @@ store_fixed_bit_field (op0, offset, bitsize, bitpos, value)
      The bit field is contained entirely within OP0.
      BITPOS is the starting bit number within OP0.
      (OP0's mode may actually be narrower than MODE.)  */
+
+#if REAL_BITS_PER_UNIT == 36
+  /* PDP-10: after forcing a subword MEM field to its containing
+     36-bit word, do not fall through to the generic clear/and/or
+     fallback.  For all-zero subpieces it can simplify the operation
+     back into a full-word SETZM, clobbering neighboring packed fields
+     in the same word.  Emit the backend insert pattern directly while
+     BITPOS is still the PDP-10 byte-position counted from the left.  */
+  if (GET_CODE (op0) == MEM && bitsize < BITS_PER_WORD && HAVE_insv)
+    {
+      enum machine_mode maxmode = mode_for_extraction (EP_insv, 3);
+      rtx value1 = value;
+      rtx pat;
+
+      if (GET_MODE (value1) != maxmode)
+	{
+	  if (GET_CODE (value1) == CONST_INT)
+	    value1 = gen_int_mode (INTVAL (value1), maxmode);
+	  else if (GET_MODE (value1) != VOIDmode
+		   && GET_MODE_BITSIZE (GET_MODE (value1)) >= bitsize)
+	    value1 = convert_to_mode (maxmode, value1, 1);
+	}
+
+      if (! ((*insn_data[(int) CODE_FOR_insv].operand[3].predicate)
+	     (value1, maxmode)))
+	value1 = force_reg (maxmode, value1);
+
+      pat = gen_insv (op0, GEN_INT (bitsize), GEN_INT (bitpos), value1);
+      if (pat)
+	{
+	  emit_insn (pat);
+	  return;
+	}
+    }
+#endif
 
   if (BYTES_BIG_ENDIAN)
       /* BITPOS is the distance between our msb
@@ -989,7 +1065,55 @@ store_split_bit_field (op0, bitsize, bitpos, value)
 	  offset = 0;
 	}
       else
-	word = op0;
+	{
+	  word = op0;
+#if REAL_BITS_PER_UNIT == 36
+	  /* PDP-10 memory offsets here are real 36-bit words.  Fold the
+	     split-piece word offset into the MEM before calling the fixed
+	     helper.  Passing OFFSET as four 9-bit storage units would make
+	     store_fixed_bit_field combine it back into the bit position and
+	     either re-enter the split path or address the wrong byte.  */
+	  if (offset != 0)
+	    word = adjust_address (word, word_mode, offset);
+	  offset = 0;
+#endif
+	}
+
+#if REAL_BITS_PER_UNIT == 36
+      /* PDP-10: we are splitting a bit-field across real 36-bit memory
+	 words.  Do not pass each subpiece back through the generic fixed
+	 fallback first: all-zero subpieces can be simplified there into a
+	 full-word SETZM.  At this point WORD, THISSIZE, and THISPOS still
+	 exactly describe the PDP-10 byte pointer we want, so emit the backend
+	 insert pattern directly when possible.  */
+      if (GET_CODE (word) == MEM && thissize < BITS_PER_WORD && HAVE_insv)
+	{
+	  enum machine_mode maxmode = mode_for_extraction (EP_insv, 3);
+	  rtx part1 = part;
+	  rtx pat;
+
+	  if (GET_MODE (part1) != maxmode)
+	    {
+	      if (GET_CODE (part1) == CONST_INT)
+		part1 = gen_int_mode (INTVAL (part1), maxmode);
+	      else if (GET_MODE (part1) != VOIDmode
+		       && GET_MODE_BITSIZE (GET_MODE (part1)) >= thissize)
+		part1 = convert_to_mode (maxmode, part1, 1);
+	    }
+
+	  if (! ((*insn_data[(int) CODE_FOR_insv].operand[3].predicate)
+		 (part1, maxmode)))
+	    part1 = force_reg (maxmode, part1);
+
+	  pat = gen_insv (word, GEN_INT (thissize), GEN_INT (thispos), part1);
+	  if (pat)
+	    {
+	      emit_insn (pat);
+	      bitsdone += thissize;
+	      continue;
+	    }
+	}
+#endif
 
       /* OFFSET is in UNITs, and UNIT is in bits.
          store_fixed_bit_field wants offset in bytes.  */
@@ -1116,6 +1240,12 @@ extract_bit_field (str_rtx, bitsize, bitnum, unsignedp,
       op0 = shallow_copy_rtx (op0);
       set_mem_alias_set (op0, 0);
       set_mem_expr (op0, 0);
+#if REAL_BITS_PER_UNIT == 36
+      /* PDP-10: this is a bit-field access, not an independent scalar
+	 QImode/HImode object.  Clear MEM_SCALAR_P so later md patterns do
+	 not turn a subword clear into a full-word SETZM/MOVEM.  */
+      MEM_SET_IN_STRUCT_P (op0, 1);
+#endif
     }
 
   /* ??? We currently assume TARGET is at least as big as BITSIZE.
@@ -1310,6 +1440,19 @@ extract_bit_field (str_rtx, bitsize, bitnum, unsignedp,
     op0 = protect_from_queue (str_rtx, 1);
 
   /* Now OFFSET is nonzero only for memory operands.  */
+
+  /* PDP-10: avoid the extv/extzv path for MEM fields crossing a real
+     36-bit word.  The backend byte extraction patterns describe one
+     word-sized byte pointer; a cross-word field must be assembled from
+     pieces.  */
+#if REAL_BITS_PER_UNIT == 36
+  if (GET_CODE (op0) == MEM && bitpos + bitsize > BITS_PER_WORD)
+    {
+      target = extract_split_bit_field (op0, bitsize, offset * unit + bitpos,
+					 unsignedp);
+      goto extract_done;
+    }
+#endif
 
   if (unsignedp)
     {
@@ -1583,6 +1726,8 @@ extract_bit_field (str_rtx, bitsize, bitnum, unsignedp,
 	target = extract_fixed_bit_field (int_mode, op0, offset, bitsize,
 					  bitpos, target, 0);
     }
+
+ extract_done:
   if (target == spec_target)
     return target;
   if (target == spec_target_subreg)
@@ -1655,6 +1800,13 @@ extract_fixed_bit_field (tmode, op0, offset, bitsize, bitpos,
 					bitpos + offset * BITS_PER_UNIT,
 					unsignedp);
 
+#if REAL_BITS_PER_UNIT == 36
+      /* PDP-10: mirror store_fixed_bit_field.  A subword MEM mode is a
+	 view into a 36-bit word, not an independent addressable object.  */
+      if (GET_MODE_BITSIZE (mode) < BITS_PER_WORD)
+	mode = word_mode;
+#endif
+
       total_bits = GET_MODE_BITSIZE (mode);
 
       /* Make sure bitpos is valid for the chosen mode.  Adjust BITPOS to
@@ -1675,6 +1827,24 @@ extract_fixed_bit_field (tmode, op0, offset, bitsize, bitpos,
       offset -= (offset % (total_bits / BITS_PER_UNIT));
       /* PDP-10: adjust by number of words.  */
       op0 = adjust_address (op0, mode, offset / 4);
+
+      /* PDP-10 subword fields can arrive here with BITPOS still beyond
+	 the selected word after OFFSET has been folded into the address.
+	 Normalize that case before the big-endian conversion below.
+	 Otherwise unsigned HOST_WIDE_INT underflows, the signed extraction
+	 path selects VOIDmode, and expand_shift aborts.  */
+      if (bitpos >= total_bits)
+	{
+	  unsigned HOST_WIDE_INT word_offset = bitpos / total_bits;
+
+#if BITS_PER_UNIT == 9
+	  op0 = adjust_address (op0, mode, word_offset);
+#else
+	  op0 = adjust_address (op0, mode,
+				word_offset * (total_bits / BITS_PER_UNIT));
+#endif
+	  bitpos -= word_offset * total_bits;
+	}
     }
 
   mode = GET_MODE (op0);
@@ -1880,7 +2050,17 @@ extract_split_bit_field (op0, bitsize, bitpos, unsignedp)
 	  offset = 0;
 	}
       else
-	word = op0;
+	{
+	  word = op0;
+#if REAL_BITS_PER_UNIT == 36
+	  /* PDP-10 memory offsets here are real 36-bit words.  Fold the
+	     split-piece word offset into the MEM before extracting the fixed
+	     piece, for the same reason as store_split_bit_field above.  */
+	  if (offset != 0)
+	    word = adjust_address (word, word_mode, offset);
+	  offset = 0;
+#endif
+	}
 
       /* Extract the parts in bit-counting order,
 	 whose meaning is determined by BYTES_PER_UNIT.
@@ -2918,6 +3098,13 @@ expand_mult_highpart (mode, op0, cnst1, target, unsignedp, max_cost)
       && size - 1 < BITS_PER_WORD
       && mul_cost[(int) wider_mode] + shift_cost[size-1] < max_cost)
     {
+      /* We are about to call a non-widening multiply in WIDER_MODE.
+	 expand_binop does not widen multiply operands for us, so make
+	 OP0 match OP1 before entering the common try path.  Without this,
+	 unsigned division by constants can ask expand_binop for a DImode
+	 multiply with an SImode dividend, leading operand_subword_force
+	 to build an invalid subreg.  */
+      op0 = convert_to_mode (wider_mode, op0, unsignedp);
       op1 = wide_op1;
       goto try;
     }

@@ -28,7 +28,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 /* XKL-specific stuff.  */
 #define XKL_STUFF 0
 
-
+
+
 /**********************************************************************
 
 	Index
@@ -80,30 +81,25 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 	Miscellaneous Parameters
 	External variable declarations  */
 
-
+
+
 /**********************************************************************
 
 	To-do List
 
 **********************************************************************/
 
-/* PROMOTE_FUNCTION_RETURN, FUNCTION_VALUE: promote QImode and HImode
-   to SImode?
-
-   FUNCTION_PROFILER
+/* FUNCTION_PROFILER
    MACHINE_STATE_SAVE
    MACHINE_STATE_RESTORE
-   LEGITIMIZE_ADDRESS
    LEGITIMIZE_RELOAD_ADDRESS
-   RTX_COSTS
-   ADDRESS_COST
-   BRANCH_COST
    ADJUST_COST
-   
+
    CALLER_SAVE_PROFITABLE: tune the cost of allocating call-clobbered
    registers for pseudos.  */
 
-
+
+
 /**********************************************************************
 
 	Controlling the Compilation Driver, gcc
@@ -128,21 +124,21 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #define CPP_SPEC "%(cpp_cpu_arch)"
 
 #define CPP_CPU_ARCH_SPEC "\
-%{march=166:-D__PDP10_166__} \
-%{march=ka10:-D__PDP10_KA10__} \
-%{march=ki10:-D__PDP10_KI10__} \
-%{march=ks10:-D__PDP10_KS10__} \
-%{march=kl10:-D__PDP10_KL10__} \
-%{march=xkl1:-D__PDP10_XKL1__} \
-%{march=xkl2:-D__PDP10_XKL2__} \
+%{march=166:-D__PDP10_166__ -Acpu=166} \
+%{march=ka10:-D__PDP10_KA10__ -Acpu=ka10} \
+%{march=ki10:-D__PDP10_KI10__ -Acpu=ki10} \
+%{march=ks10:-D__PDP10_KS10__ -Acpu=ks10} \
+%{march=kl10:-D__PDP10_KL10__ -Acpu=kl10} \
+%{march=xkl1:-D__PDP10_XKL1__ -Acpu=xkl1} \
+%{march=xkl2:-D__PDP10_XKL2__ -Acpu=xkl2} \
 %{!march=*: \
- %{mcpu=166:-D__PDP10_166__} \
- %{mcpu=ka10:-D__PDP10_KA10__} \
- %{mcpu=ki10:-D__PDP10_KI10__} \
- %{mcpu=ks10:-D__PDP10_KS10__} \
- %{mcpu=kl10:-D__PDP10_KL10__} \
- %{mcpu=xkl1:-D__PDP10_XKL1__} \
- %{mcpu=xkl2:-D__PDP10_XKL2__} \
+ %{mcpu=166:-D__PDP10_166__ -Acpu=166} \
+ %{mcpu=ka10:-D__PDP10_KA10__ -Acpu=ka10} \
+ %{mcpu=ki10:-D__PDP10_KI10__ -Acpu=ki10} \
+ %{mcpu=ks10:-D__PDP10_KS10__ -Acpu=ks10} \
+ %{mcpu=kl10:-D__PDP10_KL10__ -Acpu=kl10} \
+ %{mcpu=xkl1:-D__PDP10_XKL1__ -Acpu=xkl1} \
+ %{mcpu=xkl2:-D__PDP10_XKL2__ -Acpu=xkl2} \
  %{!mcpu*:%(cpp_cpu_arch_default)}} \
 %{mregparm=0:-D__REGPARM__=0} \
 %{mregparm=1:-D__REGPARM__=1} \
@@ -152,12 +148,18 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 %{mregparm=5:-D__REGPARM__=5} \
 %{mregparm=6:-D__REGPARM__=6} \
 %{mregparm=7:-D__REGPARM__=7} \
-%{!mregparm*:-D__REGPARM__=7} \
-%{mlong-long-71bit:-D__LONG_LONG_71BIT__=1} \
+%{!mregparm*:-D__REGPARM__=4} \
+%{mlong-long-72bit:-D__LONG_LONG_72BIT__=1} \
+%{!mlong-long-72bit:-D__LONG_LONG_71BIT__=1} \
+%{mgfloat:-D__PDP10_GFLOAT__=1} \
 "
 
-/* FIXME: this should depend on TARGET_CPU_DEFAULT.  */
-#define CPP_ARCH_DEFAULT_SPEC "-D__PDP10_XKL1__"
+/* Default CPP architecture macro for builds that do not pass -march/-mcpu.
+   Keep this in step with TARGET_CPU_DEFAULT below.  */
+#ifndef TARGET_CPU_DEFAULT_CPP_SPEC
+#define TARGET_CPU_DEFAULT_CPP_SPEC "-D__PDP10_166__ -Acpu=166"
+#endif
+#define CPP_ARCH_DEFAULT_SPEC TARGET_CPU_DEFAULT_CPP_SPEC
 
 /* This macro defines names of additional specifications to put in the
    specs that can be used in various specifications like CC1_SPEC.
@@ -175,9 +177,10 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
    of strings to tell the driver program which options are defaults
    for this target and thus do not need to be handled specially when
    using MULTILIB_OPTIONS.  */
-#define MULTILIB_DEFAULTS { "mregparm=7" }
+#define MULTILIB_DEFAULTS { "mregparm=4" }
 
-
+
+
 /**********************************************************************
 
 	Run-time Target Specification
@@ -189,9 +192,9 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
    system.  */
 #ifndef CPP_PREDEFINES
 #if XKL_STUFF
-#define CPP_PREDEFINES  "-Dpdp10 -DPDP10 -Dtops20 -DTOPS20 -DGNUCC -DGCC -Acpu=pdp10 -Amachine=pdp10"
+#define CPP_PREDEFINES  "-D__PDP10__ -D__PDP10 -DGNUCC -DGCC -Amachine=pdp10"
 #else
-#define CPP_PREDEFINES  "-Dpdp10 -Dtops20 -Acpu=pdp10 -Amachine=pdp10"
+#define CPP_PREDEFINES  "-D__PDP10__ -D__PDP10 -Amachine=pdp10"
 #endif
 #endif
 
@@ -233,7 +236,13 @@ extern int target_model;
 #define CPU_EXTENDED	0x00001000	/* Extended addressing.  */
 #define CPU_GFLOAT	0x00002000	/* Giant format floating-point.  */
 #define CPU_STRING	0x00004000	/* String instructions.  */
-#define CPU_71BIT	0x00008000	/* Use double-word integers.  */
+#define CPU_71BIT	0x00008000	/* Use 71-bit double-word integers.  */
+#define OPT_LONG_LONG_71BIT 0x00100000	/* User selected 71-bit long long. */
+#define OPT_LONG_LONG_72BIT 0x00200000	/* User selected raw 72-bit long long. */
+#define OPT_GFLOAT	0x00400000	/* User explicitly selected G-float. */
+#define OPT_PDP6_FLOAT	0x00800000	/* Placeholder: user requested PDP-6 FP. */
+#define OPT_KA10_FLOAT	0x01000000	/* Placeholder: user requested KA10 FP. */
+#define OPT_NO_FLOAT	0x02000000	/* Placeholder: user requested no FP. */
 #define ASM_TAB		0x00010000	/* Tab between opcode and operands.  */
 #define ASM_UPPER	0x00020000	/* Upper-case opcodes.  */
 #define ASM_INDENT_SKIPPED 0x00040000	/* Indent skiped insns.  */
@@ -250,6 +259,14 @@ extern int target_model;
 
 #define TARGET_EXTENDED	(target_flags & CPU_EXTENDED)
 #define TARGET_GFLOAT	(target_flags & CPU_GFLOAT)
+#define TARGET_PDP6_FLOAT	(target_flags & OPT_PDP6_FLOAT)
+#define TARGET_KA10_FLOAT	(target_flags & OPT_KA10_FLOAT)
+#define TARGET_EXPLICIT_NO_FLOAT (target_flags & OPT_NO_FLOAT)
+/* Floating-point code generation is intentionally not part of the
+   DAIMOS PDP-6/KA10 baseline yet.  These option bits are placeholders
+   for future, machine-specific FP work and are not used by the machine
+   description at present.  */
+#define TARGET_ANY_FLOAT	0
 /* String instructions aren't implemented, and their use is discouraged.  */
 #define TARGET_STRING	0
 #define TARGET_71BIT	(target_flags & CPU_71BIT)
@@ -274,9 +291,10 @@ extern int target_model;
 #define TUNE_XKL1	(target_tune == CPU_XKL1)
 #define TUNE_XKL2	(target_tune == CPU_XKL2)
 
-/* Just in case configure has failed to define anything.  */
+/* DAIMON builds default to the PDP-6/166 baseline.  Later PDP-10
+   processors remain selectable with -march/-mcpu.  */
 #ifndef TARGET_CPU_DEFAULT
-#define TARGET_CPU_DEFAULT 0
+#define TARGET_CPU_DEFAULT CPU_166
 #endif
 
 /* This macro defines names of command options to set and clear bits
@@ -286,12 +304,15 @@ extern int target_model;
 {									   \
   { "extended",	    OPT_EXTENDED,   "Use extended addressing"		}, \
   { "unextended",   OPT_UNEXTENDED, "Don't use extended addressing"	}, \
-  { "gfloat",	    CPU_GFLOAT,	    "Use giant-format doubles"		}, \
+  { "gfloat",	    CPU_GFLOAT | OPT_GFLOAT, "Use giant-format doubles"	}, \
   { "dfloat",	   -CPU_GFLOAT,	    "Use double-format doubles"		}, \
+  { "pdp6-float",  OPT_PDP6_FLOAT, "Request future PDP-6 floating point" }, \
+  { "ka10-float",  OPT_KA10_FLOAT, "Request future KA10 floating point" }, \
+  { "no-float",    OPT_NO_FLOAT,    "Request no floating point"		}, \
   { "string",	    CPU_STRING,	    "Use string instructions"		}, \
   { "no-string",   -CPU_STRING,	    "Don't use string instructions"	}, \
-  { "long-long-71bit", CPU_71BIT,   "Use 71-bit long long"		}, \
-  { "long-long-72bit", -CPU_71BIT,  "Use 72-bit long long"		}, \
+  { "long-long-71bit", CPU_71BIT | OPT_LONG_LONG_71BIT, "Use 71-bit long long" }, \
+  { "long-long-72bit", OPT_LONG_LONG_72BIT, "Use raw 72-bit long long" }, \
   { "tab",	    ASM_TAB,        "Tab between opcode and operands"	}, \
   { "upper",	    ASM_UPPER,	    "Upper-case opcodes"		}, \
   { "indent-skipped", ASM_INDENT_SKIPPED, "Indent skipped instructions"	}, \
@@ -299,12 +320,12 @@ extern int target_model;
   { "no-convert-voidp", OPT_VOIDP,  "Don't convert to/from void *"	}, \
   { "convert-voidp", -OPT_VOIDP,    "Do convert to/from void *"		}, \
   { "no-clear-subregs", OPT_NOCLRSUBR, "Don't clear subregs"		}, \
-  { "clear-subregs",OPT_NOCLRSUBR,  "Clear subregs"			}, \
+  { "clear-subregs",-OPT_NOCLRSUBR, "Clear subregs"			}, \
   { "",		    TARGET_CPU_DEFAULT, ""				}  \
 }
 
 #ifndef TARGET_DEFAULT
-#define TARGET_DEFAULT  0
+#define TARGET_DEFAULT  TARGET_CPU_DEFAULT
 #endif
 
 /* This macro is similar to TARGET_SWITCHES but defines names of
@@ -409,7 +430,8 @@ extern char *pdp10_char_bytesize_arg;
    -fomit-frame-pointer option whenever -O is specified.  */
 #define CAN_DEBUG_WITHOUT_FP 1
 
-
+
+
 /**********************************************************************
 
 	Storage Layout
@@ -480,10 +502,9 @@ extern char *pdp10_char_bytesize_arg;
 #define PROMOTE_FUNCTION_ARGS
 
 /* Define this macro if the promotion described by PROMOTE_MODE should
-   also be done for the return value of functions.
-
-   If this macro is defined, FUNCTION_VALUE must perform the same
-   promotions done by PROMOTE_MODE. (FIXME: is this true?)  */
+   also be done for the return value of functions.  FUNCTION_VALUE uses
+   pdp10_function_value_mode so the caller and callee agree on the
+   promoted return register mode.  */
 #define PROMOTE_FUNCTION_RETURN
 
 /* Normal alignment required for function parameters on the stack, in
@@ -554,7 +575,8 @@ extern char *pdp10_char_bytesize_arg;
    machine.  */
 #define TARGET_FLOAT_FORMAT PDP10_FLOAT_FORMAT
 
-
+
+
 /**********************************************************************
 
 	Layout of Source Language Data Types
@@ -608,7 +630,8 @@ extern int pdp10_char_bytesize;
 #define DEFAULT_SIGNED_CHAR 0
 #endif
 
-
+
+
 /**********************************************************************
 
 	Register Usage
@@ -687,7 +710,8 @@ extern int pdp10_char_bytesize;
 #define MODES_TIEABLE_P(MODE1, MODE2) \
   (GET_MODE_CLASS (MODE1) == GET_MODE_CLASS (MODE2))
 
-
+
+
 /**********************************************************************
 
 	Register Classes
@@ -748,8 +772,17 @@ enum reg_class
 /* A macro whose definition is the name of the class to which a valid
    index register must belong.  An index register is one used in an
    address where its value is either multiplied by a scale factor or
-   added to another register.  */
-#define INDEX_REG_CLASS INDEX_REGS
+   added to another register.
+
+   PDP-10 uses ACs as base registers for displacement addressing, but it
+   does not have a GCC-style index-register addressing form where an
+   address is the sum of two registers.  REGNO_OK_FOR_INDEX_P below is
+   therefore always false.  Keep INDEX_REG_CLASS consistent with that;
+   otherwise generic reload_combine believes index registers exist and
+   tries its optional reg+reg address rewrite after reload.  That pass can
+   then walk PDP-10 stack byte-pointer/address RTL and abort on pseudos
+   that are not meaningful index-register uses.  */
+#define INDEX_REG_CLASS NO_REGS
 
 /* A C expression which defines the machine-dependent operand
    constraint letters for register classes.  */
@@ -795,7 +828,8 @@ enum reg_class
    for the target machine.  */
 #define EXTRA_CONSTRAINT(OP, C) pdp10_extra_constraint ((OP), (C))
 
-
+
+
 /**********************************************************************
 
 	Stack Layout and Calling Conventions
@@ -923,7 +957,7 @@ enum reg_class
  */
 
 /* The default number of registers used to pass arguments.  */
-#define PDP10_DEFAULT_REGPARM 7
+#define PDP10_DEFAULT_REGPARM 4
 
 /* A C expression that controls whether a function argument is passed
    in a register, and which register.  */
@@ -979,7 +1013,8 @@ enum reg_class
 
 /* A C expression to create an RTX representing the place where a
    function returns a value of data type VALTYPE.  */
-#define FUNCTION_VALUE(VALTYPE, FUNC) gen_rtx_REG (TYPE_MODE (VALTYPE), 1)
+#define FUNCTION_VALUE(VALTYPE, FUNC) \
+  gen_rtx_REG (pdp10_function_value_mode (VALTYPE), 1)
 
 /* A C expression to create an RTX representing the place where a
    library function returns a value of mode MODE.  */
@@ -1057,7 +1092,8 @@ enum reg_class
 /* MACHINE_STATE_SAVE
    MACHINE_STATE_RESTORE.  */
 
-
+
+
 /**********************************************************************
 
 	Tail Calls
@@ -1067,7 +1103,8 @@ enum reg_class
 #define FUNCTION_OK_FOR_SIBCALL(DECL) \
   !(current_function_stdarg || current_function_varargs)
 
-
+
+
 /**********************************************************************
 
 	Implementing the Varargs Macros
@@ -1079,7 +1116,8 @@ enum reg_class
 
 #define STRICT_ARGUMENT_NAMING 1
 
-
+
+
 /**********************************************************************
 
 	Trampolines for Nested Functions
@@ -1166,7 +1204,8 @@ do {									 \
 		    (CXT));						 \
 } while (0)
 
-
+
+
 /**********************************************************************
 
 	Implicit Calls To Library Routines
@@ -1178,7 +1217,8 @@ do {									 \
    functions bcopy and bzero.  */
 #define TARGET_MEM_FUNCTIONS 1
 
-
+
+
 /**********************************************************************
 
 	Addressing Modes
@@ -1291,7 +1331,8 @@ do {								\
    satisfies CONSTANT_P, so you need not check this.  */
 #define LEGITIMATE_CONSTANT_P(X) 1
 
-
+
+
 /**********************************************************************
 
 	Describing Relative Costs of Operations
@@ -1357,6 +1398,10 @@ do {								\
   case ROTATE:								     \
   case ROTATERT:							     \
     return COSTS_N_INSNS (1);						     \
+  case ZERO_EXTEND:							     \
+  case SIGN_EXTEND:							     \
+  case TRUNCATE:							     \
+    return pdp10_operand_cost (X, OUTER_CODE);			     \
   case MULT:								     \
     if (optimize_size)							     \
       /* Shift instructions are preferred, so multiplications are	     \
@@ -1364,7 +1409,7 @@ do {								\
       return COSTS_N_INSNS (3) / 2;					     \
     else if (GET_MODE (X) == SImode)					     \
       return COSTS_N_INSNS (5);						     \
-    else if (GET_CODE (X) == DImode)					     \
+    else if (GET_MODE (X) == DImode)					     \
       return COSTS_N_INSNS (10);					     \
     else								     \
       return COSTS_N_INSNS (20);					     \
@@ -1434,7 +1479,8 @@ do {								\
    good thing to use for a given mode.  */
 #define USE_STORE_PRE_INCREMENT(MODE) GET_MODE_SIZE (MODE) < 4
 
-
+
+
 /**********************************************************************
 
 	Dividing the Output into Sections
@@ -1444,7 +1490,7 @@ do {								\
 /* A C expression whose value is a string containing the assembler
    operation that should precede instructions and read-only data.  */
 #ifndef TEXT_SECTION_ASM_OP
-#define TEXT_SECTION_ASM_OP  	"\t.text"
+#define TEXT_SECTION_ASM_OP  	""
 #endif
 
 /* A C expression whose value is a string containing the assembler
@@ -1466,7 +1512,8 @@ do {								\
 #define ENCODE_SECTION_INFO(DECL, NEW_DECL_P) \
   pdp10_encode_section_info (DECL)
 
-
+
+
 /**********************************************************************
 
 	Position Independent Code
@@ -1492,7 +1539,8 @@ so that they use relative addresses.  */
 
 /* LEGITIMATE_PIC_OPERAND */
 
-
+
+
 /**********************************************************************
 
 	Defining the Output Assembler Language
@@ -1506,13 +1554,22 @@ so that they use relative addresses.  */
 /* A C epression which outputs to the stdio stream STREAM some
    appropriate text to go at the start of an assembler file.  */
 #ifndef ASM_FILE_START
-#define ASM_FILE_START(STREAM) do { } while (0)
+/* GAS doesn't use TITLE/SEARCH/ENTRY directives; MIDAS does.  */
+#ifdef __PDP10_GAS_H__
+#define ASM_FILE_START(STREAM) pdp10_build_machine_types ()
+#else
+#define ASM_FILE_START(STREAM) macro_file_start (STREAM)
+#endif
 #endif
 
 /* A C expression which outputs to the stdio stream STREAM some
    appropriate text to go at the end of an assembler file.  */
 #ifndef ASM_FILE_END
+#ifdef __PDP10_GAS_H__
+#define ASM_FILE_END(STREAM) pdp10_output_byte ((STREAM), 0, 0)
+#else
 #define ASM_FILE_END(STREAM) do { } while (0)
+#endif
 #endif
 
 /* A C string constant describing how to begin a comment in the target
@@ -1600,9 +1657,15 @@ do { char str[30];					\
 /* A C statement to output to the stdio stream STREAM an assembler
    instruction to assemble a string constant.
 
-   PDP-10 assemblers should use ASCIZ or BYTE.  GAS will use .ascii.
-#define ASM_OUTPUT_ASCII(STREAM, PTR, LEN)
+   PDP-10 assemblers cannot use the generic byte-oriented string
+   emitter.  The target output routine packs target bytes into 36-bit
+   words.  GAS/custom assembler variants may override this in their
+   own header.
 */
+#ifndef ASM_OUTPUT_ASCII
+#define ASM_OUTPUT_ASCII(STREAM, PTR, LEN) \
+  macro_output_ascii ((STREAM), (PTR), (LEN))
+#endif
 
 /* Define this macro as a C expression which is nonzero if the
    character C is used as a logical line separator by the
@@ -1611,15 +1674,6 @@ do { char str[30];					\
    GAS uses ';'.  MIDAS uses '?'.
 #define IS_ASM_LOGICAL_LINE_SEPARATOR(C)
 */
-
-/* These macros are defined as C string constants, describing the
-   syntax in the assembler for grouping arithmetic expressions.  */
-#ifndef ASM_OPEN_PAREN
-#define ASM_OPEN_PAREN	"<"
-#endif
-#ifndef ASM_CLOSE_PAREN
-#define ASM_CLOSE_PAREN	">"
-#endif
 
 /*
  * Output of Uninitialized Variables
@@ -1742,14 +1796,14 @@ do {								\
    name is made from the string PREFIX and the numer NUM.  */
 #ifndef ASM_OUTPUT_INTERNAL_LABEL
 #define ASM_OUTPUT_INTERNAL_LABEL(STREAM, PREFIX, NUM) \
-  fprintf ((STREAM), "%%%s%u:\n", (PREFIX), (unsigned)(NUM))
+  fprintf ((STREAM), "%%L%s%u:\n", (PREFIX), (unsigned)(NUM))
 #endif
 
 /* A C statement to store into the string STRING a label whose name is
    made from the string PREFIX and the numer NUM.  */
 #ifndef ASM_GENERATE_INTERNAL_LABEL
 #define ASM_GENERATE_INTERNAL_LABEL(STRING, PREFIX, NUM) \
-  sprintf ((STRING), "*%%%s%u", (PREFIX), (unsigned)(NUM))
+  sprintf ((STRING), "*%%L%s%u", (PREFIX), (unsigned)(NUM))
 #endif
 
 /* Construct a private name.  */
@@ -1891,12 +1945,12 @@ pdp10_asm_output_opcode (FILE *stream, const char *ptr)
 /* A C statement to output to the stdio stream STREAM an assembler
    command to advance the locatino counter to a multiple of 2 to the
    POWER bytes.  */
-#ifndef ASM_OUTPUT_ALIGN  
+#ifndef ASM_OUTPUT_ALIGN
 #define ASM_OUTPUT_ALIGN(STREAM, POWER) \
-  fprintf ((STREAM), "\t.align\t%d\n", (POWER))
+  pdp10_asm_output_align ((STREAM), (POWER))
 #endif
 
-
+
 /**********************************************************************
 
 	Controlling Debugging Information Format
@@ -1941,7 +1995,8 @@ pdp10_asm_output_opcode (FILE *stream, const char *ptr)
 #define DWARF2_FRAME_INFO 1
 */
 
-
+
+
 /**********************************************************************
 
 	Miscellaneous Parameters
@@ -2058,7 +2113,8 @@ enum pdp10_builtins
 #define EXPAND_BUILTIN_VA_ARG(VALIST, TYPE) \
   pdp10_expand_builtin_va_arg ((VALIST), (TYPE))
 
-
+
+
 /**********************************************************************
 
 	External Variable Declarations
@@ -2072,7 +2128,8 @@ extern rtx pdp10_compare_op0, pdp10_compare_op1;
 extern int pdp10_regparm;
 extern int pdp10_retregs;
 
-
+
+
 /**********************************************************************
 
 	Miscellaneous
@@ -2102,3 +2159,4 @@ extern int pdp10_retregs;
   gen_rtx_UNSPEC ((MODE), gen_rtvec (2, (OP0), (OP1)), UNSPEC_ADJBP)
 
 #endif /* __PDP10_H__ */
+

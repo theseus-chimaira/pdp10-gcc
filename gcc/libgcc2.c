@@ -44,6 +44,27 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #endif
 
 #include "libgcc2.h"
+
+
+/* DAIMOS/PDP-10 bare target: libgcc2 is built with inhibit_libc before
+   there is a target libc.  Several checked arithmetic helpers call abort().
+   Without a local definition, the current PDP-10 assembler has to resolve the
+   external abort reference as a zero placeholder while assembling individual
+   libgcc2 objects, which is exactly the wrong kind of exciting.
+
+   Keep this deliberately tiny and local for now.  It removes the unsafe
+   unresolved external and gives early freestanding libgcc a deterministic
+   stop.  Later DAIMOS can replace this policy with a monitor UUO, HALT
+   convention, or runtime-provided diagnostic abort once the ABI exists.  */
+#if defined (inhibit_libc) && defined (__PDP10__)
+static void
+pdp10_libgcc_abort ()
+{
+  for (;;)
+    ;
+}
+#define abort pdp10_libgcc_abort
+#endif
 
 #if defined (L_negdi2) || defined (L_divdi3) || defined (L_moddi3)
 #if defined (L_divdi3) || defined (L_moddi3)

@@ -167,6 +167,15 @@ static unsigned HOST_WIDE_INT array_size_for_constructor PARAMS ((tree));
 static unsigned min_align		PARAMS ((unsigned, unsigned));
 static void output_constructor		PARAMS ((tree, HOST_WIDE_INT,
 						 unsigned int));
+#ifdef __PDP10_H__
+#ifndef PDP10_STRING_CST_9BIT_P
+#define PDP10_STRING_CST_9BIT_P(NODE) TREE_LANG_FLAG_1 (NODE)
+#endif
+static HOST_WIDE_INT pdp10_string_cst_logical_length PARAMS ((tree));
+static int pdp10_array_string_element_bits PARAMS ((tree));
+static HOST_WIDE_INT pdp10_output_string_initializer
+  PARAMS ((tree, HOST_WIDE_INT, unsigned int));
+#endif
 static void globalize_decl		PARAMS ((tree));
 static void maybe_assemble_visibility	PARAMS ((tree));
 static int in_named_entry_eq		PARAMS ((const PTR, const PTR));
@@ -3324,41 +3333,81 @@ output_constant_def (exp, defer)
 
       /* We have a symbol name; construct the SYMBOL_REF and the MEM.  */
       {
-	/* PDP-10: handle byte pointers.  */
+	/* PDP-10: handle byte pointers.
+
+	   Extended targets use one-word global byte pointer selector
+	   codes in bits 0..5 of the left half.  Unextended targets use
+	   a local byte pointer P,S field in bits 0..11 of the left half.
+	   The old code aborted here for local targets, which made even a
+	   simple string literal ICE for -mcpu=166 -munextended.  */
 	rtx addr = gen_rtx_SYMBOL_REF (Pmode, desc->label);
 	int ps;
+	int bytesize;
 
-	if (!TARGET_EXTENDED)
-	  abort ();
-
-	switch (pdp10_bytesize (TREE_TYPE (exp)))
+	bytesize = pdp10_bytesize (TREE_TYPE (exp));
+	if (TARGET_EXTENDED)
 	  {
-	  case 6:
-	    ps = 046;
-	    break;
-	  case 7:
-	    ps = 062;
-	    break;
-	  case 8:
-	    ps = 055;
-	    break;
-	  case 9:
-	    ps = 070;
-	    break;
-	  case 18:
-	    ps = 075;
-	    break;
-	  case 32:
-	  case 36:
-	    ps = 0;
-	    break;
-	  default:
-	    abort ();
+	    switch (bytesize)
+	      {
+	      case 6:
+		ps = 046;
+		break;
+	      case 7:
+		ps = 062;
+		break;
+	      case 8:
+		ps = 055;
+		break;
+	      case 9:
+		ps = 070;
+		break;
+	      case 18:
+		ps = 075;
+		break;
+	      case 32:
+	      case 36:
+		ps = 0;
+		break;
+	      default:
+		abort ();
+	      }
+
+	    addr = plus_constant (addr,
+				  trunc_int_for_mode ((HOST_WIDE_INT)ps << 30,
+						      SImode));
+	  }
+	else
+	  {
+	    switch (bytesize)
+	      {
+	      case 6:
+		ps = 03606;
+		break;
+	      case 7:
+		ps = 03507;
+		break;
+	      case 8:
+		ps = 03410;
+		break;
+	      case 9:
+		ps = 03311;
+		break;
+	      case 18:
+		ps = 02222;
+		break;
+	      case 32:
+	      case 36:
+		ps = 0;
+		break;
+	      default:
+		abort ();
+	      }
+
+	    addr = plus_constant (addr,
+				  trunc_int_for_mode ((HOST_WIDE_INT)ps << 24,
+						      SImode));
 	  }
 
-	addr = plus_constant (addr,
-			      trunc_int_for_mode ((HOST_WIDE_INT)ps << 30,
-						  SImode));
 	rtl = desc->rtl
 	  = gen_rtx_MEM (TYPE_MODE (TREE_TYPE (exp)), addr);
       }
@@ -3525,7 +3574,11 @@ output_constant_def_contents (exp, reloc, labelno)
   /* Output the value of EXP.  */
   output_constant (exp,
 		   (TREE_CODE (exp) == STRING_CST
+#ifdef __PDP10_H__
+		    ? MAX (pdp10_string_cst_logical_length (exp),
+#else
 		    ? MAX (TREE_STRING_LENGTH (exp),
+#endif
 			   int_size_in_bytes (TREE_TYPE (exp)))
 		    : int_size_in_bytes (TREE_TYPE (exp))),
 		   align);
@@ -4593,6 +4646,117 @@ initializer_constant_valid_p (value, endtype)
   return 0;
 }
 
+#ifdef __PDP10_H__
+/* Return the logical number of target string elements represented by EXP.
+   PDP-10 9-bit STRING_CST nodes may use two host bytes per target element
+   so octal escapes 0400..0777 survive the host char type.  */
+
+static HOST_WIDE_INT
+pdp10_string_cst_logical_length (exp)
+     tree exp;
+{
+  HOST_WIDE_INT len = TREE_STRING_LENGTH (exp);
+
+  if (PDP10_STRING_CST_9BIT_P (exp))
+    len /= 2;
+
+  return len;
+}
+
+/* Return the PDP-10 byte size of the elements of ARRAY_TYPE.  The generic
+   varasm code measures object sizes in target storage units, but the
+   PDP-10 port also has first-class 6-, 7-, 8-, and 9-bit character
+   element types packed into 36-bit words.  */
+
+static int
+pdp10_array_string_element_bits (array_type)
+     tree array_type;
+{
+  tree elt;
+  int n, units;
+
+  if (array_type == 0 || TREE_CODE (array_type) != ARRAY_TYPE)
+    return BITS_PER_UNIT;
+
+  elt = TREE_TYPE (array_type);
+  if (elt == 0 || TYPE_SIZE (elt) == 0 || TYPE_SIZE_UNIT (elt) == 0)
+    return BITS_PER_UNIT;
+
+  if (!host_integerp (TYPE_SIZE (elt), 1)
+      || !host_integerp (TYPE_SIZE_UNIT (elt), 1))
+    return BITS_PER_UNIT;
+
+  n = tree_low_cst (TYPE_SIZE (elt), 1);
+  units = tree_low_cst (TYPE_SIZE_UNIT (elt), 1);
+
+  if (units <= 0 || n % units != 0)
+    return BITS_PER_UNIT;
+
+  return n / units;
+}
+
+/* Output a STRING_CST used as an array initializer.  Do not use
+   ASM_OUTPUT_ASCII here: for uchar6/7/8/9 arrays we need raw array element
+   values, not assembler text-string policy such as SIXBIT conversion.
+   The 9-bit STRING_CST representation stores each target byte as two host
+   bytes so values 0400..0777 survive the host char type.  */
+
+static HOST_WIDE_INT
+pdp10_output_string_initializer (exp, size, align)
+     tree exp;
+     HOST_WIDE_INT size;
+     unsigned int align;
+{
+  const unsigned char *p;
+  HOST_WIDE_INT len, out, max;
+  int old_bits_per_unit;
+  int elem_bits, host_unit;
+
+  elem_bits = pdp10_array_string_element_bits (TREE_TYPE (exp));
+  if (elem_bits != 6 && elem_bits != 7
+      && elem_bits != 8 && elem_bits != 9)
+    elem_bits = BITS_PER_UNIT;
+
+  p = (const unsigned char *) TREE_STRING_POINTER (exp);
+  len = TREE_STRING_LENGTH (exp);
+
+  /* The STRING_CST records whether the lexer used two host bytes per
+     target byte to preserve 9-bit values.  Do not infer this from the
+     destination element size: a 9-bit literal can initialize uchar6/7/8
+     arrays, and a genuine 6/7/8-bit literal may have an even host length.  */
+  host_unit = PDP10_STRING_CST_9BIT_P (exp) ? 2 : 1;
+
+  max = pdp10_string_cst_logical_length (exp);
+  if (max > size)
+    max = size;
+
+  old_bits_per_unit = pdp10_bits_per_unit;
+  pdp10_bits_per_unit = elem_bits;
+
+  for (out = 0; out < max; out++)
+    {
+      int c;
+
+      if (host_unit == 2)
+	{
+	  c = (p[0] << 8) | p[1];
+	  p += 2;
+	}
+      else
+	c = *p++;
+
+      if (elem_bits < HOST_BITS_PER_INT)
+	c &= ((1 << elem_bits) - 1);
+
+      if (! assemble_integer (GEN_INT (c), 1, align, 1))
+	abort ();
+    }
+
+  pdp10_bits_per_unit = old_bits_per_unit;
+  return max;
+}
+#endif
+
 /* Output assembler code for constant EXP to FILE, with no label.
    This includes the pseudo-op such as ".int" or ".byte", and a newline.
    Assumes output_addressed_constants has been done on EXP already.
@@ -4670,10 +4834,29 @@ output_constant (exp, size, align)
     case ENUMERAL_TYPE:
     case POINTER_TYPE:
     case REFERENCE_TYPE:
+#ifdef __PDP10_H__
+      {
+	rtx init = expand_expr (exp, NULL_RTX, VOIDmode, EXPAND_INITIALIZER);
+	if (! assemble_integer (init, size, align, 0))
+	  {
+	    fprintf (stderr,
+	             "\nPDP10 initializer assemble_integer failure: "
+	             "size=%ld align=%u exp_code=%d type_code=%d\n",
+	             (long) size, align, (int) TREE_CODE (exp),
+	             (int) TREE_CODE (TREE_TYPE (exp)));
+	    fputs ("PDP10 initializer tree:\n", stderr);
+	    debug_tree (exp);
+	    fputs ("PDP10 initializer RTL:\n", stderr);
+	    debug_rtx (init);
+	    error ("initializer for integer value is too complicated");
+	  }
+      }
+#else
       if (! assemble_integer (expand_expr (exp, NULL_RTX, VOIDmode,
 					   EXPAND_INITIALIZER),
 			      size, align, 0))
 	error ("initializer for integer value is too complicated");
+#endif
       break;
 
     case REAL_TYPE:
@@ -4704,8 +4887,15 @@ output_constant (exp, size, align)
 	}
       else if (TREE_CODE (exp) == STRING_CST)
 	{
+#ifdef __PDP10_H__
+	  thissize = pdp10_output_string_initializer (exp, size, align);
+	  if (size > thissize)
+	    assemble_zeros (size - thissize);
+	  return;
+#else
 	  thissize = MIN (TREE_STRING_LENGTH (exp), size);
 	  assemble_string (TREE_STRING_POINTER (exp), thissize);
+#endif
 	}
       else
 	abort ();
@@ -4762,7 +4952,11 @@ array_size_for_constructor (val)
      arrays of single-bytes, but nothing else does, so there's no point in
      doing it here.  */
   if (TREE_CODE (val) == STRING_CST)
+#ifdef __PDP10_H__
+    return pdp10_string_cst_logical_length (val);
+#else
     return TREE_STRING_LENGTH (val);
+#endif
 
   max_index = NULL_TREE;
   for (i = CONSTRUCTOR_ELTS (val); i ; i = TREE_CHAIN (i))

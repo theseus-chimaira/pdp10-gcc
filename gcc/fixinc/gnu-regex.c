@@ -5719,7 +5719,7 @@ regerror (errcode, preg, errbuf, errbuf_size)
     {
       if (msg_size > errbuf_size)
         {
-#if defined HAVE_MEMPCPY || defined _LIBC
+#if (defined HAVE_MEMPCPY || defined _LIBC) && defined __GLIBC__
 	  *((char *) __mempcpy (errbuf, msg, errbuf_size - 1)) = '\0';
 #else
           memcpy (errbuf, msg, errbuf_size - 1);
