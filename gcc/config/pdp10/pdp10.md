@@ -879,7 +879,7 @@
 
     return "%_%_movei %0,1";
   }
-  [(set_attr "length" "4")])
+  [(set_attr "length" "5")])
 
 (define_insn "*cbranchgeu"
   [(set (pc)
@@ -1944,8 +1944,35 @@
   [(set (match_operand:DI 0 "nonimmediate_operand" "")
         (match_operand:DI 1 "general_operand" ""))]
   ""
-  "if (!HAVE_DMOVE && pdp10_expand_dmove (operands[0], operands[1]))
-     DONE;")
+  "{
+     if (TARGET_71BIT
+         && !TARGET_KI10up
+         && GET_CODE (operands[1]) == CONST_INT
+         && INTVAL (operands[1]) < 0
+         && INTVAL (operands[1]) >= -0777777)
+       {
+         HOST_WIDE_INT value;
+         rtx tmp;
+         rtx dst;
+
+         value = INTVAL (operands[1]);
+         tmp = gen_reg_rtx (DImode);
+         dst = register_operand (operands[0], DImode)
+               ? operands[0]
+               : gen_reg_rtx (DImode);
+
+         emit_move_insn (tmp, GEN_INT (-value));
+         emit_insn (gen_negdi2 (dst, tmp));
+
+         if (dst != operands[0])
+           emit_move_insn (operands[0], dst);
+
+         DONE;
+       }
+
+     if (!HAVE_DMOVE && pdp10_expand_dmove (operands[0], operands[1]))
+       DONE;
+   }")
 
 ;; TODO: if there's a REG_UNUSED note attached to this insn, avoid
 ;; moving the unused part of the DImode register.
@@ -2003,6 +2030,17 @@
       case 2:
         return "movei %0,0\;movei %Z0,%1";
       case 3:
+        if (TARGET_71BIT && !TARGET_KI10up)
+          {
+            static char buf[128];
+            unsigned long v;
+
+            v = (unsigned long) -INTVAL (operands[1]);
+            sprintf (buf,
+                     "seto %%0,\;setz %%Z0,\;subi %%Z0,%lo\;tlz %%Z0,400000\;tlo %%Z0,400000",
+                     v);
+            return buf;
+          }
         return "seto %0,\;movni %Z0,%n1";
       case 4:
         return "move %0,[%A1]\;move %Z0,[%B1]";
@@ -2014,7 +2052,7 @@
         abort ();
       }
   }
-  [(set_attr "length" "2,1,2,2,2,2,2")])
+  [(set_attr "length" "2,1,2,7,2,2,2")])
 
 
 ;; Repair an already-split two-word register move whose destination pair
@@ -2817,6 +2855,18 @@
 	   }
        }
 
+     if (TARGET_71BIT && !TARGET_KI10up)
+       {
+	 if (!register_operand (operands[1], DImode))
+	   operands[1] = force_reg (DImode, operands[1]);
+	 if (!register_operand (operands[2], DImode))
+	   operands[2] = force_reg (DImode, operands[2]);
+
+	 emit_insn (gen_muldi3_71_no_dmul (operands[0], operands[1],
+					    operands[2]));
+	 DONE;
+       }
+
      if (!TARGET_71BIT)
        {
 	 if (!register_operand (operands[1], DImode))
@@ -2831,6 +2881,27 @@
 
      FAIL;
    }")
+
+;; KA10/PDP-6-class 71-bit DImode multiply.  The hardware MUL result
+;; is not already in the backend's normalized 71-bit DImode storage shape:
+;; for example, low-limb 2^34 * 2 comes back from MUL as 1,,0 while
+;; adddi3's canonical value for 2^35 is 0,,400000000000.  Normalize the
+;; low-limb MUL result before adding the cross terms.  This mirrors the
+;; existing raw72 MUL canonicalization step, but keeps the default 71-bit
+;; arithmetic path away from the raw 72-bit multiply pattern.
+(define_insn "muldi3_71_no_dmul"
+  [(set (match_operand:DI 0 "register_operand" "=&r")
+	(mult:DI (match_operand:DI 1 "register_operand" "r")
+		 (match_operand:DI 2 "register_operand" "r")))
+   (clobber (match_scratch:DI 3 "=&r"))]
+  "TARGET_71BIT && !TARGET_KI10up"
+  {
+    if (TARGET_166)
+      return "move %0,%Z1\;mul %0,%Z2\;trne %0,1\;tloa %Z0,400000\;tlz %Z0,400000\;ash %0,-1\;tlnn %Z1,400000\;jrst .+3\;jumpl %1,.+2\;add %0,%Z2\;tlnn %Z2,400000\;jrst .+3\;jumpl %2,.+2\;add %0,%Z1\;jumpge %1,.+2\;add %0,%Z2\;jumpge %2,.+2\;add %0,%Z1\;move %3,%1\;move %Z3,%2\;imul %Z3,%Z1\;add %0,%Z3\;imul %3,%Z2\;add %0,%3";
+
+    return "move %0,%Z1\;mul %0,%Z2\;trne %0,1\;tloa %Z0,400000\;tlz %Z0,400000\;ash %0,-1\;jumpge %1,.+2\;add %0,%Z2\;jumpge %2,.+2\;add %0,%Z1\;move %3,%1\;move %Z3,%2\;imul %Z3,%Z1\;add %0,%Z3\;imul %3,%Z2\;add %0,%3";
+  }
+  [(set_attr "length" "16")])
 
 ;; Raw 72-bit DImode multiply.  Treat the two DImode words as base-2^36
 ;; limbs and compute the low 72 bits of the product:
