@@ -13,3 +13,6 @@ indicate indirect addressing, 4 bits to specify an index register, and
 18 bits to specify an address or offset.  The first version of the
 architecture was limited to a virtual address space of 256K words; a
 later version extended this to a maximum of 1G words.
+
+forked from:https://github.com/larsbrinkhoff/pdp10-gcc
+https://github.com/larsbrinkhoff/pdp10-gcc
