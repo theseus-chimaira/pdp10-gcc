@@ -1947,6 +1947,7 @@
   "{
      if (TARGET_71BIT
          && !TARGET_KI10up
+         && !no_new_pseudos
          && GET_CODE (operands[1]) == CONST_INT
          && INTVAL (operands[1]) < 0
          && INTVAL (operands[1]) >= -0777777)
@@ -3066,7 +3067,7 @@
 	  (sign_extend:TI (match_operand:DI 2 "general_operand" "rm,i")))))
    (set (subreg:DI (match_dup 0) 8)
         (truncate:DI (mod:TI (match_dup 1) (sign_extend:TI (match_dup 2)))))]
-  "TARGET_71BIT"
+  "0 && TARGET_71BIT"
   "@
    ddiv %0,%2
    ddiv %0,[%D2]")
@@ -3077,7 +3078,7 @@
 			   (match_operand:DI 2 "general_operand" "")))
 	      (set (match_operand:DI 3 "register_operand" "")
 		   (mod:DI (match_dup 1) (match_dup 2)))])]
-  "TARGET_71BIT"
+  "0 && TARGET_71BIT"
   "{
      rtx temp = gen_reg_rtx (TImode);
      emit_move_insn (gen_rtx_SUBREG (SImode, temp, 0),
