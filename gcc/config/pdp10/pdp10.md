@@ -861,17 +861,18 @@
   ""
   {
     HOST_WIDE_INT sign = (HOST_WIDE_INT)1 << 35;
+    HOST_WIDE_INT op2 = INTVAL (operands[2]);
 
     output_asm_insn ("movei %0,0", operands);
 
-    operands[2] = gen_int_mode (-INTVAL (operands[2]), SImode);
+    operands[2] = gen_int_mode (-op2, SImode);
     if (INTVAL (operands[2]) & ~(HOST_WIDE_INT)0777777)
       output_asm_insn ("caml %1,[%2]", operands);
     else
       output_asm_insn ("cail %1,%2", operands);
           
     operands[3] = gen_int_mode ((INTVAL (operands[3]) ^ sign)
-				- INTVAL (operands[2]), SImode);
+				- op2, SImode);
     if (INTVAL (operands[3]) & ~(HOST_WIDE_INT)0777777)
       output_asm_insn ("%_caml %1,[%3]", operands);
     else
@@ -968,15 +969,16 @@
   ""
   {
     HOST_WIDE_INT sign = (HOST_WIDE_INT)1 << 35;
+    HOST_WIDE_INT op2 = INTVAL (operands[2]);
 
-    operands[2] = gen_int_mode (-INTVAL (operands[2]), SImode);
+    operands[2] = gen_int_mode (-op2, SImode);
     if (INTVAL (operands[2]) & ~(HOST_WIDE_INT)0777777)
       output_asm_insn ("caml %1,[%2]", operands);
     else
       output_asm_insn ("cail %1,%2", operands);
 
     operands[3] = gen_int_mode ((INTVAL (operands[3]) ^ sign)
-				- INTVAL (operands[2]), SImode);
+				- op2, SImode);
     if (INTVAL (operands[3]) & ~(HOST_WIDE_INT)0777777)
       output_asm_insn ("%_caml %1,[%3]", operands);
     else
@@ -1164,32 +1166,52 @@
   [(set (match_operand:QI 0 "nonimmediate_operand" "")
         (match_operand:QI 1 "general_operand" ""))]
   ""
-  "if (no_new_pseudos)
+  "if (GET_CODE (operands[0]) == SUBREG
+       && GET_CODE (SUBREG_REG (operands[0])) == ZERO_EXTRACT)
+     {
+       rtx insv = SUBREG_REG (operands[0]);
+       rtx val = operands[1];
+
+       /* Do not leave final RTL shaped like
+
+            (set (subreg:QI (zero_extract:SI ...) 3)
+                 (zero_extend:SI ...))
+
+          That is mixed-mode and IVR cannot validate it.  Canonicalize to
+          the normal SImode insertion:
+
+            (set (zero_extract:SI ...) SImode-reg)
+
+          If the source is already a QImode subreg of an SImode register,
+          the insertion only consumes the low 9 bits, so the whole SImode
+          register is the right source.  */
+       if (GET_CODE (val) == ZERO_EXTEND
+	   && GET_CODE (XEXP (val, 0)) == SUBREG
+	   && GET_MODE (XEXP (val, 0)) == QImode
+	   && GET_CODE (SUBREG_REG (XEXP (val, 0))) == REG
+	   && GET_MODE (SUBREG_REG (XEXP (val, 0))) == SImode)
+	 val = SUBREG_REG (XEXP (val, 0));
+       else if (GET_CODE (val) == SUBREG
+		&& GET_MODE (val) == QImode
+		&& GET_CODE (SUBREG_REG (val)) == REG
+		&& GET_MODE (SUBREG_REG (val)) == SImode)
+	 val = SUBREG_REG (val);
+       else
+	 val = convert_to_mode (SImode, val, 1);
+
+       emit_move_insn (insv, val);
+       DONE;
+     }
+
+   if (no_new_pseudos)
      {
        if (REG_P (operands[0]) && GET_CODE (operands[1]) == CONST_INT)
          operands[0] = gen_rtx_REG (SImode, REGNO (operands[0]));
      }
    else
      {
-       if (GET_CODE (operands[0]) == SUBREG
-	   && GET_CODE (SUBREG_REG (operands[0])) == ZERO_EXTRACT)
-	 {
-	   if (GET_CODE (XEXP (SUBREG_REG (operands[0]), 0)) == MEM
-	       && SUBREG_BYTE (operands[0]) == 3
-	       && GET_CODE (XEXP (SUBREG_REG (operands[0]), 1)) == CONST_INT
-	       && INTVAL (XEXP (SUBREG_REG (operands[0]), 1)) == 9
-	       && GET_CODE (XEXP (SUBREG_REG (operands[0]), 2)) == CONST_INT
-	       && INTVAL (XEXP (SUBREG_REG (operands[0]), 2)) == 27
-	       && pdp10_scalar_mem_p (XEXP (SUBREG_REG (operands[0]), 0)))
-	     emit_move_insn (XEXP (SUBREG_REG (operands[0]), 0),
-			     convert_to_mode (SImode, operands[1], 1));
-	   else
-	     emit_move_insn (SUBREG_REG (operands[0]),
-			     convert_to_mode (SImode, operands[1], 1));
-	   DONE;
-	 }
-       else if (GET_CODE (operands[1]) == SUBREG
-		&& GET_CODE (SUBREG_REG (operands[1])) == ZERO_EXTRACT)
+       if (GET_CODE (operands[1]) == SUBREG
+	   && GET_CODE (SUBREG_REG (operands[1])) == ZERO_EXTRACT)
 	 {
 	   rtx temp = gen_reg_rtx (SImode);
 	   emit_move_insn (temp, SUBREG_REG (operands[1]));
@@ -1204,6 +1226,7 @@
        if (GET_CODE (operands[0]) == MEM)
    	 operands[1] = force_reg (QImode, operands[1]);
      }")
+
 
 (define_insn "*movqi_reg"
   [(set (match_operand:QI 0 "register_operand" "=r")
@@ -1853,6 +1876,91 @@
 	(match_operand:SI 3 "register_operand" "r"))]
   ""
   "*return pdp10_output_insv (insn, operands);")
+
+;; gcc-torture/compile/920501-3.c can present a long-long bitfield store as
+;; a zero_extract:SI into a BLKmode object.  The generic SImode memory insv
+;; does not match that final RTL shape, but pdp10_output_insv can still emit
+;; the normal DPB-style store.
+(define_insn "*insv_memblk"
+  [(set (zero_extract:SI (match_operand:BLK 0 "memory_operand" "+m")
+				 (match_operand:SI 1 "const_int_operand" "")
+				 (match_operand:SI 2 "const_int_operand" ""))
+	(match_operand:SI 3 "register_operand" "r"))]
+  ""
+  "*return pdp10_output_insv (insn, operands);")
+
+
+
+;; Whole-word moves into one word of a complex DImode pseudo/hard register.
+;; The lvalue is spelled directly as SUBREGs, so genrecog sees a real
+;; destination.  Do not use a match_operand as the destination itself here:
+;; that is what caused the earlier "destination operand allows non-lvalue"
+;; warning.
+(define_insn "*movsi_cdi_subreg_0_0"
+  [(set (subreg:SI (subreg:DI
+		     (match_operand:CDI 0 "register_operand" "+r") 0) 0)
+	(match_operand:SI 1 "reg_or_mem_operand" "rm"))]
+  ""
+  "*return pdp10_output_movsi_cdi_subreg (insn, operands);")
+
+(define_insn "*movsi_cdi_subreg_0_4"
+  [(set (subreg:SI (subreg:DI
+		     (match_operand:CDI 0 "register_operand" "+r") 0) 4)
+	(match_operand:SI 1 "reg_or_mem_operand" "rm"))]
+  ""
+  "*return pdp10_output_movsi_cdi_subreg (insn, operands);")
+
+(define_insn "*movsi_cdi_subreg_8_0"
+  [(set (subreg:SI (subreg:DI
+		     (match_operand:CDI 0 "register_operand" "+r") 8) 0)
+	(match_operand:SI 1 "reg_or_mem_operand" "rm"))]
+  ""
+  "*return pdp10_output_movsi_cdi_subreg (insn, operands);")
+
+(define_insn "*movsi_cdi_subreg_8_4"
+  [(set (subreg:SI (subreg:DI
+		     (match_operand:CDI 0 "register_operand" "+r") 8) 4)
+	(match_operand:SI 1 "reg_or_mem_operand" "rm"))]
+  ""
+  "*return pdp10_output_movsi_cdi_subreg (insn, operands);")
+
+
+;; Whole-word stores from one word of a complex DImode pseudo/hard register.
+;; This is the actual 20000804 IVR shape:
+;;
+;;   (set (mem:SI ...)
+;;        (subreg:SI (subreg:DI (reg:CDI R) A) B))
+;;
+;; IVR first sees the MEM address containing virtual-stack-vars.  Recognition
+;; is allowed to fail before substitution, but after replacing the virtual
+;; address with a real frame/temp register this pattern must be recognizable.
+(define_insn "*movsi_from_cdi_subreg_0_0"
+  [(set (match_operand:SI 0 "memory_operand" "=m")
+	(subreg:SI (subreg:DI
+		     (match_operand:CDI 1 "register_operand" "r") 0) 0))]
+  ""
+  "*return pdp10_output_movsi_from_cdi_subreg (insn, operands);")
+
+(define_insn "*movsi_from_cdi_subreg_0_4"
+  [(set (match_operand:SI 0 "memory_operand" "=m")
+	(subreg:SI (subreg:DI
+		     (match_operand:CDI 1 "register_operand" "r") 0) 4))]
+  ""
+  "*return pdp10_output_movsi_from_cdi_subreg (insn, operands);")
+
+(define_insn "*movsi_from_cdi_subreg_8_0"
+  [(set (match_operand:SI 0 "memory_operand" "=m")
+	(subreg:SI (subreg:DI
+		     (match_operand:CDI 1 "register_operand" "r") 8) 0))]
+  ""
+  "*return pdp10_output_movsi_from_cdi_subreg (insn, operands);")
+
+(define_insn "*movsi_from_cdi_subreg_8_4"
+  [(set (match_operand:SI 0 "memory_operand" "=m")
+	(subreg:SI (subreg:DI
+		     (match_operand:CDI 1 "register_operand" "r") 8) 4))]
+  ""
+  "*return pdp10_output_movsi_from_cdi_subreg (insn, operands);")
 
 (define_expand "movsi"
   [(set (match_operand:SI 0 "nonimmediate_operand" "")
@@ -7394,3 +7502,4 @@
     output_asm_insn (pdp10_output_extzv (insn, ops), ops);
     return "";
   })
+

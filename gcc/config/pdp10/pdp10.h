@@ -1190,18 +1190,26 @@ do {									  \
 
 /* A C statement to initialize the variable parts of a trampoline.  */
 #define INITIALIZE_TRAMPOLINE(ADDR, FNADDR, CXT)			 \
-do {									 \
-  if (TARGET_SMALL || TARGET_SMALLISH)					 \
-    emit_insn (gen_HRR (gen_rtx_MEM (SImode, plus_constant ((ADDR), 1)), \
-			(FNADDR)));					 \
-  else									 \
+do {								 \
+  rtx fnaddr__ = (FNADDR);						 \
+  rtx cxt__ = (CXT);							 \
+  if (TARGET_SMALL || TARGET_SMALLISH)				 \
+    {								 \
+      fnaddr__ = force_reg (SImode, fnaddr__);			 \
+      emit_insn (gen_HRR (gen_rtx_MEM (SImode, plus_constant ((ADDR), 1)), \
+			  fnaddr__));					 \
+    }								 \
+  else								 \
     emit_move_insn (gen_rtx_MEM (SImode, plus_constant ((ADDR), 3)),	 \
-		    (FNADDR));						 \
+		    fnaddr__);						 \
   if (TARGET_SMALL)							 \
-    emit_insn (gen_HRR (gen_rtx_MEM (SImode, (ADDR)), (CXT)));		 \
-  else									 \
+    {								 \
+      cxt__ = force_reg (SImode, cxt__);				 \
+      emit_insn (gen_HRR (gen_rtx_MEM (SImode, (ADDR)), cxt__));	 \
+    }								 \
+  else								 \
     emit_move_insn (gen_rtx_MEM (SImode, plus_constant ((ADDR), 2)),	 \
-		    (CXT));						 \
+		    cxt__);						 \
 } while (0)
 
 

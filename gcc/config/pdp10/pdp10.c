@@ -4117,6 +4117,92 @@ reg_or_mem_operand (op, mode)
   return register_operand (op, mode) || memory_operand (op, mode);
 }
 
+/* Return the selected PDP-10 word offset for
+
+     (subreg:SI (subreg:DI (reg:CDI R) A) B)
+
+   or -1 if DEST is not that shape.  A and B are GCC addressable-unit
+   offsets.  On this target UNITS_PER_WORD selects the next PDP-10 word.  */
+static int
+pdp10_cdi_subreg_word_offset (dest, base)
+     rtx dest;
+     rtx *base;
+{
+  int bytes;
+  rtx x;
+
+  if (GET_CODE (dest) != SUBREG || GET_MODE (dest) != SImode)
+    return -1;
+
+  bytes = SUBREG_BYTE (dest);
+  x = SUBREG_REG (dest);
+
+  if (GET_CODE (x) != SUBREG || GET_MODE (x) != DImode)
+    return -1;
+
+  bytes += SUBREG_BYTE (x);
+  x = SUBREG_REG (x);
+
+  if (!REG_P (x) || GET_MODE (x) != CDImode)
+    return -1;
+
+  if ((bytes % UNITS_PER_WORD) != 0)
+    return -1;
+
+  if (base != 0)
+    *base = x;
+
+  return bytes / UNITS_PER_WORD;
+}
+
+/* Output a scalar PDP-10 word move into a word of a complex-DImode
+   register.  Recognition is intentionally done by direct lvalue patterns in
+   pdp10.md; this helper only computes the selected word register for final
+   assembly output.  */
+const char *
+pdp10_output_movsi_cdi_subreg (insn, operands)
+     rtx insn;
+     rtx *operands;
+{
+  rtx dest = SET_DEST (PATTERN (insn));
+  rtx base = 0;
+  rtx ops[2];
+  int offset;
+
+  offset = pdp10_cdi_subreg_word_offset (dest, &base);
+  if (offset < 0)
+    abort ();
+
+  ops[0] = gen_rtx_REG (SImode, REGNO (base) + offset);
+  ops[1] = operands[1];
+
+  output_asm_insn ("move %0,%1", ops);
+  return "";
+}
+
+/* Output a scalar PDP-10 word store from a word of a complex-DImode
+   register.  */
+const char *
+pdp10_output_movsi_from_cdi_subreg (insn, operands)
+     rtx insn;
+     rtx *operands;
+{
+  rtx src = SET_SRC (PATTERN (insn));
+  rtx base = 0;
+  rtx ops[2];
+  int offset;
+
+  offset = pdp10_cdi_subreg_word_offset (src, &base);
+  if (offset < 0)
+    abort ();
+
+  ops[0] = operands[0];
+  ops[1] = gen_rtx_REG (SImode, REGNO (base) + offset);
+
+  output_asm_insn ("movem %1,%0", ops);
+  return "";
+}
+
 /* Return nonzero if OP is a valid PDP-10 register-or-memory operand,
    but only allow memory operands after register allocation has
    finished.  */
@@ -7877,7 +7963,7 @@ pdp10_bytesize (type)
 {
   int size;
 
-  if (TREE_CODE (type) == ARRAY_TYPE)
+  while (TREE_CODE (type) == ARRAY_TYPE)
     type = TREE_TYPE (type);
 
   if (TREE_CODE (type) == RECORD_TYPE)

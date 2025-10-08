@@ -171,6 +171,12 @@ extern const char *
 extern const char *
 		pdp10_output_insv PARAMS ((rtx insn, rtx *operands));
 extern const char *
+		pdp10_output_movsi_cdi_subreg PARAMS ((rtx insn,
+						     rtx *operands));
+extern const char *
+		pdp10_output_movsi_from_cdi_subreg PARAMS ((rtx insn,
+							  rtx *operands));
+extern const char *
 		pdp10_output_movsi PARAMS ((rtx insn, int which_alternative));
 extern int	pdp10_expand_dmove PARAMS ((rtx destination, rtx source));
 extern int	pdp10_expand_move_4 PARAMS ((rtx destination, rtx source));

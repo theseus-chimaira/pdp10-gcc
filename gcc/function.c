@@ -3915,6 +3915,123 @@ instantiate_new_reg (x, poffset)
    We first try some simple transformations to avoid the creation of extra
    pseudos.  */
 
+
+
+/* PDP-10 backend bring-up repair: delete mixed-mode bitfield self-copies.
+
+   The 20020318 gcc-torture compile case can emit this before IVR:
+
+     (set (subreg:QI (zero_extract:SI MEM 9 27) 3)
+          (subreg:QI (zero_extract:SI MEM 9 27) 3))
+
+   It is semantically a no-op, but it is not a recognizable insn.  During
+   instantiate_virtual_regs_1, IVR later tries to replace virtual-stack-vars
+   inside MEM and validation aborts because the containing insn was invalid
+   before the address substitution.  Delete the no-op before descending into
+   it.  */
+static int
+pdp10_delete_mixed_mode_bitfield_selfcopy (object)
+     rtx object;
+{
+  rtx pat;
+  rtx dest;
+  rtx src;
+  rtx dz;
+  rtx sz;
+
+  if (object == 0 || ! INSN_P (object))
+    return 0;
+
+  pat = PATTERN (object);
+  if (GET_CODE (pat) != SET)
+    return 0;
+
+  dest = SET_DEST (pat);
+  src = SET_SRC (pat);
+
+  if (GET_CODE (dest) != SUBREG
+      || GET_MODE (dest) != QImode
+      || GET_CODE (src) != SUBREG
+      || GET_MODE (src) != QImode)
+    return 0;
+
+  if (SUBREG_BYTE (dest) != SUBREG_BYTE (src))
+    return 0;
+
+  dz = SUBREG_REG (dest);
+  sz = SUBREG_REG (src);
+
+  if (GET_CODE (dz) != ZERO_EXTRACT
+      || GET_MODE (dz) != SImode
+      || GET_CODE (sz) != ZERO_EXTRACT
+      || GET_MODE (sz) != SImode)
+    return 0;
+
+  if (! rtx_equal_p (dz, sz))
+    return 0;
+
+  delete_insn (object);
+  return 1;
+}
+
+
+/* PDP-10 backend bring-up repair: canonicalize a mixed-mode bitfield store
+   before instantiate_virtual_regs_1 validates changes inside it.
+
+   Some earlier lowering paths can leave this invalid RTL:
+
+     (set (subreg:QI (zero_extract:SI MEM 9 27) 3)
+          (zero_extend:SI (subreg:QI (reg:SI R) 3)))
+
+   That SET is unrecognizable before IVR touches it, because the SET
+   destination is QImode and the source is SImode.  The actual operation is
+   the normal SImode insertion:
+
+     (set (zero_extract:SI MEM 9 27) (reg:SI R))
+
+   Do this on the containing instruction object, not only while visiting the
+   top-level SET, because IVR may later be validating a nested loc pointer
+   while still using the containing instruction as OBJECT.  */
+static void
+pdp10_canonicalize_mixed_mode_bitfield_object (object)
+     rtx object;
+{
+  rtx pat;
+  rtx dest;
+  rtx src;
+  rtx inner;
+
+  if (object == 0 || ! INSN_P (object))
+    return;
+
+  pat = PATTERN (object);
+  if (GET_CODE (pat) != SET)
+    return;
+
+  dest = SET_DEST (pat);
+  src = SET_SRC (pat);
+
+  if (GET_CODE (dest) != SUBREG
+      || GET_MODE (dest) != QImode
+      || GET_CODE (SUBREG_REG (dest)) != ZERO_EXTRACT
+      || GET_MODE (SUBREG_REG (dest)) != SImode
+      || GET_CODE (src) != ZERO_EXTEND
+      || GET_MODE (src) != SImode)
+    return;
+
+  inner = XEXP (src, 0);
+
+  if (GET_CODE (inner) == SUBREG
+      && GET_MODE (inner) == QImode
+      && GET_CODE (SUBREG_REG (inner)) == REG
+      && GET_MODE (SUBREG_REG (inner)) == SImode)
+    src = SUBREG_REG (inner);
+
+  SET_DEST (pat) = SUBREG_REG (dest);
+  SET_SRC (pat) = src;
+}
+
+
 static int
 instantiate_virtual_regs_1 (loc, object, extra_insns)
      rtx *loc;
@@ -3933,6 +4050,10 @@ instantiate_virtual_regs_1 (loc, object, extra_insns)
   /* Re-start here to avoid recursion in common cases.  */
  restart:
 
+  if (pdp10_delete_mixed_mode_bitfield_selfcopy (object))
+    return 1;
+
+  pdp10_canonicalize_mixed_mode_bitfield_object (object);
   x = *loc;
   if (x == 0)
     return 1;
@@ -3957,6 +4078,46 @@ instantiate_virtual_regs_1 (loc, object, extra_insns)
       return 1;
 
     case SET:
+
+      /* Canonicalize a mixed-mode bitfield store before descending into its
+         address.  Some front-end/expander paths can emit an invalid SET like
+
+           (set (subreg:QI (zero_extract:SI MEM 9 27) 3)
+                (zero_extend:SI (subreg:QI (reg:SI R) 3)))
+
+         This cannot be recognized because the SET destination is QImode while
+         the source is SImode.  What the machine operation really means is the
+         ordinary SImode insertion
+
+           (set (zero_extract:SI MEM 9 27) (reg:SI R))
+
+         or, more generally, an SImode source.  Do this before IVR tries to
+         validate changes inside MEM, otherwise validation fails simply because
+         the pre-existing insn is already unrecognizable.  */
+      {
+        rtx dest = SET_DEST (x);
+        rtx src = SET_SRC (x);
+
+        if (GET_CODE (dest) == SUBREG
+            && GET_MODE (dest) == QImode
+            && GET_CODE (SUBREG_REG (dest)) == ZERO_EXTRACT
+            && GET_MODE (SUBREG_REG (dest)) == SImode
+            && GET_CODE (src) == ZERO_EXTEND
+            && GET_MODE (src) == SImode)
+          {
+            rtx inner = XEXP (src, 0);
+
+            if (GET_CODE (inner) == SUBREG
+                && GET_MODE (inner) == QImode
+                && GET_CODE (SUBREG_REG (inner)) == REG
+                && GET_MODE (SUBREG_REG (inner)) == SImode)
+              src = SUBREG_REG (inner);
+
+            SET_DEST (x) = SUBREG_REG (dest);
+            SET_SRC (x) = src;
+          }
+      }
+
       /* We are allowed to set the virtual registers.  This means that
 	 the actual register should receive the source minus the
 	 appropriate offset.  This is used, for example, in the handling
