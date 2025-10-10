@@ -5751,6 +5751,159 @@ pdp10_gas_output_ascii (stream, ptr, len)
     }
 }
 
+
+/* GAS/custom-assembler path: support a symbolic label difference stored in
+   the low half of a packed 18-bit short pair.
+
+   labels-3.c contains:
+
+       static const short ar[] = { &&l1 - &&l1, &&l2 - &&l1 };
+
+   The first element is an ordinary CONST_INT and leaves an 18-bit pending
+   high half in gas_byte_word.  The second element expands as a HImode
+   MINUS of two PDP-10 label pointer constants.  Generic varasm cannot split
+   that symbolic HImode value into target bytes, so assemble it here as one
+   complete 36-bit word:
+
+       .word  <pending-high-half shifted left 18> + label2 - label1
+
+   For the common {0, labeldiff} case this becomes just:
+
+       .word  label2-label1
+
+   which the local PDP-10 assembler resolves and naturally leaves in the
+   right halfword.  */
+static int
+pdp10_gas_labeldiff_halfword_part (x, labelp, offsetp)
+     rtx x;
+     rtx *labelp;
+     HOST_WIDE_INT *offsetp;
+{
+  rtx a;
+  rtx b;
+
+  *offsetp = 0;
+
+  while (GET_CODE (x) == SUBREG || GET_CODE (x) == CONST)
+    {
+      if (GET_CODE (x) == SUBREG)
+	x = SUBREG_REG (x);
+      else
+	x = XEXP (x, 0);
+    }
+
+  if (GET_CODE (x) == LABEL_REF)
+    {
+      *labelp = x;
+      return 1;
+    }
+
+  if (GET_CODE (x) != PLUS)
+    return 0;
+
+  a = XEXP (x, 0);
+  b = XEXP (x, 1);
+
+  if (GET_CODE (a) == LABEL_REF && GET_CODE (b) == CONST_INT)
+    {
+      *labelp = a;
+      *offsetp = INTVAL (b);
+      return 1;
+    }
+
+  if (GET_CODE (b) == LABEL_REF && GET_CODE (a) == CONST_INT)
+    {
+      *labelp = b;
+      *offsetp = INTVAL (a);
+      return 1;
+    }
+
+  return 0;
+}
+
+static int
+pdp10_gas_labeldiff_halfword_p (x, leftp, rightp, deltap)
+     rtx x;
+     rtx *leftp;
+     rtx *rightp;
+     HOST_WIDE_INT *deltap;
+{
+  HOST_WIDE_INT loff;
+  HOST_WIDE_INT roff;
+
+  if (GET_CODE (x) == CONST)
+    x = XEXP (x, 0);
+
+  if (GET_CODE (x) != MINUS)
+    return 0;
+
+  if (! pdp10_gas_labeldiff_halfword_part (XEXP (x, 0), leftp, &loff))
+    return 0;
+
+  if (! pdp10_gas_labeldiff_halfword_part (XEXP (x, 1), rightp, &roff))
+    return 0;
+
+  *deltap = loff - roff;
+  return 1;
+}
+
+static void
+pdp10_gas_print_labeldiff_halfword_expr (stream, left, right, delta)
+     FILE *stream;
+     rtx left;
+     rtx right;
+     HOST_WIDE_INT delta;
+{
+  output_addr_const (stream, left);
+  fputc ('-', stream);
+  output_addr_const (stream, right);
+
+  if (delta > 0)
+    {
+      fputc ('+', stream);
+      pdp10_print_unsigned (stream, delta);
+    }
+  else if (delta < 0)
+    {
+      fputc ('-', stream);
+      pdp10_print_unsigned (stream, -delta);
+    }
+}
+
+static int
+pdp10_gas_assemble_labeldiff_halfword (x)
+     rtx x;
+{
+  rtx left;
+  rtx right;
+  HOST_WIDE_INT delta;
+  HOST_WIDE_INT high_word;
+
+  if (! pdp10_gas_labeldiff_halfword_p (x, &left, &right, &delta))
+    return 0;
+
+  /* This helper is for the second halfword of a packed pair.  If a future
+     case needs a symbolic first halfword, handle that separately rather
+     than silently changing the object layout.  */
+  if (gas_bits_in_word != 18)
+    return 0;
+
+  high_word = (gas_byte_word & (HOST_WIDE_INT) 0777777) << 18;
+
+  fputs ("\t.word\t", asm_out_file);
+  if (high_word != 0)
+    {
+      pdp10_print_unsigned (asm_out_file, high_word);
+      fputc ('+', asm_out_file);
+    }
+  pdp10_gas_print_labeldiff_halfword_expr (asm_out_file, left, right, delta);
+  fputc ('\n', asm_out_file);
+
+  gas_byte_word = 0;
+  gas_bits_in_word = 0;
+  return 1;
+}
+
 static bool
 pdp10_assemble_integer (x, size, aligned_p)
      rtx x;
@@ -5765,6 +5918,12 @@ pdp10_assemble_integer (x, size, aligned_p)
       rtx folded = pdp10_simplify_unspec (x, NULL_RTX);
       if (folded != NULL_RTX)
 	x = folded;
+    }
+
+  if (size == 2 && pdp10_gas_assemble_labeldiff_halfword (x))
+    {
+      pdp10_byte_count += size;
+      return true;
     }
 
   if (aligned_p

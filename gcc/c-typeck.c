@@ -85,6 +85,7 @@ static void pdp10_normalize_asm_operands PARAMS ((tree));
 static void pdp10_normalize_asm_clobbers PARAMS ((tree));
 static int pdp10_preserve_component_address_p PARAMS ((tree));
 static int pdp10_preserve_array_ref_address_p PARAMS ((tree));
+static int pdp10_component_address_parts PARAMS ((tree, tree *, tree *));
 #endif
 static void output_init_element		PARAMS ((tree, tree, tree, int));
 static void output_pending_init_elements PARAMS ((int));
@@ -2684,6 +2685,19 @@ pointer_diff (op0, op1)
       op1 = lit1;
     }
 
+#ifdef __PDP10_H__
+  {
+    tree pbase0, pbase1, poff0, poff1;
+
+    if (pdp10_component_address_parts (op0, &pbase0, &poff0)
+	&& pdp10_component_address_parts (op1, &pbase1, &poff1)
+	&& operand_equal_p (pbase0, pbase1, 0))
+      {
+	op0 = poff0;
+	op1 = poff1;
+      }
+  }
+#endif
 
   /* First do the subtraction as integers;
      then drop through to build the divide operator.
@@ -2757,6 +2771,67 @@ pdp10_preserve_component_address_p (arg)
 	  || bytesize == 8
 	  || bytesize == 9
 	  || bytesize == 18);
+}
+
+
+/* If EXPR is the address of a COMPONENT_REF, return its base object and
+   constant byte offset.  This is used to fold pointer subtraction such as
+
+       s.f - &s.b
+
+   where both sides are component addresses inside the same object.  The
+   PDP-10 address-of-component preservation hook deliberately keeps these
+   as COMPONENT_REF addresses for byte-pointer correctness, but pointer
+   subtraction in static initializers must still reduce same-base component
+   differences to integer constants before varasm sees them.  */
+static int
+pdp10_component_address_parts (expr, basep, offsetp)
+     tree expr;
+     tree *basep;
+     tree *offsetp;
+{
+  tree field;
+  tree index;
+
+  while (TREE_CODE (expr) == NOP_EXPR
+	 || TREE_CODE (expr) == CONVERT_EXPR
+	 || TREE_CODE (expr) == NON_LVALUE_EXPR)
+    expr = TREE_OPERAND (expr, 0);
+
+  if (TREE_CODE (expr) == ADDR_EXPR)
+    expr = TREE_OPERAND (expr, 0);
+
+  while (TREE_CODE (expr) == NON_LVALUE_EXPR)
+    expr = TREE_OPERAND (expr, 0);
+
+  /* Some array-to-pointer conversions are represented as &array[0].  */
+  if (TREE_CODE (expr) == ARRAY_REF)
+    {
+      index = TREE_OPERAND (expr, 1);
+      while (TREE_CODE (index) == NOP_EXPR
+	     || TREE_CODE (index) == CONVERT_EXPR
+	     || TREE_CODE (index) == NON_LVALUE_EXPR)
+	index = TREE_OPERAND (index, 0);
+
+      if (! (TREE_CODE (index) == INTEGER_CST
+	     && compare_tree_int (index, 0) == 0))
+	return 0;
+
+      expr = TREE_OPERAND (expr, 0);
+      while (TREE_CODE (expr) == NON_LVALUE_EXPR)
+	expr = TREE_OPERAND (expr, 0);
+    }
+
+  if (TREE_CODE (expr) != COMPONENT_REF)
+    return 0;
+
+  field = TREE_OPERAND (expr, 1);
+  if (DECL_C_BIT_FIELD (field))
+    return 0;
+
+  *basep = TREE_OPERAND (expr, 0);
+  *offsetp = byte_position (field);
+  return 1;
 }
 
 /* Return nonzero if ADDR_EXPR of ARRAY_REF ARG must not be folded early
@@ -3178,7 +3253,20 @@ build_unary_op (code, xarg, flag)
 	      }
 
 #ifdef __PDP10_H__
-	    if (pdp10_preserve_component_address_p (arg))
+	    /* The PDP-10 backend preserves address-taking of sub-word component
+	       fields so RTL expansion can build an exact local byte pointer.
+	       Do not preserve the classic offsetof idiom, though:
+
+	         &((struct S *)0)->field
+
+	       The generic branch immediately below already has PDP-10-specific
+	       logic to fold a null-base component address to a byte offset.  If
+	       we preserve it here first, static initializers such as
+	       (unsigned long)((unsigned char *)&((S *)0)->f - (unsigned char *)0)
+	       are rejected as non-constant.  */
+	    if (pdp10_preserve_component_address_p (arg)
+		&& ! (TREE_CODE (addr) == INTEGER_CST
+		      && compare_tree_int (addr, 0) == 0))
 	      addr = build1 (code, argtype, arg);
 	    else
 #endif
