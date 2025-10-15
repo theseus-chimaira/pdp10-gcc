@@ -8353,7 +8353,59 @@ maybe_expand_ibp (byte_size, op0, op1, increment)
     ibp = increment - bytes_per_word * addi;
  
    if (addi != 0)
-      emit_insn (gen_addsi3 (op0, op1, GEN_INT (addi)));
+      {
+        /* OP1 may be a constant local byte pointer.  Adding a whole-word
+           offset to such a pointer must adjust only the 18-bit Y address
+           field and must preserve the P,S selector bits.  A plain
+           plus_constant/gen_addsi3 on the full 36-bit constant can borrow
+           through the low address field and corrupt S, producing examples
+           like POINT 5,foo-1,35 from POINT 6,foo,35 plus -1. */
+        if (CONSTANT_P (op1) && pdp10_const_word36_byte_pointer_p (op1))
+          {
+            rtx base;
+            pdp10_word36 offset;
+            pdp10_word36 high;
+            pdp10_word36 addr;
+            rtx adjusted;
+
+            if (!pdp10_decompose_symbolic_word36 (op1, &base, &offset))
+              abort ();
+
+            high = offset & ~((pdp10_word36) ADDRESS_MASK);
+            addr = (offset + (pdp10_word36) addi) & (pdp10_word36) ADDRESS_MASK;
+            offset = (high | addr) & PDP10_WORD36_MASK;
+
+            if (base != NULL_RTX)
+              adjusted = gen_rtx_CONST (Pmode,
+                                        gen_rtx_PLUS (Pmode, base,
+                                                      pdp10_gen_word36_constant (offset)));
+            else
+              adjusted = pdp10_gen_word36_constant (offset);
+
+            emit_move_insn (op0, adjusted);
+          }
+        else
+          {
+            rtx tmp;
+
+            /* This is byte-pointer arithmetic, not plain integer
+               arithmetic.  A local PDP-10 byte pointer stores its byte
+               selector in the left half and the word address in the right
+               half.  A normal 36-bit ADDI/SUBI may borrow/carry through the
+               18-bit Y field and corrupt the P,S selector, e.g. turning
+               POINT 6,foo+1,35 plus -2 into POINT 5,foo-1,35.
+
+               Preserve OP0's left half, compute the adjusted right half in a
+               scratch register, then copy only that right half back.  */
+            if (!rtx_equal_p (op0, op1))
+              emit_move_insn (op0, op1);
+
+            tmp = gen_reg_rtx (Pmode);
+            emit_move_insn (tmp, op0);
+            emit_insn (gen_addsi3 (tmp, tmp, GEN_INT (addi)));
+            emit_insn (gen_HRR (op0, tmp));
+          }
+      }
     else
       {
 	if (!reg_or_mem_operand (op1, Pmode))
@@ -8400,8 +8452,17 @@ pdp10_expand_addbp3 (type, target, op0, op1)
     {
       HOST_WIDE_INT n = INTVAL (op1);
 
-      if (n % units_per_byte == 0)
-	op1 = GEN_INT (n / units_per_byte);
+      /* GCC's PDP-10 subword address paths are not uniform here.
+         Some constant adjustments arrive scaled in C storage units,
+         but direct address-taking of short18 array elements reaches this
+         routine as a PDP-10 byte count already.  In particular,
+         &a[2] for short18 must advance two halfwords; dividing the
+         increment by TYPE_SIZE_UNIT turns it into one IBP and reads
+         a[1].  Keep the small in-word constants as byte counts.  */
+      if (n >= units_per_byte * bytes_per_word
+          || n <= -units_per_byte * bytes_per_word)
+        if (n % units_per_byte == 0)
+	  op1 = GEN_INT (n / units_per_byte);
     }
 
   /* First, try to use ADDI or SUBI.  On KS10/KL10-class machines,
@@ -8418,7 +8479,33 @@ pdp10_expand_addbp3 (type, target, op0, op1)
 	{
 	  int n = increment / bytes_per_word;
 	  if (CONSTANT_P (op0))
-	    return plus_constant (op0, n);
+	    {
+	      /* OP0 may be a symbolic local byte pointer.  Adjusting a
+	         whole-word byte-pointer increment must change only the Y
+	         address field.  A plain plus_constant on the whole 36-bit
+	         byte pointer can borrow into the P/S field for negative
+	         offsets, corrupting e.g. POINT 6,foo,35 + -1 into
+	         POINT 5,foo-1,35.  */
+	      if (pdp10_const_word36_byte_pointer_p (op0))
+	        {
+	          rtx base;
+	          pdp10_word36 offset;
+	          pdp10_word36 high;
+	          pdp10_word36 addr;
+
+	          if (!pdp10_decompose_symbolic_word36 (op0, &base, &offset))
+	            abort ();
+
+	          high = offset & ~((pdp10_word36) ADDRESS_MASK);
+	          addr = (offset + (pdp10_word36) n) & (pdp10_word36) ADDRESS_MASK;
+	          offset = (high | addr) & PDP10_WORD36_MASK;
+
+	          return base != NULL_RTX
+	            ? pdp10_plus_constant_word36 (base, offset)
+	            : pdp10_gen_word36_constant (offset);
+	        }
+	      return plus_constant (op0, n);
+	    }
 	  else
 	    emit_insn (gen_addsi3 (target, op0, GEN_INT (n)));
 	  return target;
@@ -9268,6 +9355,9 @@ static int	pdp10_dynamic_ref_bitpos PARAMS ((tree exp,
 					      pdp10_word36 *bitposp));
 static int	pdp10_addr_expr_array_byte PARAMS ((tree exp, int bytesize,
 					       int *bytep));
+static int	pdp10_addr_expr_array_position PARAMS ((tree exp, int bytesize,
+					           int *bytep,
+					           HOST_WIDE_INT *wordp));
 static int	pdp10_dynamic_ref_base_bitpos PARAMS ((tree exp, tree *basep,
 						    pdp10_word36 *bitposp));
 static rtx	pdp10_dynamic_addr_expr_byte_pointer PARAMS ((tree exp, int bytesize));
@@ -10032,9 +10122,23 @@ pdp10_addr_expr_array_byte (exp, bytesize, bytep)
      int bytesize;
      int *bytep;
 {
+  HOST_WIDE_INT word_offset;
+
+  return pdp10_addr_expr_array_position (exp, bytesize, bytep,
+                                         &word_offset);
+}
+
+static int
+pdp10_addr_expr_array_position (exp, bytesize, bytep, wordp)
+     tree exp;
+     int bytesize;
+     int *bytep;
+     HOST_WIDE_INT *wordp;
+{
   tree object;
   pdp10_word36 bitpos;
   pdp10_word36 byte_pos;
+  HOST_WIDE_INT word_offset;
 
   if (exp == NULL_TREE)
     return 0;
@@ -10092,7 +10196,10 @@ pdp10_addr_expr_array_byte (exp, bytesize, bytep)
               if (byte_pos + (pdp10_word36) bytesize <= BITS_PER_WORD
                   && byte_pos % (pdp10_word36) bytesize == 0)
                 {
+                  word_offset = (HOST_WIDE_INT) (bitpos / BITS_PER_WORD);
                   *bytep = (int) (byte_pos / (pdp10_word36) bytesize);
+                  if (wordp)
+                    *wordp = word_offset;
                   return 1;
                 }
             }
@@ -10112,7 +10219,10 @@ pdp10_addr_expr_array_byte (exp, bytesize, bytep)
   if (byte_pos % (pdp10_word36) bytesize != 0)
     return 0;
 
+  word_offset = (HOST_WIDE_INT) (bitpos / BITS_PER_WORD);
   *bytep = (int) (byte_pos / (pdp10_word36) bytesize);
+  if (wordp)
+    *wordp = word_offset;
   return 1;
 }
 
@@ -10970,6 +11080,8 @@ pdp10_convert_pointer (exp, op0, target, mod, stack, not_null)
 {
   enum expand_modifier modifier = mod;
   int from, to, byte = 0, emit_jump;
+  HOST_WIDE_INT subword_word = 0;
+  int have_subword_word = 0;
   rtx label = gen_label_rtx ();
 
   if (stack)
@@ -11116,8 +11228,15 @@ pdp10_convert_pointer (exp, op0, target, mod, stack, not_null)
   {
     int subword_byte;
 
-    if (pdp10_addr_expr_array_byte (exp, to, &subword_byte))
-      byte = subword_byte;
+    HOST_WIDE_INT word_offset;
+
+    if (pdp10_addr_expr_array_position (exp, to, &subword_byte,
+                                        &word_offset))
+      {
+        byte = subword_byte;
+        subword_word = word_offset;
+        have_subword_word = 1;
+      }
     else if (TREE_CODE (exp) == ADDR_EXPR
 	     && !AGGREGATE_TYPE_P (TREE_TYPE (TREE_OPERAND (exp, 0))))
       {
@@ -11140,6 +11259,9 @@ pdp10_convert_pointer (exp, op0, target, mod, stack, not_null)
 
   if (!op0)
     op0 = expand_expr (TREE_OPERAND (exp, 0), NULL_RTX, Pmode, 0);
+
+  if (have_subword_word && subword_word != 0 && from == 36)
+    op0 = plus_constant (op0, subword_word);
 
   if (from == to)
     return op0;
@@ -11238,6 +11360,8 @@ pdp10_convert_ptr (exp, op0, target, from, to, not_null)
      int not_null;
 {
   int byte = 0, emit_jump;
+  HOST_WIDE_INT subword_word = 0;
+  int have_subword_word = 0;
   rtx label = gen_label_rtx ();
 
   if (exp)
@@ -11254,8 +11378,15 @@ pdp10_convert_ptr (exp, op0, target, from, to, not_null)
   {
     int subword_byte;
 
-    if (pdp10_addr_expr_array_byte (exp, to, &subword_byte))
-      byte = subword_byte;
+    HOST_WIDE_INT word_offset;
+
+    if (pdp10_addr_expr_array_position (exp, to, &subword_byte,
+                                        &word_offset))
+      {
+        byte = subword_byte;
+        subword_word = word_offset;
+        have_subword_word = 1;
+      }
     else if (exp && TREE_CODE (exp) == ADDR_EXPR
 	     && !AGGREGATE_TYPE_P (TREE_TYPE (TREE_OPERAND (exp, 0))))
       {
@@ -11273,6 +11404,9 @@ pdp10_convert_ptr (exp, op0, target, from, to, not_null)
 
   if (!op0)
     op0 = expand_expr (TREE_OPERAND (exp, 0), NULL_RTX, Pmode, 0);
+
+  if (have_subword_word && subword_word != 0 && from == 36)
+    op0 = plus_constant (op0, subword_word);
 
   if (from == to)
     return op0;

@@ -69,6 +69,135 @@ const char *weak_global_object_name;
 extern struct obstack permanent_obstack;
 #define obstack_chunk_alloc xmalloc
 
+#ifdef __PDP10_H__
+static int
+pdp10_constructor_packed_subword_field_p (field)
+     tree field;
+{
+  tree type;
+  int bytesize;
+
+  if (field == 0 || TREE_CODE (field) != FIELD_DECL)
+    return 0;
+
+  type = TREE_TYPE (field);
+  while (TREE_CODE (type) == ARRAY_TYPE)
+    type = TREE_TYPE (type);
+
+  bytesize = pdp10_bytesize (type);
+  return bytesize > 0 && bytesize < BITS_PER_WORD;
+}
+
+static int
+pdp10_constructor_packed_subword_field_unit_bits (field)
+     tree field;
+{
+  tree type;
+  int bitsize;
+  unsigned HOST_WIDE_INT units;
+
+  if (field == 0 || TREE_CODE (field) != FIELD_DECL)
+    return 0;
+
+  type = TREE_TYPE (field);
+  while (TREE_CODE (type) == ARRAY_TYPE)
+    type = TREE_TYPE (type);
+
+  bitsize = pdp10_bytesize (type);
+  if (bitsize <= 0 || bitsize >= BITS_PER_WORD)
+    return 0;
+
+  if (TYPE_SIZE_UNIT (type) == 0 || !host_integerp (TYPE_SIZE_UNIT (type), 1))
+    return 0;
+
+  units = tree_low_cst (TYPE_SIZE_UNIT (type), 1);
+  if (units == 0)
+    return 0;
+
+  return (bitsize + units - 1) / units;
+}
+
+static int
+pdp10_constructor_type_byte_bits (type)
+     tree type;
+{
+  while (TREE_CODE (type) == ARRAY_TYPE)
+    type = TREE_TYPE (type);
+  return pdp10_bytesize (type);
+}
+
+static HOST_WIDE_INT
+pdp10_constructor_align_bitpos (bitpos, bytesize)
+     HOST_WIDE_INT bitpos;
+     int bytesize;
+{
+  HOST_WIDE_INT word;
+  HOST_WIDE_INT rem;
+  HOST_WIDE_INT pos;
+
+  if (bytesize <= 0)
+    return bitpos;
+
+  if (bytesize >= BITS_PER_WORD)
+    {
+      rem = bitpos % BITS_PER_WORD;
+      if (rem != 0)
+	bitpos += BITS_PER_WORD - rem;
+      return bitpos;
+    }
+
+  word = bitpos - bitpos % BITS_PER_WORD;
+  rem = bitpos % BITS_PER_WORD;
+
+  pos = ((rem + bytesize - 1) / bytesize) * bytesize;
+  if (pos + bytesize > BITS_PER_WORD)
+    return word + BITS_PER_WORD;
+  return word + pos;
+}
+
+static int
+pdp10_constructor_record_field_bitpos (record_type, wanted, bitposp)
+     tree record_type;
+     tree wanted;
+     HOST_WIDE_INT *bitposp;
+{
+  tree field;
+  HOST_WIDE_INT bitpos;
+
+  if (record_type == 0 || TREE_CODE (record_type) != RECORD_TYPE)
+    return 0;
+
+  bitpos = 0;
+  for (field = TYPE_FIELDS (record_type); field; field = TREE_CHAIN (field))
+    {
+      tree ftype;
+      HOST_WIDE_INT fbits;
+      int bytesize;
+
+      if (TREE_CODE (field) != FIELD_DECL)
+	continue;
+
+      ftype = TREE_TYPE (field);
+      bytesize = pdp10_constructor_type_byte_bits (ftype);
+      if (TYPE_SIZE (ftype) == 0 || !host_integerp (TYPE_SIZE (ftype), 1))
+	return 0;
+
+      bitpos = pdp10_constructor_align_bitpos (bitpos, bytesize);
+
+      if (field == wanted)
+	{
+	  *bitposp = bitpos;
+	  return 1;
+	}
+
+      fbits = tree_low_cst (TYPE_SIZE (ftype), 1);
+      bitpos += fbits;
+    }
+
+  return 0;
+}
+#endif
+
 struct addr_const;
 struct constant_descriptor;
 struct rtx_const;
@@ -5002,6 +5131,9 @@ output_constructor (exp, size, align)
   /* Non-zero means BYTE contains part of a byte, to be output.  */
   int byte_buffer_in_use = 0;
   int byte = 0;
+#ifdef __PDP10_H__
+  HOST_WIDE_INT pdp10_record_bits = 0;
+#endif
 
   if (HOST_BITS_PER_WIDE_INT < BITS_PER_UNIT)
     abort ();
@@ -5075,6 +5207,18 @@ output_constructor (exp, size, align)
 	  HOST_WIDE_INT pos = field ? int_byte_position (field) : 0;
 	  unsigned int align2;
 
+#ifdef __PDP10_H__
+	  /* PDP-10 static constructors for records containing 6/7/8/9/16/18-bit
+	     scalar fields must be packed by the target byte stream, not by GCC's
+	     generic abstract 9-bit storage-unit offsets.  The load/store expander
+	     treats these fields as a continuous PDP-10 byte run; using
+	     int_byte_position here inserts bogus .space directives before packed
+	     fields such as the first char6 member of a struct initializer.  */
+	  if (TREE_CODE (type) == RECORD_TYPE
+	      && pdp10_constructor_packed_subword_field_p (field))
+	    pos = total_bytes;
+#endif
+
 	  if (index != 0)
 	    pos = (tree_low_cst (TYPE_SIZE_UNIT (TREE_TYPE (val)), 1)
 		   * (tree_low_cst (index, 0) - tree_low_cst (min_index, 0)));
@@ -5131,6 +5275,49 @@ output_constructor (exp, size, align)
 	    fieldsize = int_size_in_bytes (TREE_TYPE (type));
 
 	  /* Output the element's initial value.  */
+#ifdef __PDP10_H__
+	  if (TREE_CODE (type) == RECORD_TYPE)
+	    {
+	      int field_unit_bits;
+	      int saved_bits_per_unit;
+
+	      field_unit_bits = pdp10_constructor_packed_subword_field_unit_bits (field);
+	      saved_bits_per_unit = pdp10_bits_per_unit;
+
+	      if (field_unit_bits > 0)
+		{
+		  HOST_WIDE_INT target_bits;
+		  HOST_WIDE_INT pad_bits;
+
+		  target_bits = pdp10_constructor_align_bitpos
+		    (pdp10_record_bits, pdp10_constructor_type_byte_bits (TREE_TYPE (field)));
+		  pad_bits = target_bits - pdp10_record_bits;
+		  while (pad_bits > 0)
+		    {
+		      int chunk_bits;
+
+		      chunk_bits = pad_bits > BITS_PER_WORD ? BITS_PER_WORD : (int) pad_bits;
+		      pdp10_bits_per_unit = chunk_bits;
+		      assemble_integer (GEN_INT (0), 1, BITS_PER_UNIT, 1);
+		      pdp10_record_bits += chunk_bits;
+		      pad_bits -= chunk_bits;
+		    }
+
+		  pdp10_bits_per_unit = field_unit_bits;
+		}
+
+	      if (val == 0)
+		assemble_zeros (fieldsize);
+	      else
+		output_constant (val, fieldsize, align2);
+
+	      if (field_unit_bits > 0)
+		pdp10_record_bits += (HOST_WIDE_INT) field_unit_bits * fieldsize;
+
+	      pdp10_bits_per_unit = saved_bits_per_unit;
+	    }
+	  else
+#endif
 	  if (val == 0)
 	    assemble_zeros (fieldsize);
 	  else
@@ -5285,6 +5472,11 @@ output_constructor (exp, size, align)
       assemble_integer (GEN_INT (byte), 1, BITS_PER_UNIT, 1);
       total_bytes++;
     }
+
+#ifdef __PDP10_H__
+  if (TREE_CODE (type) == RECORD_TYPE)
+    pdp10_output_byte (asm_out_file, NULL_RTX, 0);
+#endif
 
   if (total_bytes < size)
     assemble_zeros (size - total_bytes);

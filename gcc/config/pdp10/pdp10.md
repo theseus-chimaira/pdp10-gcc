@@ -507,9 +507,12 @@
 				; division by a positive power of two.
 				;   Operand 0 is the value.
 				;   Operand 1 is the bias.
-   (UNSPEC_BLT_SETUP	20)])	; Build BLT control word (SImode):
+   (UNSPEC_BLT_SETUP	20)	; Build BLT control word (SImode):
 				;   Operand 0 is the source address.
 				;   Operand 1 is the destination address.
+   (UNSPEC_MULSI_LOW	21)])	; Canonicalize low word after MUL (SImode):
+				;   Operand 0 is the raw low word.
+				;   Operand 1 is the raw high word.
 
 (define_constants
   [(VUNSPEC_BLOCKAGE	0)
@@ -2806,11 +2809,37 @@
    dsub %0,%2
    dsub %0,[%D2]")
 
-(define_insn "mulsi3"
+(define_expand "mulsi3"
+  [(set (match_operand:SI 0 "nonimmediate_operand" "")
+	(mult:SI (match_operand:SI 1 "reg_or_mem_operand" "")
+		 (match_operand:SI 2 "general_operand" "")))]
+  ""
+  "{
+     rtx temp = gen_reg_rtx (DImode);
+     rtx temp0 = gen_rtx_SUBREG (SImode, temp, 0);
+     rtx temp1 = gen_rtx_SUBREG (SImode, temp, 4);
+
+     emit_move_insn (temp0, operands[1]);
+     emit_insn (gen_MUL (temp, temp0, operands[2]));
+     emit_insn (gen_canonicalize_mulsi_low (temp1, temp0));
+     emit_move_insn (operands[0], temp1);
+     DONE;
+   }")
+
+(define_insn "canonicalize_mulsi_low"
+  [(set (match_operand:SI 0 "register_operand" "+r")
+	(unspec:SI [(match_dup 0)
+		    (match_operand:SI 1 "register_operand" "r")]
+		   UNSPEC_MULSI_LOW))]
+  ""
+  "trne %1,1\;%_tloa %0,400000\;%_%_tlz %0,400000"
+  [(set_attr "length" "3")])
+
+(define_insn "*imulsi3_fast_signed_low"
   [(set (match_operand:SI 0 "nonimmediate_operand" "=r,r,r,m")
 	(mult:SI (match_operand:SI 1 "reg_or_mem_operand" "%0,0,0,0")
 		 (match_operand:SI 2 "general_operand" "rm,I,i,r")))]
-  ""
+  "0"
   "@
    imul %0,%2
    imuli %0,%2

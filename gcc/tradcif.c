@@ -89,7 +89,7 @@
 
   static const char *lexptr;
 
-#line 93 "tr3774726.c"
+#line 93 "tr219537.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -157,7 +157,7 @@ union YYSTYPE
   int voidval;
   char *sval;
 
-#line 161 "tr3774726.c"
+#line 161 "tr219537.c"
 
 };
 typedef union YYSTYPE YYSTYPE;
@@ -1227,46 +1227,46 @@ yyreduce:
   case 2: /* start: exp1  */
 #line 76 "tradcif.y"
                 { expression_value = (yyvsp[0].integer).value; }
-#line 1231 "tr3774726.c"
+#line 1231 "tr219537.c"
     break;
 
   case 4: /* exp1: exp1 ',' exp  */
 #line 82 "tradcif.y"
                         { (yyval.integer) = (yyvsp[0].integer); }
-#line 1237 "tr3774726.c"
+#line 1237 "tr219537.c"
     break;
 
   case 5: /* exp: '-' exp  */
 #line 87 "tradcif.y"
                         { (yyval.integer).value = - (yyvsp[0].integer).value;
 			  (yyval.integer).unsignedp = (yyvsp[0].integer).unsignedp; }
-#line 1244 "tr3774726.c"
+#line 1244 "tr219537.c"
     break;
 
   case 6: /* exp: '!' exp  */
 #line 90 "tradcif.y"
                         { (yyval.integer).value = ! (yyvsp[0].integer).value;
 			  (yyval.integer).unsignedp = 0; }
-#line 1251 "tr3774726.c"
+#line 1251 "tr219537.c"
     break;
 
   case 7: /* exp: '+' exp  */
 #line 93 "tradcif.y"
                         { (yyval.integer) = (yyvsp[0].integer); }
-#line 1257 "tr3774726.c"
+#line 1257 "tr219537.c"
     break;
 
   case 8: /* exp: '~' exp  */
 #line 95 "tradcif.y"
                         { (yyval.integer).value = ~ (yyvsp[0].integer).value;
 			  (yyval.integer).unsignedp = (yyvsp[0].integer).unsignedp; }
-#line 1264 "tr3774726.c"
+#line 1264 "tr219537.c"
     break;
 
   case 9: /* exp: '(' exp1 ')'  */
 #line 98 "tradcif.y"
                         { (yyval.integer) = (yyvsp[-1].integer); }
-#line 1270 "tr3774726.c"
+#line 1270 "tr219537.c"
     break;
 
   case 10: /* exp: exp '*' exp  */
@@ -1276,7 +1276,7 @@ yyreduce:
 			    (yyval.integer).value = (unsigned) (yyvsp[-2].integer).value * (yyvsp[0].integer).value;
 			  else
 			    (yyval.integer).value = (yyvsp[-2].integer).value * (yyvsp[0].integer).value; }
-#line 1280 "tr3774726.c"
+#line 1280 "tr219537.c"
     break;
 
   case 11: /* exp: exp '/' exp  */
@@ -1291,7 +1291,7 @@ yyreduce:
 			    (yyval.integer).value = (unsigned) (yyvsp[-2].integer).value / (yyvsp[0].integer).value;
 			  else
 			    (yyval.integer).value = (yyvsp[-2].integer).value / (yyvsp[0].integer).value; }
-#line 1295 "tr3774726.c"
+#line 1295 "tr219537.c"
     break;
 
   case 12: /* exp: exp '%' exp  */
@@ -1306,21 +1306,21 @@ yyreduce:
 			    (yyval.integer).value = (unsigned) (yyvsp[-2].integer).value % (yyvsp[0].integer).value;
 			  else
 			    (yyval.integer).value = (yyvsp[-2].integer).value % (yyvsp[0].integer).value; }
-#line 1310 "tr3774726.c"
+#line 1310 "tr219537.c"
     break;
 
   case 13: /* exp: exp '+' exp  */
 #line 131 "tradcif.y"
                         { (yyval.integer).value = (yyvsp[-2].integer).value + (yyvsp[0].integer).value;
 			  (yyval.integer).unsignedp = (yyvsp[-2].integer).unsignedp || (yyvsp[0].integer).unsignedp; }
-#line 1317 "tr3774726.c"
+#line 1317 "tr219537.c"
     break;
 
   case 14: /* exp: exp '-' exp  */
 #line 134 "tradcif.y"
                         { (yyval.integer).value = (yyvsp[-2].integer).value - (yyvsp[0].integer).value;
 			  (yyval.integer).unsignedp = (yyvsp[-2].integer).unsignedp || (yyvsp[0].integer).unsignedp; }
-#line 1324 "tr3774726.c"
+#line 1324 "tr219537.c"
     break;
 
   case 15: /* exp: exp LSH exp  */
@@ -1330,7 +1330,7 @@ yyreduce:
 			    (yyval.integer).value = (unsigned) (yyvsp[-2].integer).value << (yyvsp[0].integer).value;
 			  else
 			    (yyval.integer).value = (yyvsp[-2].integer).value << (yyvsp[0].integer).value; }
-#line 1334 "tr3774726.c"
+#line 1334 "tr219537.c"
     break;
 
   case 16: /* exp: exp RSH exp  */
@@ -1340,21 +1340,21 @@ yyreduce:
 			    (yyval.integer).value = (unsigned) (yyvsp[-2].integer).value >> (yyvsp[0].integer).value;
 			  else
 			    (yyval.integer).value = (yyvsp[-2].integer).value >> (yyvsp[0].integer).value; }
-#line 1344 "tr3774726.c"
+#line 1344 "tr219537.c"
     break;
 
   case 17: /* exp: exp EQUAL exp  */
 #line 149 "tradcif.y"
                         { (yyval.integer).value = ((yyvsp[-2].integer).value == (yyvsp[0].integer).value);
 			  (yyval.integer).unsignedp = 0; }
-#line 1351 "tr3774726.c"
+#line 1351 "tr219537.c"
     break;
 
   case 18: /* exp: exp NOTEQUAL exp  */
 #line 152 "tradcif.y"
                         { (yyval.integer).value = ((yyvsp[-2].integer).value != (yyvsp[0].integer).value);
 			  (yyval.integer).unsignedp = 0; }
-#line 1358 "tr3774726.c"
+#line 1358 "tr219537.c"
     break;
 
   case 19: /* exp: exp LEQ exp  */
@@ -1365,7 +1365,7 @@ yyreduce:
 			      (unsigned) (yyvsp[-2].integer).value <= (unsigned) (yyvsp[0].integer).value;
 			  else
 			    (yyval.integer).value = (yyvsp[-2].integer).value <= (yyvsp[0].integer).value; }
-#line 1369 "tr3774726.c"
+#line 1369 "tr219537.c"
     break;
 
   case 20: /* exp: exp GEQ exp  */
@@ -1376,7 +1376,7 @@ yyreduce:
 			      (unsigned) (yyvsp[-2].integer).value >= (unsigned) (yyvsp[0].integer).value;
 			  else
 			    (yyval.integer).value = (yyvsp[-2].integer).value >= (yyvsp[0].integer).value; }
-#line 1380 "tr3774726.c"
+#line 1380 "tr219537.c"
     break;
 
   case 21: /* exp: exp '<' exp  */
@@ -1387,7 +1387,7 @@ yyreduce:
 			      (unsigned) (yyvsp[-2].integer).value < (unsigned) (yyvsp[0].integer).value;
 			  else
 			    (yyval.integer).value = (yyvsp[-2].integer).value < (yyvsp[0].integer).value; }
-#line 1391 "tr3774726.c"
+#line 1391 "tr219537.c"
     break;
 
   case 22: /* exp: exp '>' exp  */
@@ -1398,79 +1398,79 @@ yyreduce:
 			      (unsigned) (yyvsp[-2].integer).value > (unsigned) (yyvsp[0].integer).value;
 			  else
 			    (yyval.integer).value = (yyvsp[-2].integer).value > (yyvsp[0].integer).value; }
-#line 1402 "tr3774726.c"
+#line 1402 "tr219537.c"
     break;
 
   case 23: /* exp: exp '&' exp  */
 #line 183 "tradcif.y"
                         { (yyval.integer).value = (yyvsp[-2].integer).value & (yyvsp[0].integer).value;
 			  (yyval.integer).unsignedp = (yyvsp[-2].integer).unsignedp || (yyvsp[0].integer).unsignedp; }
-#line 1409 "tr3774726.c"
+#line 1409 "tr219537.c"
     break;
 
   case 24: /* exp: exp '^' exp  */
 #line 186 "tradcif.y"
                         { (yyval.integer).value = (yyvsp[-2].integer).value ^ (yyvsp[0].integer).value;
 			  (yyval.integer).unsignedp = (yyvsp[-2].integer).unsignedp || (yyvsp[0].integer).unsignedp; }
-#line 1416 "tr3774726.c"
+#line 1416 "tr219537.c"
     break;
 
   case 25: /* exp: exp '|' exp  */
 #line 189 "tradcif.y"
                         { (yyval.integer).value = (yyvsp[-2].integer).value | (yyvsp[0].integer).value;
 			  (yyval.integer).unsignedp = (yyvsp[-2].integer).unsignedp || (yyvsp[0].integer).unsignedp; }
-#line 1423 "tr3774726.c"
+#line 1423 "tr219537.c"
     break;
 
   case 26: /* exp: exp AND exp  */
 #line 192 "tradcif.y"
                         { (yyval.integer).value = ((yyvsp[-2].integer).value && (yyvsp[0].integer).value);
 			  (yyval.integer).unsignedp = 0; }
-#line 1430 "tr3774726.c"
+#line 1430 "tr219537.c"
     break;
 
   case 27: /* exp: exp OR exp  */
 #line 195 "tradcif.y"
                         { (yyval.integer).value = ((yyvsp[-2].integer).value || (yyvsp[0].integer).value);
 			  (yyval.integer).unsignedp = 0; }
-#line 1437 "tr3774726.c"
+#line 1437 "tr219537.c"
     break;
 
   case 28: /* exp: exp '?' exp ':' exp  */
 #line 198 "tradcif.y"
                         { (yyval.integer).value = (yyvsp[-4].integer).value ? (yyvsp[-2].integer).value : (yyvsp[0].integer).value;
 			  (yyval.integer).unsignedp = (yyvsp[-2].integer).unsignedp || (yyvsp[0].integer).unsignedp; }
-#line 1444 "tr3774726.c"
+#line 1444 "tr219537.c"
     break;
 
   case 29: /* exp: INT  */
 #line 201 "tradcif.y"
                         { (yyval.integer) = yylval.integer; }
-#line 1450 "tr3774726.c"
+#line 1450 "tr219537.c"
     break;
 
   case 30: /* exp: CHAR  */
 #line 203 "tradcif.y"
                         { (yyval.integer) = yylval.integer; }
-#line 1456 "tr3774726.c"
+#line 1456 "tr219537.c"
     break;
 
   case 31: /* exp: NAME  */
 #line 205 "tradcif.y"
                         { (yyval.integer).value = 0;
 			  (yyval.integer).unsignedp = 0; }
-#line 1463 "tr3774726.c"
+#line 1463 "tr219537.c"
     break;
 
   case 32: /* exp: '#'  */
 #line 207 "tradcif.y"
                         { (yyval.integer).value =
 			    test_assertion ((unsigned char **) &lexptr); }
-#line 1470 "tr3774726.c"
+#line 1470 "tr219537.c"
     break;
 
 
-#line 1474 "tr3774726.c"
+#line 1474 "tr219537.c"
 
       default: break;
     }
