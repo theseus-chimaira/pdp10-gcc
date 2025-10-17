@@ -645,7 +645,7 @@
         (zero_extend:SI
 	 (match_operand:QI 1 "pdp10_maybe_volatile_memory_operand" "m")))]
   "pdp10_scalar_mem_p (operands[1])"
-  "move %0,%W1")
+  "move %0,%W1\;andi %0,777")
 ; (define_insn ""
 ;   [(set (match_operand:SI 0 "register_operand" "=r")
 ; 	(and:SI
@@ -661,7 +661,7 @@
 		    (match_operand 2 "const_int_operand" "")]
 		   UNSPEC_ZERO_EXTEND))]
   "pdp10_scalar_mem_p (operands[1])"
-  "move %0,%W1")
+  "move %0,%W1\;andi %0,777")
 
 ;; Store scalar chars using MOVEM.
 (define_insn ""
@@ -1060,16 +1060,7 @@
   "INTVAL (operands[2]) != 4 && INTVAL (operands[2]) != 18
    && INTVAL (operands[2]) != 20"
   {
-    rtx ops[4];
-    ops[0] = operands[0];
-    ops[1] = operands[1];
-    ops[2] = GEN_INT (BITS_PER_WORD - INTVAL (operands[2]));
-    ops[3] = GEN_INT (0);
-    if (get_attr_length (insn) == 1)
-      output_asm_insn (pdp10_output_extzv (insn, ops), ops);
-    else
-      output_asm_insn (pdp10_output_extzv_sequence (ops), ops);
-    return "";
+    return pdp10_output_lshiftrt_memory (insn, operands);
   }
   [(set (attr "length")
 	(if_then_else
@@ -1295,6 +1286,16 @@
       }
     else
       {
+        int bitpos;
+        rtx addr = XEXP (operands[1], 0);
+
+        if (GET_CODE (addr) == PRE_INC
+            && REG_P (XEXP (addr, 0))
+            && pdp10_qi_mem_expr_bitpos (operands[1], &bitpos))
+          {
+            pdp10_output_load_signed_byte (insn, operands);
+            return "";
+          }
 	if (which_alternative == 0)
 	  return "ildb %0,%1\;trne %0,400\;%_orcmi %0,777";
 	else
@@ -3386,8 +3387,8 @@
   ""
   "@
    camge %3,%4\;%_move %0,%2
-   camle %3,%4\;%_move %0,%1
-   camle %3,%4\;%_skipa %0,%1\;%_%_move %0,%2"
+   caml %3,%4\;%_move %0,%1
+   caml %3,%4\;%_skipa %0,%1\;%_%_move %0,%2"
   [(set_attr "length" "2,2,3")])
 
 (define_insn "sminsi3"
@@ -3432,8 +3433,8 @@
   ""
   "@
    camle %3,%4\;%_move %0,%2
-   camge %3,%4\;%_move %0,%1
-   camge %3,%4\;%_skipa %0,%1\;%_%_move %0,%2"
+   camg %3,%4\;%_move %0,%1
+   camg %3,%4\;%_skipa %0,%1\;%_%_move %0,%2"
   [(set_attr "length" "2,2,3")])
 
 ;; The JFFO instruction searches from the most significant bit while
