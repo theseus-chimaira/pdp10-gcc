@@ -5847,8 +5847,19 @@ get_inner_reference (exp, pbitsize, pbitpos, poffset, pmode,
     }
 
   /* If OFFSET is constant, see if we can return the whole thing as a
-     constant bit position.  Otherwise, split it up.  */
-  if (host_integerp (offset, 0)
+     constant bit position.  Otherwise, split it up.
+
+     PDP-10 QImode arrays are packed 9-bit storage-unit arrays.  Folding a
+     constant q[i] offset entirely into PBITPOS makes q[0]..q[3] appear as
+     the same MEM address early in RTL, and later DSE/combine can collapse
+     distinct stores.  Keep the storage-unit OFFSET visible for one-byte
+     objects so the target output hooks can reconstruct the final PDP-10 word
+     and byte position from MEM_EXPR/MEM_OFFSET.  */
+  if (*pbitsize == BITS_PER_UNIT
+      && host_integerp (offset, 0)
+      && ! integer_zerop (offset))
+    *pbitpos = tree_low_cst (bit_offset, 0), *poffset = offset;
+  else if (host_integerp (offset, 0)
       && 0 != (tem = size_binop (MULT_EXPR, convert (bitsizetype, offset),
 				 bitsize_unit_node))
       && 0 != (tem = size_binop (PLUS_EXPR, tem, bit_offset))

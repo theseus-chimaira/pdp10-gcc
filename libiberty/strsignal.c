@@ -558,8 +558,8 @@ followed by a newline.
 
 void
 psignal (signo, message)
-  unsigned signo;
-  char *message;
+  int signo;
+  const char *message;
 {
   if (signal_names == NULL)
     {

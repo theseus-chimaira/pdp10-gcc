@@ -3997,8 +3997,24 @@ ignoring option `%s' due to invalid debug level specification",
 		}
 	    }
 
+#ifdef PDP10_ACCEPT_G_NO_DEBUG
+	  /* PDP-10/DAIMON currently has no specified native object/debug
+	     format.  Accept -g/-g* switches for source and testsuite
+	     compatibility, but force them to be code-generation-only and
+	     suppress all debug output.  This intentionally keeps -g from
+	     selecting the incomplete TOPS-20 debug writer.  */
+	  type = NO_DEBUG;
+	  selected_debug_type = NO_DEBUG;
+	  type_explicitly_set_p = 0;
+	  level = 0;
+#endif
+
 	  if (type == NO_DEBUG)
+#ifndef PDP10_ACCEPT_G_NO_DEBUG
 	    warning ("`%s': unknown or unsupported -g option", arg - 2);
+#else
+	    ;
+#endif
 
 	  /* Does it conflict with an already selected type?  */
 	  if (type_explicitly_set_p

@@ -1971,6 +1971,11 @@ pdp10_asm_output_opcode (FILE *stream, const char *ptr)
 
 #define TOPS20_DEBUGGING_INFO 1
 
+/* DAIMON/PDP-10 policy: accept -g switches for build/test compatibility,
+   but do not emit real debug information until the native object/debug
+   format is specified.  */
+#define PDP10_ACCEPT_G_NO_DEBUG 1
+
 /* DBX register number for a given compiler register number.
 #define DBX_REGISTER_NUMBER(REGNO) (REGNO)
 */

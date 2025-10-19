@@ -4124,13 +4124,29 @@ build_modify_expr (lhs, modifycode, rhs)
       {
 	/* Produce (a ? (b = rhs) : (c = rhs))
 	   except that the RHS goes through a save-expr
-	   so the code to compute it is only emitted once.  */
-	tree cond
+	   so the code to compute it is only emitted once.
+
+	   The omitted-middle GNU extension, x ?: y, builds operand 1 as
+	   SAVE_EXPR <x> so x is evaluated once for the condition/value form.
+	   When the conditional expression is itself used as an lvalue, the
+	   assignable object is the saved expression's operand, not the
+	   SAVE_EXPR node.  Keep the condition as-is, but assign through the
+	   underlying lvalue for this old extension shape.  */
+	tree lhs_op1 = TREE_OPERAND (lhs, 1);
+	tree lhs_op2 = TREE_OPERAND (lhs, 2);
+	tree cond;
+
+	if (TREE_CODE (lhs_op1) == SAVE_EXPR)
+	  lhs_op1 = TREE_OPERAND (lhs_op1, 0);
+	if (TREE_CODE (lhs_op2) == SAVE_EXPR)
+	  lhs_op2 = TREE_OPERAND (lhs_op2, 0);
+
+	cond
 	  = build_conditional_expr (TREE_OPERAND (lhs, 0),
-				    build_modify_expr (TREE_OPERAND (lhs, 1),
-						       modifycode, rhs),
-				    build_modify_expr (TREE_OPERAND (lhs, 2),
-						       modifycode, rhs));
+				    build_modify_expr (lhs_op1,
+					       modifycode, rhs),
+				    build_modify_expr (lhs_op2,
+					       modifycode, rhs));
 	if (TREE_CODE (cond) == ERROR_MARK)
 	  return cond;
 	/* Make sure the code to compute the rhs comes out
@@ -4139,6 +4155,14 @@ build_modify_expr (lhs, modifycode, rhs)
 		      /* But cast it to void to avoid an "unused" error.  */
 		      convert (void_type_node, rhs), cond);
       }
+      /* Handle the old GNU omitted-middle conditional lvalue shape.
+	 Some forms such as x ?: y can leave the selected lvalue wrapped
+	 in a SAVE_EXPR before this routine sees the assignment.  */
+    case SAVE_EXPR:
+      if (lvalue_p (TREE_OPERAND (lhs, 0)))
+	return build_modify_expr (TREE_OPERAND (lhs, 0), modifycode, rhs);
+      break;
+
     default:
       break;
     }

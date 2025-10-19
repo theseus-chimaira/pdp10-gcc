@@ -169,6 +169,8 @@ extern const char *
 extern const char *
 		pdp10_output_lshiftrt_memory PARAMS ((rtx insn, rtx *operands));
 extern const char *
+		pdp10_output_ashiftrt_memory PARAMS ((rtx insn, rtx *operands));
+extern const char *
 		pdp10_output_extzv_foo PARAMS ((rtx insn, rtx *operands));
 extern const char *
 		pdp10_output_insv PARAMS ((rtx insn, rtx *operands));

@@ -195,6 +195,7 @@ static int	pdp10_decompose_symbolic_constant PARAMS ((rtx x, rtx *basep,
 static int	pdp10_decompose_symbolic_word36 PARAMS ((rtx x, rtx *basep,
 					   pdp10_word36 *offsetp));
 static int	pdp10_const_word36_byte_pointer_p PARAMS ((rtx x));
+static int	pdp10_qi_mem_logical_offset PARAMS ((rtx mem, HOST_WIDE_INT *offp, int *unsignedp));
 static int	pdp10_qi_mem_byte_offset PARAMS ((rtx mem, HOST_WIDE_INT *byteoffp, int *unsignedp));
 static void	pdp10_print_raw_word36_constant PARAMS ((FILE *stream, rtx x));
 static int	pdp10_frame_address_p PARAMS ((rtx x));
@@ -6345,47 +6346,79 @@ pdp10_output_store_byte (insn, operands)
           && REG_P (XEXP (XEXP (operands[0], 0), 0)))
         {
           rtx ops[2];
+          HOST_WIDE_INT logicaloff;
+          int unsignedp;
+
           ops[0] = XEXP (XEXP (operands[0], 0), 0);
           ops[1] = operands[1];
+
+          if (pdp10_qi_mem_logical_offset (operands[0], &logicaloff, &unsignedp))
+            {
+              int i, n;
+              (void) unsignedp;
+              n = -1;
+              if (MEM_OFFSET (operands[0]) != 0
+                  && GET_CODE (MEM_OFFSET (operands[0])) == CONST_INT
+                  && INTVAL (MEM_OFFSET (operands[0])) < 0)
+                n = UNITS_PER_WORD;
+              else if (logicaloff == 6 || logicaloff == 9)
+                n = (logicaloff == 6) ? 2 : 5;
+
+              if (n >= 0)
+                {
+                  for (i = 0; i < n; i++)
+                    output_asm_insn ("ibp %0", ops);
+                  output_asm_insn ("dpb %1,%0", ops);
+                  return "";
+                }
+            }
+
           output_asm_insn ("idpb %1,%0", ops);
           return "";
         }
 
-      if (GET_MODE (operands[0]) == QImode
-          && REG_P (XEXP (operands[0], 0)))
-        {
-          rtx ops[2];
-          ops[0] = XEXP (operands[0], 0);
-          ops[1] = operands[1];
-          output_asm_insn ("dpb %1,%0", ops);
-          return "";
-        }
 
       if (GET_MODE (operands[0]) == QImode
           && REG_P (XEXP (operands[0], 0)))
         {
-          HOST_WIDE_INT byteoff;
+          HOST_WIDE_INT logicaloff;
           int unsignedp;
-          if (pdp10_qi_mem_byte_offset (operands[0], &byteoff, &unsignedp))
+          if (pdp10_qi_mem_logical_offset (operands[0], &logicaloff, &unsignedp))
             {
               rtx ops[2];
+              HOST_WIDE_INT wordoff;
+              HOST_WIDE_INT byteoff;
+              HOST_WIDE_INT corr;
               HOST_WIDE_INT i;
               rtx scratch = gen_rtx_REG (SImode, 0);
 
               (void) unsignedp;
-              ops[0] = XEXP (operands[0], 0);
-              ops[1] = operands[1];
-              if (byteoff == 0)
+              wordoff = logicaloff / UNITS_PER_WORD;
+              byteoff = logicaloff % UNITS_PER_WORD;
+              if (byteoff < 0)
                 {
-                  output_asm_insn ("dpb %1,%0", ops);
-                  return "";
+                  byteoff += UNITS_PER_WORD;
+                  wordoff -= 1;
                 }
 
+              /* Here the REG address has already been forced to the
+                 containing PDP-10 word by the generic address expander.  Use
+                 MEM_EXPR/MEM_OFFSET only to choose the in-word byte. */
+              (void) wordoff;
+              (void) corr;
               ops[0] = scratch;
               ops[1] = XEXP (operands[0], 0);
               output_asm_insn ("move %0,%1", ops);
               for (i = 0; i < byteoff; i++)
                 output_asm_insn ("ibp %0", ops);
+              ops[1] = operands[1];
+              output_asm_insn ("dpb %1,%0", ops);
+              return "";
+            }
+          else
+            {
+              rtx ops[2];
+              ops[0] = XEXP (operands[0], 0);
               ops[1] = operands[1];
               output_asm_insn ("dpb %1,%0", ops);
               return "";
@@ -6741,7 +6774,25 @@ pdp10_output_movhi (operands, sign_extend)
   else
     {
       if (store)
-	return "dpb %1,%0%; movhi";
+        {
+          int bitpos;
+          if (GET_CODE (x) == MEM
+              && GET_MODE (x) == HImode
+              && REG_P (address)
+              && pdp10_hi_mem_array_field_bitpos (x, &bitpos)
+              && bitpos == 18)
+            {
+              rtx ops[3];
+              ops[0] = gen_rtx_REG (SImode, 0);
+              ops[1] = address;
+              ops[2] = operands[1];
+              output_asm_insn ("move %0,%1", ops);
+              output_asm_insn ("ibp %0", ops);
+              output_asm_insn ("dpb %2,%0", ops);
+              return "";
+            }
+	  return "dpb %1,%0%; movhi";
+        }
       else
         {
           int bitpos;
@@ -7421,6 +7472,42 @@ pdp10_output_extv_sequence (operands)
    position inside that word before using the normal extzv output helper.
    Without this, final output prints offsets like 17(P) and 20(P) as word
    offsets, which is wrong for packed structs.  */
+
+/* Output the target-specific memory form of
+
+       (ashiftrt:SI (mem:SI ADDR) CONST_SHIFT)
+
+   Some signed 9-bit byte-pointer reloads are widened to SImode and then
+   represented as ASHIFTRT by 27.  If ADDR is already a PDP-10 byte pointer
+   register, MOVE mem; ASH -33 reads the containing word and extracts the
+   wrong byte.  Load through LDB and sign-extend the 9-bit result instead. */
+const char *
+pdp10_output_ashiftrt_memory (insn, operands)
+     rtx insn ATTRIBUTE_UNUSED;
+     rtx *operands;
+{
+  rtx mem = operands[1];
+  rtx addr;
+  rtx ops[2];
+
+  if (GET_CODE (mem) == MEM
+      && MEM_ALIGN (mem) <= BITS_PER_UNIT)
+    {
+      addr = XEXP (mem, 0);
+      if (REG_P (addr))
+        {
+          ops[0] = operands[0];
+          ops[1] = addr;
+          output_asm_insn ("ldb %0,%1", ops);
+          output_asm_insn ("trne %0,400", ops);
+          output_asm_insn ("orcmi %0,777", ops);
+          return "";
+        }
+    }
+
+  return "move %0,%1\n\tash %0,-33";
+}
+
 const char *
 pdp10_output_lshiftrt_memory (insn, operands)
      rtx insn;
@@ -7439,6 +7526,16 @@ pdp10_output_lshiftrt_memory (insn, operands)
   ops[1] = operands[1];
   ops[2] = GEN_INT (BITS_PER_WORD - INTVAL (operands[2]));
   ops[3] = GEN_INT (0);
+
+  if (GET_CODE (mem) == MEM
+      && MEM_ALIGN (mem) <= BITS_PER_UNIT
+      && INTVAL (operands[2]) == 27
+      && REG_P (XEXP (mem, 0)))
+    {
+      ops[1] = XEXP (mem, 0);
+      output_asm_insn ("ldb %0,%1", ops);
+      return "";
+    }
 
   if (GET_CODE (mem) == MEM
       && MEM_ALIGN (mem) == BITS_PER_UNIT
@@ -7697,10 +7794,13 @@ pdp10_const_byte_pointer_p (x)
 
    where combine widened the mode to SImode, but the object is still a
    signed/unsigned 9-bit field addressed through a byte pointer.  */
+static int pdp10_initializer_ref_bitpos PARAMS ((tree exp, tree *basep,
+                                             pdp10_word36 *bitposp));
+
 static int
-pdp10_qi_mem_byte_offset (mem, byteoffp, unsignedp)
+pdp10_qi_mem_logical_offset (mem, offp, unsignedp)
      rtx mem;
-     HOST_WIDE_INT *byteoffp;
+     HOST_WIDE_INT *offp;
      int *unsignedp;
 {
   tree expr, type, field;
@@ -7717,6 +7817,42 @@ pdp10_qi_mem_byte_offset (mem, byteoffp, unsignedp)
     return 0;
 
   off = 0;
+
+  /* Static/global references such as grec.c9[1] have the true packed
+     PDP-10 bit position in the initializer/address walker.  The generic
+     FIELD_DECL byte position is only a 9-bit storage-unit approximation and
+     can describe c9[1] as part of an 18-bit pointer group, which later
+     produces POINT 18 plus IBP.  Recover the actual 9-bit byte number here
+     for final SImode reloads.  */
+  {
+    tree base_tree;
+    tree probe;
+    pdp10_word36 bitpos;
+
+    /* Keep the static initializer walker away from dynamic MEM_EXPR trees
+       such as p->q[i].  Those are handled by the older fallback below; the
+       initializer walker is only meant for concrete static/global objects. */
+    probe = expr;
+    while (probe != 0 && TREE_CODE (probe) == ARRAY_REF)
+      probe = TREE_OPERAND (probe, 0);
+    while (probe != 0 && TREE_CODE (probe) == COMPONENT_REF)
+      probe = TREE_OPERAND (probe, 0);
+
+    if (probe != 0
+        && TREE_CODE (probe) == VAR_DECL
+        && pdp10_initializer_ref_bitpos (expr, &base_tree, &bitpos))
+      {
+        off = (HOST_WIDE_INT) (bitpos / BITS_PER_UNIT);
+        if (MEM_OFFSET (mem) != 0 && GET_CODE (MEM_OFFSET (mem)) == CONST_INT)
+          off += INTVAL (MEM_OFFSET (mem));
+        if (offp)
+          *offp = off;
+        if (unsignedp)
+          *unsignedp = TREE_UNSIGNED (type) ? 1 : 0;
+        return 1;
+      }
+  }
+
   field = NULL_TREE;
   if (TREE_CODE (expr) == COMPONENT_REF)
     field = TREE_OPERAND (expr, 1);
@@ -7725,11 +7861,49 @@ pdp10_qi_mem_byte_offset (mem, byteoffp, unsignedp)
     field = TREE_OPERAND (TREE_OPERAND (expr, 0), 1);
 
   if (field != NULL_TREE && TREE_CODE (field) == FIELD_DECL)
-    off += int_bit_position (field) / BITS_PER_UNIT;
+    {
+      HOST_WIDE_INT fieldbit = int_bit_position (field);
+
+      /* For 9-bit scalar fields inside heterogeneous packed records, GCC's
+         generic bit position can name a non-9-bit boundary such as bit 12
+         after two 6-bit fields.  The actual PDP-10 QI load/store paths use
+         the next 9-bit byte slot.  Round up here so late SImode reloads such
+         as grec.c9+1 choose POINT 9,...,35 rather than POINT 9,...,26.  */
+      off += (fieldbit + BITS_PER_UNIT - 1) / BITS_PER_UNIT;
+    }
 
   if (MEM_OFFSET (mem) != 0 && GET_CODE (MEM_OFFSET (mem)) == CONST_INT)
-    off += INTVAL (MEM_OFFSET (mem));
+    {
+      HOST_WIDE_INT memoff = INTVAL (MEM_OFFSET (mem));
+      off += memoff;
+      if (memoff < 0
+          && off >= UNITS_PER_WORD
+          && field != NULL_TREE
+          && TREE_CODE (field) == FIELD_DECL)
+        {
+          HOST_WIDE_INT fieldbit = int_bit_position (field);
+          off = ((fieldbit + BITS_PER_UNIT - 1) / BITS_PER_UNIT)
+            % UNITS_PER_WORD;
+        }
+    }
 
+  if (offp)
+    *offp = off;
+  if (unsignedp)
+    *unsignedp = TREE_UNSIGNED (type) ? 1 : 0;
+  return 1;
+}
+
+static int
+pdp10_qi_mem_byte_offset (mem, byteoffp, unsignedp)
+     rtx mem;
+     HOST_WIDE_INT *byteoffp;
+     int *unsignedp;
+{
+  HOST_WIDE_INT off;
+
+  if (!pdp10_qi_mem_logical_offset (mem, &off, unsignedp))
+    return 0;
 
   off %= UNITS_PER_WORD;
   if (off < 0)
@@ -7737,8 +7911,6 @@ pdp10_qi_mem_byte_offset (mem, byteoffp, unsignedp)
 
   if (byteoffp)
     *byteoffp = off;
-  if (unsignedp)
-    *unsignedp = TREE_UNSIGNED (type) ? 1 : 0;
   return 1;
 }
 
@@ -7820,8 +7992,7 @@ pdp10_output_movsi (insn, which_alternative)
       && GET_CODE (PATTERN (insn)) == SET
       && REG_P (SET_DEST (PATTERN (insn)))
       && GET_CODE (SET_SRC (PATTERN (insn))) == MEM
-      && GET_MODE (SET_SRC (PATTERN (insn))) == SImode
-      && MEM_ALIGN (SET_SRC (PATTERN (insn))) < BITS_PER_WORD)
+      && GET_MODE (SET_SRC (PATTERN (insn))) == SImode)
     {
       rtx src = SET_SRC (PATTERN (insn));
       rtx dst = SET_DEST (PATTERN (insn));
@@ -7829,26 +8000,59 @@ pdp10_output_movsi (insn, which_alternative)
       HOST_WIDE_INT byteoff;
       int unsignedp;
 
-      if (REG_P (addr)
-          && pdp10_qi_mem_byte_offset (src, &byteoff, &unsignedp))
+      if ((REG_P (addr) || GET_CODE (addr) == PLUS)
+          && pdp10_qi_mem_logical_offset (src, &byteoff, &unsignedp))
         {
           rtx ops[2];
-          HOST_WIDE_INT i;
 
           ops[0] = dst;
           ops[1] = addr;
-          if (byteoff == 0)
-            output_asm_insn ("ldb %0,%1", ops);
-          else
-            {
-              output_asm_insn ("move %0,%1", ops);
-              for (i = 0; i < byteoff; i++)
-                output_asm_insn ("ibp %0", ops);
-              output_asm_insn ("ldb %0,%0", ops);
-            }
+
+          /* Static/global subword initializers can leave an actual PDP-10
+             byte pointer in a register after address reload, for example
+
+                 MOVE r,[POINT 18,grec,17]
+                 IBP r
+                 MOVE d,(r)
+
+             for grec.c9[1].  The MEM is still SImode and may have word
+             alignment, so the older MEM_ALIGN < BITS_PER_WORD guard missed
+             it.  In that shape the register is the byte pointer; do not
+             reinterpret it as a word address and synthesize POINT again.  */
+          {
+            HOST_WIDE_INT inword = byteoff % UNITS_PER_WORD;
+            char buf[64];
+
+            if (inword < 0)
+              inword += UNITS_PER_WORD;
+
+            /* When reload materializes a static QI array field address as a
+               18-bit byte pointer plus IBP, the surviving logical byte number
+               still names the containing 18-bit group.  Select the inner
+               9-bit byte inside that halfword.  This maps grec.c9+1 from
+               POINT 18/IBP plus byte 2 to POINT 9,...,35, and c9+2 to the
+               first byte of the next word.  */
+            if (REG_P (addr) && MEM_ALIGN (src) >= BITS_PER_WORD)
+              inword = (inword + 1) % UNITS_PER_WORD;
+
+            /* Reconstruct the byte position from MEM_EXPR/MEM_OFFSET.  The
+               address that survives reload can be a byte pointer, a word
+               address, or a PLUS word address.  Use its right-half effective
+               address as the containing word and install the selected P,S. */
+            if (REG_P (addr))
+              sprintf (buf, "ldb %%0,[POINT 9,(%%1),%d]",
+                       (int) inword * BITS_PER_UNIT + 8);
+            else
+              sprintf (buf, "ldb %%0,[POINT 9,%%1,%d]",
+                       (int) inword * BITS_PER_UNIT + 8);
+            output_asm_insn (buf, ops);
+          }
+
           if (!unsignedp)
-            output_asm_insn ("trne %0,400", ops);
-          output_asm_insn ("orcmi %0,777", ops);
+            {
+              output_asm_insn ("trne %0,400", ops);
+              output_asm_insn ("orcmi %0,777", ops);
+            }
           return "";
         }
     }
@@ -11065,7 +11269,9 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
 
   if (GET_CODE (base_addr) == REG
       && TREE_CODE (base_tree) == INDIRECT_REF
-      && byte_pos % (pdp10_word36) bytesize == 0)
+      && byte_pos % (pdp10_word36) bytesize == 0
+      && pdp10_normalize_pointer_bytesize (pdp10_bytesize (TREE_TYPE (base_tree)))
+         < BITS_PER_WORD)
     {
       rtx inc = GEN_INT ((HOST_WIDE_INT) (bitpos / (pdp10_word36) bytesize));
       reg = gen_reg_rtx (Pmode);

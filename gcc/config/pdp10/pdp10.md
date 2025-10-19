@@ -7489,8 +7489,8 @@
 	(ashiftrt:SI (match_operand:SI 1 "memory_operand" "m")
 		     (const_int 27)))]
   ""
-  "move %0,%1\;ash %0,-33"
-  [(set_attr "length" "2")])
+  "*return pdp10_output_ashiftrt_memory (insn, operands);"
+  [(set_attr "length" "3")])
 
 (define_insn ""
   [(set (match_operand:QI 0 "register_operand" "=r")

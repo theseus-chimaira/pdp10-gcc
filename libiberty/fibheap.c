@@ -33,6 +33,7 @@ Boston, MA 02111-1307, USA.  */
 #endif
 #include "libiberty.h"
 #include "fibheap.h"
+#include <limits.h>
 
 
 #define FIBHEAPKEY_MIN	LONG_MIN
