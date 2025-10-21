@@ -334,8 +334,6 @@
 
 ;; Add `cmpdi' pattern.
 
-;; Revisit `casesi'.
-
 ;; Peepholes for AOSA and SOSA.
 
 ;; "Self" half-word instructions.
@@ -2087,84 +2085,18 @@
        DONE;
    }")
 
-;; TODO: if there's a REG_UNUSED note attached to this insn, avoid
-;; moving the unused part of the DImode register.
 (define_insn "DMOVE"
   [(set (match_operand:DI 0 "nonimmediate_operand" "=r,r,r,r,r,o,m")
         (match_operand:DI 1 "general_operand" "rm,O,I,J,i,O,r"))]
   "TARGET_KI10up"
-  "@
-   dmove %0,%1
-   setzb %0,%Z0
-   movei %0,0\;movei %Z0,%1
-   seto %0,\;movni %Z0,%n1
-   dmove %0,[%D1]
-   setzm %0\;setzm %Z0
-   dmovem %1,%0"
+  "* return pdp10_output_movdi (insn, operands, which_alternative, 1);"
   [(set_attr "length" "1,1,2,2,1,2,1")])
 
 (define_insn "*movdi"
   [(set (match_operand:DI 0 "nonimmediate_operand" "=r,r,r,r,r,o,o")
         (match_operand:DI 1 "general_operand" "ro,O,I,J,i,O,r"))]
   "!TARGET_KI10up"
-  {
-    switch (which_alternative)
-      {
-      case 0:
-        {
-          rtx dst = operands[0];
-          rtx src = operands[1];
-          int dstno = -1;
-          int srcno = -1;
-
-          if (GET_CODE (dst) == SUBREG)
-            dst = SUBREG_REG (dst);
-          if (GET_CODE (src) == SUBREG)
-            src = SUBREG_REG (src);
-
-          if (GET_CODE (dst) == REG)
-            dstno = REGNO (dst);
-          if (GET_CODE (src) == REG)
-            srcno = REGNO (src);
-
-          if (dstno >= 0 && srcno >= 0)
-            {
-              if (dstno == srcno)
-                return "";
-              if (dstno == srcno + 1)
-                return "move %Z0,%Z1\;move %0,%1";
-            }
-
-          return "move %0,%1\;move %Z0,%Z1";
-        }
-
-      case 1:
-        return "setzb %0,%Z0";
-      case 2:
-        return "movei %0,0\;movei %Z0,%1";
-      case 3:
-        if (TARGET_71BIT && !TARGET_KI10up)
-          {
-            static char buf[128];
-            unsigned long v;
-
-            v = (unsigned long) -INTVAL (operands[1]);
-            sprintf (buf,
-                     "seto %%0,\;setz %%Z0,\;subi %%Z0,%lo\;tlz %%Z0,400000\;tlo %%Z0,400000",
-                     v);
-            return buf;
-          }
-        return "seto %0,\;movni %Z0,%n1";
-      case 4:
-        return "move %0,[%A1]\;move %Z0,[%B1]";
-      case 5:
-        return "setzm %0\;setzm %Z0";
-      case 6:
-        return "movem %1,%0\;movem %Z1,%Z0";
-      default:
-        abort ();
-      }
-  }
+  "* return pdp10_output_movdi (insn, operands, which_alternative, 0);"
   [(set_attr "length" "2,1,2,7,2,2,2")])
 
 
@@ -5963,14 +5895,13 @@
 			  (match_operand:SI 2 "general_operand" ""))
 		      (label_ref (match_dup 4))
 		      (pc)))
-;;; This is too general.  The jump table label will always be local.
-;;; Unless the table is in .rodata located in another section.
-;  (set (match_dup 6)
-;	(plus:SI (match_dup 5) (label_ref (match_operand 3 "" ""))))
-;  (parallel [(set (pc) (if_then_else (const_int 1)
-;				      (mem:SI (match_dup 6))
-;				      (label_ref (match_dup 4))))
-;	      (use (label_ref (match_dup 3)))])]
+;; Keep the jump-table address in the exact TABLE_LABEL(INDEX_REG)
+;; form matched by *casesi_tablejump below.  PDP-6/KA10 casesi is
+;; intentionally an absolute local ADDR_VEC dispatch, not a generic
+;; memory operand and not a PC-relative/difference table.  The target
+;; remains unextended-addressing here: table labels and entries must be
+;; ordinary 18-bit code addresses, with any larger target-model policy
+;; deferred to an extended-addressing machine variant.
    (parallel [(set (pc)
 		   (if_then_else
 		    (const_int 1)
@@ -5979,8 +5910,7 @@
 		    (label_ref (match_dup 4))))
 	      (use (label_ref (match_dup 3)))])]
   ""
-  "operands[5] = gen_reg_rtx (SImode);
-   /*operands[6] = gen_reg_rtx (SImode);*/")
+  "operands[5] = gen_reg_rtx (SImode);")
 
 ;; The casesi expander emits the jump-table dispatch as a MEM whose
 ;; address is TABLE_LABEL(INDEX_REG).  Do not use memory_operand here:

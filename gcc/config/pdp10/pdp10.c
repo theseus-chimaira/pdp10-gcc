@@ -2208,13 +2208,6 @@ maybe_remove_label_and_following_code (label)
 
   INSN_DELETED_P (label) = 1;
 
-#if 0
-  insn = prev_active_insn (label);
-  if (get_attr_skip (insn) == SKIP_YES
-      /* TODO: is any_condjump_p enough? */
-      || any_condjump_p (insn))
-    return;
-#else
   for (insn = PREV_INSN (label); insn != NULL_RTX; insn = PREV_INSN (insn))
     {
       if (!INSN_DELETED_P (insn) && active_insn_p (insn))
@@ -2222,7 +2215,6 @@ maybe_remove_label_and_following_code (label)
       if (GET_CODE (insn) == BARRIER)
 	break;
     }
-#endif
 
   for (insn = NEXT_INSN (label); GET_CODE (insn) != BARRIER;
        insn = NEXT_INSN (insn))
@@ -6146,8 +6138,10 @@ pdp10_output_range_compare (insn, ops, trna)
       INSN_DELETED_P (jump_target) = 1;
     }
   else
-    /* TODO: pdp10_output_jrst (operands[4]); */
-    output_asm_insn ("%_%_%_jrst %F4" + (trna ? 0 : 2), operands);
+    {
+      pdp10_opcode_indentation = 2 + trna;
+      pdp10_output_jrst (operands[4]);
+    }
 
   return "";
 }
@@ -6169,6 +6163,9 @@ static const char *
 		output_bitfield_move PARAMS ((FILE *stream, rtx insn,
 					      int store, int sign, rtx reg,
 					      rtx x, int len, int bit));
+static int	pdp10_reg_unused_note_p PARAMS ((rtx insn, int regno));
+static int	pdp10_movdi_unused_parts PARAMS ((rtx insn, rtx destination,
+					       rtx source));
 static int	use_xblt PARAMS ((rtx destination, rtx source, rtx length));
 static int	expand_blt PARAMS ((rtx destination, rtx source, rtx length));
 static int	expand_xblt PARAMS ((rtx destination, rtx source, rtx length));
@@ -6178,6 +6175,193 @@ static int	expand_xblt_clear PARAMS ((rtx destination, rtx length));
 static int	expand_movslj PARAMS ((rtx dest, rtx source, rtx length));
 static int	expand_movst_clear PARAMS ((rtx destination, rtx length));
 #endif
+
+
+/* Return nonzero if INSN has a REG_UNUSED note for hard register REGNO.  */
+static int
+pdp10_reg_unused_note_p (insn, regno)
+     rtx insn;
+     int regno;
+{
+  rtx note;
+
+  for (note = REG_NOTES (insn); note; note = XEXP (note, 1))
+    if (REG_NOTE_KIND (note) == REG_UNUSED)
+      {
+	rtx x = XEXP (note, 0);
+
+	if (GET_CODE (x) == REG && REGNO (x) == regno)
+	  return 1;
+      }
+
+  return 0;
+}
+
+/* Return a bit mask describing unused destination words of a DImode move.
+   Bit 0 means the high word is unused, bit 1 means the low word is unused.
+   Do not optimize volatile memory reads, since a volatile DImode load must
+   still perform both word reads even if one destination register is dead.  */
+static int
+pdp10_movdi_unused_parts (insn, destination, source)
+     rtx insn;
+     rtx destination;
+     rtx source;
+{
+  rtx dst = destination;
+  int regno;
+  int unused = 0;
+
+  if (GET_CODE (source) == MEM && MEM_VOLATILE_P (source))
+    return 0;
+
+  if (GET_CODE (dst) == SUBREG)
+    dst = SUBREG_REG (dst);
+
+  if (GET_CODE (dst) != REG)
+    return 0;
+
+  regno = REGNO (dst);
+  if (regno >= FIRST_PSEUDO_REGISTER)
+    return 0;
+
+  if (pdp10_reg_unused_note_p (insn, regno))
+    unused |= 1;
+  if (pdp10_reg_unused_note_p (insn, regno + 1))
+    unused |= 2;
+
+  return unused;
+}
+
+/* Output a DImode move.  HAVE_DMOVE is nonzero for KI10-and-later targets
+   where the live full-width move can use DMOVE/DMOVEM.  If reload/flow has
+   proved one destination word dead with REG_UNUSED, avoid copying that word
+   when doing so does not suppress a volatile memory access.  */
+const char *
+pdp10_output_movdi (insn, operands, which_alternative, have_dmove)
+     rtx insn;
+     rtx *operands;
+     int which_alternative;
+     int have_dmove;
+{
+  int unused;
+
+  unused = pdp10_movdi_unused_parts (insn, operands[0], operands[1]);
+
+  if (unused == 3)
+    return "";
+
+  switch (which_alternative)
+    {
+    case 0:
+      if (unused & 1)
+	return "move %Z0,%Z1";
+      if (unused & 2)
+	return "move %0,%1";
+      if (!have_dmove)
+	{
+	  rtx dst = operands[0];
+	  rtx src = operands[1];
+	  int dstno = -1;
+	  int srcno = -1;
+
+	  if (GET_CODE (dst) == SUBREG)
+	    dst = SUBREG_REG (dst);
+	  if (GET_CODE (src) == SUBREG)
+	    src = SUBREG_REG (src);
+
+	  if (GET_CODE (dst) == REG)
+	    dstno = REGNO (dst);
+	  if (GET_CODE (src) == REG)
+	    srcno = REGNO (src);
+
+	  if (dstno >= 0 && srcno >= 0)
+	    {
+	      if (dstno == srcno)
+		return "";
+	      if (dstno == srcno + 1)
+		return "move %Z0,%Z1\;move %0,%1";
+	    }
+	}
+      return have_dmove ? "dmove %0,%1" : "move %0,%1\;move %Z0,%Z1";
+
+    case 1:
+      if (unused & 1)
+	return "setz %Z0,";
+      if (unused & 2)
+	return "setz %0,";
+      return "setzb %0,%Z0";
+
+    case 2:
+      if (unused & 1)
+	return "movei %Z0,%1";
+      if (unused & 2)
+	return "movei %0,0";
+      return "movei %0,0\;movei %Z0,%1";
+
+    case 3:
+      if (have_dmove)
+	{
+	  if (unused & 1)
+	    return "movni %Z0,%n1";
+	  if (unused & 2)
+	    return "seto %0,";
+	  return "seto %0,\;movni %Z0,%n1";
+	}
+      else if (TARGET_71BIT && !TARGET_KI10up)
+	{
+	  static char buf[128];
+	  unsigned long v;
+
+	  v = (unsigned long) -INTVAL (operands[1]);
+	  if (unused & 1)
+	    sprintf (buf,
+		     "setz %%Z0,\;subi %%Z0,%lo\;tlz %%Z0,400000\;tlo %%Z0,400000",
+		     v);
+	  else if (unused & 2)
+	    sprintf (buf, "seto %%0,");
+	  else
+	    sprintf (buf,
+		     "seto %%0,\;setz %%Z0,\;subi %%Z0,%lo\;tlz %%Z0,400000\;tlo %%Z0,400000",
+		     v);
+	  return buf;
+	}
+      else
+	{
+	  if (unused & 1)
+	    return "movni %Z0,%n1";
+	  if (unused & 2)
+	    return "seto %0,";
+	  return "seto %0,\;movni %Z0,%n1";
+	}
+
+    case 4:
+      if (have_dmove)
+	{
+	  if (unused & 1)
+	    return "move %Z0,[%B1]";
+	  if (unused & 2)
+	    return "move %0,[%A1]";
+	  return "dmove %0,[%D1]";
+	}
+      else
+	{
+	  if (unused & 1)
+	    return "move %Z0,[%B1]";
+	  if (unused & 2)
+	    return "move %0,[%A1]";
+	  return "move %0,[%A1]\;move %Z0,[%B1]";
+	}
+
+    case 5:
+      return "setzm %0\;setzm %Z0";
+
+    case 6:
+      return have_dmove ? "dmovem %1,%0" : "movem %1,%0\;movem %Z1,%Z0";
+
+    default:
+      abort ();
+    }
+}
 
 /* Return the offset from the base pointer.  */
 int
@@ -6399,6 +6583,43 @@ pdp10_output_store_byte (insn, operands)
                 {
                   byteoff += UNITS_PER_WORD;
                   wordoff -= 1;
+                }
+
+              /* Late reload can leave stores into a 9-bit array field
+                 whose field starts exactly on a PDP-10 word boundary with a
+                 REG address that is already an adjusted byte pointer to the
+                 target element.  A typical form is src.b[1]/src.b[2] in a
+                 structure whose preceding SImode member ends at the previous
+                 word.  MEM_OFFSET is then negative because GCC describes the
+                 element relative to the field base, but the REG already carries
+                 the needed IBP/address adjustment.  In that specific shape do
+                 not add more IBPs.  Do not apply this to fields that start in
+                 the middle of a word, such as q[5] followed by uq[0]: those
+                 still need the normal in-word byte offset.  */
+              if (MEM_OFFSET (operands[0]) != 0
+                  && GET_CODE (MEM_OFFSET (operands[0])) == CONST_INT
+                  && INTVAL (MEM_OFFSET (operands[0])) < 0
+                  && MEM_EXPR (operands[0]) != 0)
+                {
+                  tree expr = MEM_EXPR (operands[0]);
+                  tree field = NULL_TREE;
+
+                  if (TREE_CODE (expr) == COMPONENT_REF)
+                    field = TREE_OPERAND (expr, 1);
+                  else if (TREE_CODE (expr) == ARRAY_REF
+                           && TREE_CODE (TREE_OPERAND (expr, 0)) == COMPONENT_REF)
+                    field = TREE_OPERAND (TREE_OPERAND (expr, 0), 1);
+
+                  if (field != NULL_TREE
+                      && TREE_CODE (field) == FIELD_DECL)
+                    {
+                      HOST_WIDE_INT fieldbit = int_bit_position (field);
+                      HOST_WIDE_INT fieldbyte;
+                      fieldbyte = (fieldbit + BITS_PER_UNIT - 1)
+                        / BITS_PER_UNIT;
+                      if ((fieldbyte % UNITS_PER_WORD) == 0)
+                        byteoff = 0;
+                    }
                 }
 
               /* Here the REG address has already been forced to the
@@ -6838,17 +7059,14 @@ pdp10_expand_extzv (operands)
       emit_move_insn (operands[0], temp);
       return 1;
     }
-#if 0
-  /* TODO: is this beneficial?  */
   else if (pos + len == BITS_PER_WORD)
     {
-      HOST_WIDE_INT mask = (1 << len) - 1;
+      HOST_WIDE_INT mask = ((HOST_WIDE_INT) 1 << len) - 1;
       emit_move_insn (operands[0], op1);
       emit_insn (gen_andsi3 (operands[0], operands[0],
 			     gen_int_mode (mask, SImode)));
       return 1;
     }
-#endif
 
   return 0;
 }
@@ -7045,7 +7263,7 @@ pdp10_set_reg_from_right_half_p (set, dstno, srcno)
 /* Return nonzero if, before INSN, DEST was last assigned the right half
    of SRC, and DEST has not been touched since.  This is intentionally
    based on the hard register numbers visible after reload.  The halfword
-   recomposition bug reaches final through the generic *insv_reg path as
+   recomposition case reaches final through the generic *insv_reg path as
 
        HRRZ  dest,src
        ... modify src into a sign-half mask ...
@@ -7881,9 +8099,10 @@ pdp10_qi_mem_logical_offset (mem, offp, unsignedp)
           && field != NULL_TREE
           && TREE_CODE (field) == FIELD_DECL)
         {
+          HOST_WIDE_INT fieldbyte;
           HOST_WIDE_INT fieldbit = int_bit_position (field);
-          off = ((fieldbit + BITS_PER_UNIT - 1) / BITS_PER_UNIT)
-            % UNITS_PER_WORD;
+          fieldbyte = (fieldbit + BITS_PER_UNIT - 1) / BITS_PER_UNIT;
+          off = fieldbyte % UNITS_PER_WORD;
         }
     }
 
@@ -8020,11 +8239,47 @@ pdp10_output_movsi (insn, which_alternative)
              it.  In that shape the register is the byte pointer; do not
              reinterpret it as a word address and synthesize POINT again.  */
           {
+            HOST_WIDE_INT wordoff = byteoff / UNITS_PER_WORD;
             HOST_WIDE_INT inword = byteoff % UNITS_PER_WORD;
+            rtx outaddr = addr;
             char buf[64];
 
             if (inword < 0)
-              inword += UNITS_PER_WORD;
+              {
+                inword += UNITS_PER_WORD;
+                wordoff -= 1;
+              }
+
+            /* For late QImode array-element reloads widened to SImode,
+               MEM_EXPR/MEM_OFFSET describe the logical 9-bit byte number while
+               reload may already have folded some of the containing-word
+               displacement into a PLUS address.  Preserve that PLUS address,
+               but add only the residual word displacement that is not already
+               present in its constant addend.  This avoids double-counting
+               cases such as dst.b[1] after structure copy, while still moving
+               crossing elements such as u9[1] from word N to word N+1.  */
+            if (GET_CODE (addr) == PLUS)
+              {
+                HOST_WIDE_INT plusoff = 0;
+                HOST_WIDE_INT residual = wordoff;
+
+                if (GET_CODE (XEXP (addr, 1)) == CONST_INT)
+                  {
+                    plusoff = INTVAL (XEXP (addr, 1));
+                    residual = (wordoff > plusoff) ? (wordoff - plusoff) : 0;
+                  }
+
+                if (MEM_OFFSET (src) == 0
+                    || GET_CODE (MEM_OFFSET (src)) != CONST_INT
+                    || INTVAL (MEM_OFFSET (src)) < 0
+                    || INTVAL (MEM_OFFSET (src)) >= UNITS_PER_WORD)
+                  residual = 0;
+
+                outaddr = addr;
+                if (residual != 0)
+                  outaddr = plus_constant (addr, residual);
+                ops[1] = outaddr;
+              }
 
             /* When reload materializes a static QI array field address as a
                18-bit byte pointer plus IBP, the surviving logical byte number
@@ -8039,7 +8294,7 @@ pdp10_output_movsi (insn, which_alternative)
                address that survives reload can be a byte pointer, a word
                address, or a PLUS word address.  Use its right-half effective
                address as the containing word and install the selected P,S. */
-            if (REG_P (addr))
+            if (REG_P (outaddr))
               sprintf (buf, "ldb %%0,[POINT 9,(%%1),%d]",
                        (int) inword * BITS_PER_UNIT + 8);
             else

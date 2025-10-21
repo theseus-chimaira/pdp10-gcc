@@ -182,6 +182,9 @@ extern const char *
 							  rtx *operands));
 extern const char *
 		pdp10_output_movsi PARAMS ((rtx insn, int which_alternative));
+extern const char *
+		pdp10_output_movdi PARAMS ((rtx insn, rtx *operands,
+					       int which_alternative, int have_dmove));
 extern int	pdp10_expand_dmove PARAMS ((rtx destination, rtx source));
 extern int	pdp10_expand_move_4 PARAMS ((rtx destination, rtx source));
 extern int	pdp10_expand_movstrsi PARAMS ((rtx *operands));

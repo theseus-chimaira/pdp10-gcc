@@ -1520,6 +1520,43 @@ do {								\
 #define ENCODE_SECTION_INFO(DECL, NEW_DECL_P) \
   pdp10_encode_section_info (DECL)
 
+/* The generic named-section fallback uses only the assembler name as the
+   unique section name.  That can collide between code and data sections
+   when -ffunction-sections/-fdata-sections are used with asm-renamed
+   declarations.  Keep PDP-10 section names distinct by section class.  */
+#define UNIQUE_SECTION(DECL, RELOC)                                      \
+  do                                                                     \
+    {                                                                    \
+      int len;                                                           \
+      int sec;                                                           \
+      const char *name;                                                  \
+      const char *prefix;                                                \
+      char *string;                                                      \
+      static const char *const prefixes[4] =                             \
+      {                                                                  \
+        ".text.", ".rodata.", ".data.", ".bss."                       \
+      };                                                                 \
+                                                                           \
+      if (TREE_CODE (DECL) == FUNCTION_DECL)                             \
+        sec = 0;                                                         \
+      else if (DECL_INITIAL (DECL) == 0                                  \
+               || DECL_INITIAL (DECL) == error_mark_node)                \
+        sec = 3;                                                         \
+      else if (DECL_READONLY_SECTION (DECL, RELOC))                      \
+        sec = 1;                                                         \
+      else                                                               \
+        sec = 2;                                                         \
+                                                                           \
+      name = IDENTIFIER_POINTER (DECL_ASSEMBLER_NAME (DECL));            \
+      STRIP_NAME_ENCODING (name, name);                                  \
+      prefix = prefixes[sec];                                            \
+      len = strlen (name) + strlen (prefix);                             \
+      string = alloca (len + 1);                                         \
+      sprintf (string, "%s%s", prefix, name);                           \
+      DECL_SECTION_NAME (DECL) = build_string (len, string);             \
+    }                                                                    \
+  while (0)
+
 
 
 /**********************************************************************

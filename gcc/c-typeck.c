@@ -3156,7 +3156,7 @@ build_unary_op (code, xarg, flag)
       /* Note that this operation never does default_conversion.  */
 
       /* PDP-10: older versions warned when taking the address of
-	 scalar 7- or 8-bit byte objects.  That was a temporary guard
+	 scalar 7- or 8-bit byte objects.  That guarded an older backend state
 	 while local byte-pointer constants and conversions for those
 	 sizes were incomplete.  The backend now represents such addresses
 	 with ordinary local byte pointers, so do not warn here.  */

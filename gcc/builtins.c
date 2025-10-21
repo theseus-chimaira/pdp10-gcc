@@ -109,6 +109,20 @@ static rtx expand_builtin_strncmp	PARAMS ((tree, rtx,
 						 enum machine_mode));
 static rtx builtin_memcpy_read_str	PARAMS ((PTR, HOST_WIDE_INT,
 						 enum machine_mode));
+#ifdef __PDP10_H__
+#ifndef PDP10_STRING_CST_9BIT_P
+#define PDP10_STRING_CST_9BIT_P(NODE) TREE_LANG_FLAG_1 (NODE)
+#endif
+struct pdp10_builtin_string_data
+{
+  const unsigned char *ptr;
+  unsigned HOST_WIDE_INT len;
+  int host_unit;
+};
+static int pdp10_builtin_string_data_init PARAMS ((tree, struct pdp10_builtin_string_data *));
+static int pdp10_builtin_string_char PARAMS ((const struct pdp10_builtin_string_data *, unsigned HOST_WIDE_INT));
+static rtx pdp10_builtin_memcpy_read_str PARAMS ((PTR, HOST_WIDE_INT, enum machine_mode));
+#endif
 static rtx expand_builtin_strcat	PARAMS ((tree, rtx,
 						 enum machine_mode));
 static rtx expand_builtin_strncat	PARAMS ((tree, rtx,
@@ -353,6 +367,127 @@ c_readstr (str, mode)
     }
   return immed_double_const (c[0], c[1], mode);
 }
+
+#ifdef __PDP10_H__
+
+/* Return the logical number of target bytes represented by a STRING_CST.
+   PDP-10 narrow 9-bit string constants are stored as two host bytes per
+   target byte so values 0400..0777 are not truncated by the host char type.  */
+
+static unsigned HOST_WIDE_INT
+pdp10_builtin_string_length (str)
+     tree str;
+{
+  unsigned HOST_WIDE_INT len = TREE_STRING_LENGTH (str);
+
+  if (PDP10_STRING_CST_9BIT_P (str))
+    len /= 2;
+
+  return len;
+}
+
+/* Initialize DATA for reading logical target bytes from SRC, which must be
+   a string constant or a constant offset into one.  OFFSET is in target-byte
+   units; convert it to host storage units only after checking the PDP-10
+   two-host-byte string representation flag.  */
+
+static int
+pdp10_builtin_string_data_init (src, data)
+     tree src;
+     struct pdp10_builtin_string_data *data;
+{
+  tree offset_node;
+  tree str;
+  unsigned HOST_WIDE_INT offset;
+  unsigned HOST_WIDE_INT len;
+  int unit;
+
+  str = string_constant (src, &offset_node);
+  if (str == 0)
+    return 0;
+
+  if (offset_node == 0)
+    offset = 0;
+  else if (!host_integerp (offset_node, 1))
+    return 0;
+  else
+    offset = tree_low_cst (offset_node, 1);
+
+  len = pdp10_builtin_string_length (str);
+  if (offset > len)
+    return 0;
+
+  unit = PDP10_STRING_CST_9BIT_P (str) ? 2 : 1;
+  data->ptr = (const unsigned char *) TREE_STRING_POINTER (str) + offset * unit;
+  data->len = len - offset;
+  data->host_unit = unit;
+  return 1;
+}
+
+static int
+pdp10_builtin_string_char (data, offset)
+     const struct pdp10_builtin_string_data *data;
+     unsigned HOST_WIDE_INT offset;
+{
+  const unsigned char *p;
+
+  p = data->ptr + offset * data->host_unit;
+  if (data->host_unit == 2)
+    return (p[0] << 8) | p[1];
+  return p[0];
+}
+
+/* Callback routine for store_by_pieces.  This is the PDP-10 variant of
+   builtin_memcpy_read_str; it decodes STRING_CST data in logical target-byte
+   units before packing the requested mode.  */
+
+static rtx
+pdp10_builtin_memcpy_read_str (data_arg, offset, mode)
+     PTR data_arg;
+     HOST_WIDE_INT offset;
+     enum machine_mode mode;
+{
+  const struct pdp10_builtin_string_data *data;
+  HOST_WIDE_INT c[2];
+  HOST_WIDE_INT ch;
+  unsigned int i, j;
+
+  data = (const struct pdp10_builtin_string_data *) data_arg;
+
+  if (GET_MODE_CLASS (mode) != MODE_INT)
+    abort ();
+
+  if (offset < 0
+      || ((unsigned HOST_WIDE_INT) offset + GET_MODE_SIZE (mode)
+          > data->len))
+    abort ();
+
+  c[0] = 0;
+  c[1] = 0;
+  ch = 1;
+  for (i = 0; i < GET_MODE_SIZE (mode); i++)
+    {
+      j = i;
+      if (WORDS_BIG_ENDIAN)
+        j = GET_MODE_SIZE (mode) - i - 1;
+      if (BYTES_BIG_ENDIAN != WORDS_BIG_ENDIAN
+          && GET_MODE_SIZE (mode) > UNITS_PER_WORD)
+        j = j + UNITS_PER_WORD - 2 * (j % UNITS_PER_WORD) - 1;
+      j *= BITS_PER_UNIT;
+      if (j > 2 * HOST_BITS_PER_WIDE_INT)
+        abort ();
+      if (ch)
+        ch = pdp10_builtin_string_char (data, (unsigned HOST_WIDE_INT) offset + i);
+      c[j / HOST_BITS_PER_WIDE_INT] |= ch << (j % HOST_BITS_PER_WIDE_INT);
+#if HOST_BITS_PER_WIDE_INT % BITS_PER_UNIT != 0
+      if (j < HOST_BITS_PER_WIDE_INT
+          && j + BITS_PER_UNIT > HOST_BITS_PER_WIDE_INT)
+        c[1] |= ch >> (HOST_BITS_PER_WIDE_INT % BITS_PER_UNIT);
+#endif
+    }
+  return immed_double_const (c[0], c[1], mode);
+}
+#endif
 
 /* Cast a target constant CST to target CHAR and if that value fits into
    host char type, return zero and put that value into variable pointed by
@@ -849,6 +984,7 @@ get_memory_rtx (exp)
   else if (POINTER_TYPE_P (TREE_TYPE (exp)))
     {
       exp = build1 (INDIRECT_REF, TREE_TYPE (TREE_TYPE (exp)), exp);
+      set_mem_expr (mem, exp);
       /* memcpy, memset and other builtin stringops can alias with anything.  */
       set_mem_alias_set (mem, 0);
     }
@@ -1963,6 +2099,9 @@ expand_builtin_memcpy (arglist, target, mode)
       tree src = TREE_VALUE (TREE_CHAIN (arglist));
       tree len = TREE_VALUE (TREE_CHAIN (TREE_CHAIN (arglist)));
       const char *src_str;
+#ifdef __PDP10_H__
+      struct pdp10_builtin_string_data pdp10_src_str;
+#endif
 
       unsigned int src_align = get_pointer_alignment (src, BIGGEST_ALIGNMENT);
       unsigned int dest_align
@@ -1990,26 +2129,35 @@ expand_builtin_memcpy (arglist, target, mode)
       len_rtx = expand_expr (len, NULL_RTX, VOIDmode, 0);
       set_mem_align (dest_mem, dest_align);
       src_str = c_getstr (src);
+#ifdef __PDP10_H__
+      if (!pdp10_builtin_string_data_init (src, &pdp10_src_str))
+        pdp10_src_str.len = 0;
+#endif
 
       /* If SRC is a string constant and block move would be done
 	 by pieces, we can avoid loading the string from memory
 	 and only stored the computed constants.  */
       if (src_str
 	  && GET_CODE (len_rtx) == CONST_INT
+#ifdef __PDP10_H__
+	  && (unsigned HOST_WIDE_INT) INTVAL (len_rtx) <= pdp10_src_str.len
+	  && can_store_by_pieces (INTVAL (len_rtx), pdp10_builtin_memcpy_read_str,
+				  (PTR) &pdp10_src_str, dest_align))
+#else
 	  && (unsigned HOST_WIDE_INT) INTVAL (len_rtx) <= strlen (src_str) + 1
 	  && can_store_by_pieces (INTVAL (len_rtx), builtin_memcpy_read_str,
 				  (PTR) src_str, dest_align))
-	{
-#if 1
-	  /* PDP-10: rather gross hack to force a MEM_EXPR on dest_mem.  */
-	  extern tree build_indirect_ref (tree, const char *);
-	  if (MEM_EXPR (dest_mem) == NULL_TREE)
-	    set_mem_expr (dest_mem, build_indirect_ref (dest, "foo"));
 #endif
-
+	{
+#ifdef __PDP10_H__
+	  store_by_pieces (dest_mem, INTVAL (len_rtx),
+			   pdp10_builtin_memcpy_read_str,
+			   (PTR) &pdp10_src_str, dest_align);
+#else
 	  store_by_pieces (dest_mem, INTVAL (len_rtx),
 			   builtin_memcpy_read_str,
 			   (PTR) src_str, dest_align);
+#endif
 	  return force_operand (XEXP (dest_mem, 0), NULL_RTX);
 	}
 
