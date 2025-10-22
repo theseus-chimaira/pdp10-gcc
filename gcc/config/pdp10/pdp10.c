@@ -6279,10 +6279,10 @@ pdp10_output_movdi (insn, operands, which_alternative, have_dmove)
 	      if (dstno == srcno)
 		return "";
 	      if (dstno == srcno + 1)
-		return "move %Z0,%Z1\;move %0,%1";
+		return "move %Z0,%Z1\n\tmove %0,%1";
 	    }
 	}
-      return have_dmove ? "dmove %0,%1" : "move %0,%1\;move %Z0,%Z1";
+      return have_dmove ? "dmove %0,%1" : "move %0,%1\n\tmove %Z0,%Z1";
 
     case 1:
       if (unused & 1)
@@ -6296,7 +6296,7 @@ pdp10_output_movdi (insn, operands, which_alternative, have_dmove)
 	return "movei %Z0,%1";
       if (unused & 2)
 	return "movei %0,0";
-      return "movei %0,0\;movei %Z0,%1";
+      return "movei %0,0\n\tmovei %Z0,%1";
 
     case 3:
       if (have_dmove)
@@ -6305,7 +6305,7 @@ pdp10_output_movdi (insn, operands, which_alternative, have_dmove)
 	    return "movni %Z0,%n1";
 	  if (unused & 2)
 	    return "seto %0,";
-	  return "seto %0,\;movni %Z0,%n1";
+	  return "seto %0,\n\tmovni %Z0,%n1";
 	}
       else if (TARGET_71BIT && !TARGET_KI10up)
 	{
@@ -6315,13 +6315,13 @@ pdp10_output_movdi (insn, operands, which_alternative, have_dmove)
 	  v = (unsigned long) -INTVAL (operands[1]);
 	  if (unused & 1)
 	    sprintf (buf,
-		     "setz %%Z0,\;subi %%Z0,%lo\;tlz %%Z0,400000\;tlo %%Z0,400000",
+		     "setz %%Z0,\n\tsubi %%Z0,%lo\n\ttlz %%Z0,400000\n\ttlo %%Z0,400000",
 		     v);
 	  else if (unused & 2)
 	    sprintf (buf, "seto %%0,");
 	  else
 	    sprintf (buf,
-		     "seto %%0,\;setz %%Z0,\;subi %%Z0,%lo\;tlz %%Z0,400000\;tlo %%Z0,400000",
+		     "seto %%0,\n\tsetz %%Z0,\n\tsubi %%Z0,%lo\n\ttlz %%Z0,400000\n\ttlo %%Z0,400000",
 		     v);
 	  return buf;
 	}
@@ -6331,7 +6331,7 @@ pdp10_output_movdi (insn, operands, which_alternative, have_dmove)
 	    return "movni %Z0,%n1";
 	  if (unused & 2)
 	    return "seto %0,";
-	  return "seto %0,\;movni %Z0,%n1";
+	  return "seto %0,\n\tmovni %Z0,%n1";
 	}
 
     case 4:
@@ -6349,14 +6349,14 @@ pdp10_output_movdi (insn, operands, which_alternative, have_dmove)
 	    return "move %Z0,[%B1]";
 	  if (unused & 2)
 	    return "move %0,[%A1]";
-	  return "move %0,[%A1]\;move %Z0,[%B1]";
+	  return "move %0,[%A1]\n\tmove %Z0,[%B1]";
 	}
 
     case 5:
-      return "setzm %0\;setzm %Z0";
+      return "setzm %0\n\tsetzm %Z0";
 
     case 6:
-      return have_dmove ? "dmovem %1,%0" : "movem %1,%0\;movem %Z1,%Z0";
+      return have_dmove ? "dmovem %1,%0" : "movem %1,%0\n\tmovem %Z1,%Z0";
 
     default:
       abort ();

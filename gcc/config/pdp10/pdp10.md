@@ -5673,8 +5673,9 @@
 (define_insn "nop"
   [(const_int 0)]
   ""
-  ;; TODO: this is the traditional NOP instruction.  On KL10, TRN is
-  ;; faster.
+  ;; Use the traditional PDP-6/KA10-safe no-op.  TRN may be preferable
+  ;; on later machines, but the baseline output must remain upward
+  ;; compatible from DEX_MACH_166.
   "jfcl%; nop")
 
 (define_insn "jump"
@@ -5689,8 +5690,13 @@
   [(set (pc)
 	(match_operand:SI 0 "general_operand" ""))]
   ""
-  "/* Strip off any byte pointer fields, leaving only the word address.
-      TODO: do this earlier, before conversion to 'void *'?  */
+  "/* GCC label values are represented as local byte-pointer constants on
+      PDP-10, but JRST ultimately needs only the word address.  Register
+      and memory computed jumps are safe because normal PDP-10 effective
+      address calculation uses the address half of the register or indirect
+      word; constant jump operands, however, may be materialized as literal
+      constants, so strip the byte-pointer P/S fields here before final
+      instruction selection.  */
    if (GET_CODE (operands[0]) == CONST_INT)
      {
        HOST_WIDE_INT address = INTVAL (operands[0]);
