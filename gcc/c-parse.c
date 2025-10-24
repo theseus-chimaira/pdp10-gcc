@@ -97,7 +97,7 @@
 /* Cause the "yydebug" variable to be defined.  */
 #define YYDEBUG 1
 
-#line 101 "c-p85593.c"
+#line 101 "c-p7982.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -217,7 +217,7 @@ union YYSTYPE
 long itype; tree ttype; enum tree_code code;
 	const char *filename; int lineno; 
 
-#line 221 "c-p85593.c"
+#line 221 "c-p7982.c"
 
 };
 typedef union YYSTYPE YYSTYPE;
@@ -619,7 +619,7 @@ c_parse_init ()
 }
 
 
-#line 623 "c-p85593.c"
+#line 623 "c-p7982.c"
 
 
 #ifdef short
@@ -2752,7 +2752,7 @@ yyreduce:
 		    pedwarn ("ISO C forbids an empty source file");
 		  finish_file ();
 		}
-#line 2756 "c-p85593.c"
+#line 2756 "c-p7982.c"
     break;
 
   case 3: /* program: extdefs  */
@@ -2768,19 +2768,19 @@ yyreduce:
 		  finish_fname_decls ();
                   finish_file ();
 		}
-#line 2772 "c-p85593.c"
+#line 2772 "c-p7982.c"
     break;
 
   case 4: /* @1: %empty  */
 #line 310 "c-parse.y"
         {(yyval.ttype) = NULL_TREE; }
-#line 2778 "c-p85593.c"
+#line 2778 "c-p7982.c"
     break;
 
   case 6: /* @2: %empty  */
 #line 311 "c-parse.y"
                   {(yyval.ttype) = NULL_TREE; ggc_collect(); }
-#line 2784 "c-p85593.c"
+#line 2784 "c-p7982.c"
     break;
 
   case 10: /* extdef: ASM_KEYWORD '(' expr ')' ';'  */
@@ -2792,13 +2792,13 @@ yyreduce:
 		    assemble_asm ((yyvsp[-2].ttype));
 		  else
 		    error ("argument of `asm' is not a constant string"); }
-#line 2796 "c-p85593.c"
+#line 2796 "c-p7982.c"
     break;
 
   case 11: /* extdef: extension extdef  */
 #line 326 "c-parse.y"
                 { RESTORE_WARN_FLAGS ((yyvsp[-1].ttype)); }
-#line 2802 "c-p85593.c"
+#line 2802 "c-p7982.c"
     break;
 
   case 12: /* datadef: setspecs notype_initdecls ';'  */
@@ -2809,32 +2809,32 @@ yyreduce:
 		    warning ("data definition has no type or storage class"); 
 
 		  POP_DECLSPEC_STACK; }
-#line 2813 "c-p85593.c"
+#line 2813 "c-p7982.c"
     break;
 
   case 13: /* datadef: declspecs_nots setspecs notype_initdecls ';'  */
 #line 338 "c-parse.y"
                 { POP_DECLSPEC_STACK; }
-#line 2819 "c-p85593.c"
+#line 2819 "c-p7982.c"
     break;
 
   case 14: /* datadef: declspecs_ts setspecs initdecls ';'  */
 #line 340 "c-parse.y"
                 { POP_DECLSPEC_STACK; }
-#line 2825 "c-p85593.c"
+#line 2825 "c-p7982.c"
     break;
 
   case 15: /* datadef: declspecs ';'  */
 #line 342 "c-parse.y"
           { shadow_tag ((yyvsp[-1].ttype)); }
-#line 2831 "c-p85593.c"
+#line 2831 "c-p7982.c"
     break;
 
   case 18: /* datadef: ';'  */
 #line 346 "c-parse.y"
                 { if (pedantic)
 		    pedwarn ("ISO C does not allow extra `;' outside of a function"); }
-#line 2838 "c-p85593.c"
+#line 2838 "c-p7982.c"
     break;
 
   case 19: /* $@3: %empty  */
@@ -2843,13 +2843,13 @@ yyreduce:
 					all_prefix_attributes))
 		    YYERROR1;
 		}
-#line 2847 "c-p85593.c"
+#line 2847 "c-p7982.c"
     break;
 
   case 20: /* $@4: %empty  */
 #line 357 "c-parse.y"
                 { store_parm_decls (); }
-#line 2853 "c-p85593.c"
+#line 2853 "c-p7982.c"
     break;
 
   case 21: /* fndef: declspecs_ts setspecs declarator $@3 old_style_parm_decls $@4 save_filename save_lineno compstmt_or_error  */
@@ -2858,13 +2858,13 @@ yyreduce:
 		  DECL_SOURCE_LINE (current_function_decl) = (yyvsp[-1].lineno);
 		  finish_function (0, 1); 
 		  POP_DECLSPEC_STACK; }
-#line 2862 "c-p85593.c"
+#line 2862 "c-p7982.c"
     break;
 
   case 22: /* fndef: declspecs_ts setspecs declarator error  */
 #line 364 "c-parse.y"
                 { POP_DECLSPEC_STACK; }
-#line 2868 "c-p85593.c"
+#line 2868 "c-p7982.c"
     break;
 
   case 23: /* $@5: %empty  */
@@ -2873,13 +2873,13 @@ yyreduce:
 					all_prefix_attributes))
 		    YYERROR1;
 		}
-#line 2877 "c-p85593.c"
+#line 2877 "c-p7982.c"
     break;
 
   case 24: /* $@6: %empty  */
 #line 371 "c-parse.y"
                 { store_parm_decls (); }
-#line 2883 "c-p85593.c"
+#line 2883 "c-p7982.c"
     break;
 
   case 25: /* fndef: declspecs_nots setspecs notype_declarator $@5 old_style_parm_decls $@6 save_filename save_lineno compstmt_or_error  */
@@ -2888,13 +2888,13 @@ yyreduce:
 		  DECL_SOURCE_LINE (current_function_decl) = (yyvsp[-1].lineno);
 		  finish_function (0, 1); 
 		  POP_DECLSPEC_STACK; }
-#line 2892 "c-p85593.c"
+#line 2892 "c-p7982.c"
     break;
 
   case 26: /* fndef: declspecs_nots setspecs notype_declarator error  */
 #line 378 "c-parse.y"
                 { POP_DECLSPEC_STACK; }
-#line 2898 "c-p85593.c"
+#line 2898 "c-p7982.c"
     break;
 
   case 27: /* $@7: %empty  */
@@ -2903,13 +2903,13 @@ yyreduce:
 					all_prefix_attributes))
 		    YYERROR1;
 		}
-#line 2907 "c-p85593.c"
+#line 2907 "c-p7982.c"
     break;
 
   case 28: /* $@8: %empty  */
 #line 385 "c-parse.y"
                 { store_parm_decls (); }
-#line 2913 "c-p85593.c"
+#line 2913 "c-p7982.c"
     break;
 
   case 29: /* fndef: setspecs notype_declarator $@7 old_style_parm_decls $@8 save_filename save_lineno compstmt_or_error  */
@@ -2918,25 +2918,25 @@ yyreduce:
 		  DECL_SOURCE_LINE (current_function_decl) = (yyvsp[-1].lineno);
 		  finish_function (0, 1); 
 		  POP_DECLSPEC_STACK; }
-#line 2922 "c-p85593.c"
+#line 2922 "c-p7982.c"
     break;
 
   case 30: /* fndef: setspecs notype_declarator error  */
 #line 392 "c-parse.y"
                 { POP_DECLSPEC_STACK; }
-#line 2928 "c-p85593.c"
+#line 2928 "c-p7982.c"
     break;
 
   case 33: /* unop: '&'  */
 #line 401 "c-parse.y"
                 { (yyval.code) = ADDR_EXPR; }
-#line 2934 "c-p85593.c"
+#line 2934 "c-p7982.c"
     break;
 
   case 34: /* unop: '-'  */
 #line 403 "c-parse.y"
                 { (yyval.code) = NEGATE_EXPR; }
-#line 2940 "c-p85593.c"
+#line 2940 "c-p7982.c"
     break;
 
   case 35: /* unop: '+'  */
@@ -2945,81 +2945,81 @@ yyreduce:
   if (warn_traditional && !in_system_header)
     warning ("traditional C rejects the unary plus operator");
 		}
-#line 2949 "c-p85593.c"
+#line 2949 "c-p7982.c"
     break;
 
   case 36: /* unop: PLUSPLUS  */
 #line 410 "c-parse.y"
                 { (yyval.code) = PREINCREMENT_EXPR; }
-#line 2955 "c-p85593.c"
+#line 2955 "c-p7982.c"
     break;
 
   case 37: /* unop: MINUSMINUS  */
 #line 412 "c-parse.y"
                 { (yyval.code) = PREDECREMENT_EXPR; }
-#line 2961 "c-p85593.c"
+#line 2961 "c-p7982.c"
     break;
 
   case 38: /* unop: '~'  */
 #line 414 "c-parse.y"
                 { (yyval.code) = BIT_NOT_EXPR; }
-#line 2967 "c-p85593.c"
+#line 2967 "c-p7982.c"
     break;
 
   case 39: /* unop: '!'  */
 #line 416 "c-parse.y"
                 { (yyval.code) = TRUTH_NOT_EXPR; }
-#line 2973 "c-p85593.c"
+#line 2973 "c-p7982.c"
     break;
 
   case 40: /* expr: nonnull_exprlist  */
 #line 420 "c-parse.y"
                 { (yyval.ttype) = build_compound_expr ((yyvsp[0].ttype)); }
-#line 2979 "c-p85593.c"
+#line 2979 "c-p7982.c"
     break;
 
   case 41: /* exprlist: %empty  */
 #line 425 "c-parse.y"
                 { (yyval.ttype) = NULL_TREE; }
-#line 2985 "c-p85593.c"
+#line 2985 "c-p7982.c"
     break;
 
   case 43: /* nonnull_exprlist: expr_no_commas  */
 #line 431 "c-parse.y"
                 { (yyval.ttype) = build_tree_list (NULL_TREE, (yyvsp[0].ttype)); }
-#line 2991 "c-p85593.c"
+#line 2991 "c-p7982.c"
     break;
 
   case 44: /* nonnull_exprlist: nonnull_exprlist ',' expr_no_commas  */
 #line 433 "c-parse.y"
                 { chainon ((yyvsp[-2].ttype), build_tree_list (NULL_TREE, (yyvsp[0].ttype))); }
-#line 2997 "c-p85593.c"
+#line 2997 "c-p7982.c"
     break;
 
   case 46: /* unary_expr: '*' cast_expr  */
 #line 439 "c-parse.y"
                 { (yyval.ttype) = build_indirect_ref ((yyvsp[0].ttype), "unary *"); }
-#line 3003 "c-p85593.c"
+#line 3003 "c-p7982.c"
     break;
 
   case 47: /* unary_expr: extension cast_expr  */
 #line 442 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[0].ttype);
 		  RESTORE_WARN_FLAGS ((yyvsp[-1].ttype)); }
-#line 3010 "c-p85593.c"
+#line 3010 "c-p7982.c"
     break;
 
   case 48: /* unary_expr: unop cast_expr  */
 #line 445 "c-parse.y"
                 { (yyval.ttype) = build_unary_op ((yyvsp[-1].code), (yyvsp[0].ttype), 0);
 		  overflow_warning ((yyval.ttype)); }
-#line 3017 "c-p85593.c"
+#line 3017 "c-p7982.c"
     break;
 
   case 49: /* unary_expr: ANDAND identifier  */
 #line 449 "c-parse.y"
                 { (yyval.ttype) = finish_label_address_expr ((yyvsp[0].ttype)); }
-#line 3023 "c-p85593.c"
+#line 3023 "c-p7982.c"
     break;
 
   case 50: /* unary_expr: sizeof unary_expr  */
@@ -3029,130 +3029,130 @@ yyreduce:
 		      && DECL_C_BIT_FIELD (TREE_OPERAND ((yyvsp[0].ttype), 1)))
 		    error ("`sizeof' applied to a bit-field");
 		  (yyval.ttype) = c_sizeof (TREE_TYPE ((yyvsp[0].ttype))); }
-#line 3033 "c-p85593.c"
+#line 3033 "c-p7982.c"
     break;
 
   case 51: /* unary_expr: sizeof '(' typename ')'  */
 #line 472 "c-parse.y"
                 { skip_evaluation--;
 		  (yyval.ttype) = c_sizeof (groktypename ((yyvsp[-1].ttype))); }
-#line 3040 "c-p85593.c"
+#line 3040 "c-p7982.c"
     break;
 
   case 52: /* unary_expr: alignof unary_expr  */
 #line 475 "c-parse.y"
                 { skip_evaluation--;
 		  (yyval.ttype) = c_alignof_expr ((yyvsp[0].ttype)); }
-#line 3047 "c-p85593.c"
+#line 3047 "c-p7982.c"
     break;
 
   case 53: /* unary_expr: alignof '(' typename ')'  */
 #line 478 "c-parse.y"
                 { skip_evaluation--;
 		  (yyval.ttype) = c_alignof (groktypename ((yyvsp[-1].ttype))); }
-#line 3054 "c-p85593.c"
+#line 3054 "c-p7982.c"
     break;
 
   case 54: /* unary_expr: REALPART cast_expr  */
 #line 481 "c-parse.y"
                 { (yyval.ttype) = build_unary_op (REALPART_EXPR, (yyvsp[0].ttype), 0); }
-#line 3060 "c-p85593.c"
+#line 3060 "c-p7982.c"
     break;
 
   case 55: /* unary_expr: IMAGPART cast_expr  */
 #line 483 "c-parse.y"
                 { (yyval.ttype) = build_unary_op (IMAGPART_EXPR, (yyvsp[0].ttype), 0); }
-#line 3066 "c-p85593.c"
+#line 3066 "c-p7982.c"
     break;
 
   case 56: /* sizeof: SIZEOF  */
 #line 487 "c-parse.y"
                { skip_evaluation++; }
-#line 3072 "c-p85593.c"
+#line 3072 "c-p7982.c"
     break;
 
   case 57: /* alignof: ALIGNOF  */
 #line 491 "c-parse.y"
                 { skip_evaluation++; }
-#line 3078 "c-p85593.c"
+#line 3078 "c-p7982.c"
     break;
 
   case 59: /* cast_expr: '(' typename ')' cast_expr  */
 #line 497 "c-parse.y"
                 { (yyval.ttype) = c_cast_expr ((yyvsp[-2].ttype), (yyvsp[0].ttype)); }
-#line 3084 "c-p85593.c"
+#line 3084 "c-p7982.c"
     break;
 
   case 61: /* expr_no_commas: expr_no_commas '+' expr_no_commas  */
 #line 503 "c-parse.y"
                 { (yyval.ttype) = parser_build_binary_op ((yyvsp[-1].code), (yyvsp[-2].ttype), (yyvsp[0].ttype)); }
-#line 3090 "c-p85593.c"
+#line 3090 "c-p7982.c"
     break;
 
   case 62: /* expr_no_commas: expr_no_commas '-' expr_no_commas  */
 #line 505 "c-parse.y"
                 { (yyval.ttype) = parser_build_binary_op ((yyvsp[-1].code), (yyvsp[-2].ttype), (yyvsp[0].ttype)); }
-#line 3096 "c-p85593.c"
+#line 3096 "c-p7982.c"
     break;
 
   case 63: /* expr_no_commas: expr_no_commas '*' expr_no_commas  */
 #line 507 "c-parse.y"
                 { (yyval.ttype) = parser_build_binary_op ((yyvsp[-1].code), (yyvsp[-2].ttype), (yyvsp[0].ttype)); }
-#line 3102 "c-p85593.c"
+#line 3102 "c-p7982.c"
     break;
 
   case 64: /* expr_no_commas: expr_no_commas '/' expr_no_commas  */
 #line 509 "c-parse.y"
                 { (yyval.ttype) = parser_build_binary_op ((yyvsp[-1].code), (yyvsp[-2].ttype), (yyvsp[0].ttype)); }
-#line 3108 "c-p85593.c"
+#line 3108 "c-p7982.c"
     break;
 
   case 65: /* expr_no_commas: expr_no_commas '%' expr_no_commas  */
 #line 511 "c-parse.y"
                 { (yyval.ttype) = parser_build_binary_op ((yyvsp[-1].code), (yyvsp[-2].ttype), (yyvsp[0].ttype)); }
-#line 3114 "c-p85593.c"
+#line 3114 "c-p7982.c"
     break;
 
   case 66: /* expr_no_commas: expr_no_commas LSHIFT expr_no_commas  */
 #line 513 "c-parse.y"
                 { (yyval.ttype) = parser_build_binary_op ((yyvsp[-1].code), (yyvsp[-2].ttype), (yyvsp[0].ttype)); }
-#line 3120 "c-p85593.c"
+#line 3120 "c-p7982.c"
     break;
 
   case 67: /* expr_no_commas: expr_no_commas RSHIFT expr_no_commas  */
 #line 515 "c-parse.y"
                 { (yyval.ttype) = parser_build_binary_op ((yyvsp[-1].code), (yyvsp[-2].ttype), (yyvsp[0].ttype)); }
-#line 3126 "c-p85593.c"
+#line 3126 "c-p7982.c"
     break;
 
   case 68: /* expr_no_commas: expr_no_commas ARITHCOMPARE expr_no_commas  */
 #line 517 "c-parse.y"
                 { (yyval.ttype) = parser_build_binary_op ((yyvsp[-1].code), (yyvsp[-2].ttype), (yyvsp[0].ttype)); }
-#line 3132 "c-p85593.c"
+#line 3132 "c-p7982.c"
     break;
 
   case 69: /* expr_no_commas: expr_no_commas EQCOMPARE expr_no_commas  */
 #line 519 "c-parse.y"
                 { (yyval.ttype) = parser_build_binary_op ((yyvsp[-1].code), (yyvsp[-2].ttype), (yyvsp[0].ttype)); }
-#line 3138 "c-p85593.c"
+#line 3138 "c-p7982.c"
     break;
 
   case 70: /* expr_no_commas: expr_no_commas '&' expr_no_commas  */
 #line 521 "c-parse.y"
                 { (yyval.ttype) = parser_build_binary_op ((yyvsp[-1].code), (yyvsp[-2].ttype), (yyvsp[0].ttype)); }
-#line 3144 "c-p85593.c"
+#line 3144 "c-p7982.c"
     break;
 
   case 71: /* expr_no_commas: expr_no_commas '|' expr_no_commas  */
 #line 523 "c-parse.y"
                 { (yyval.ttype) = parser_build_binary_op ((yyvsp[-1].code), (yyvsp[-2].ttype), (yyvsp[0].ttype)); }
-#line 3150 "c-p85593.c"
+#line 3150 "c-p7982.c"
     break;
 
   case 72: /* expr_no_commas: expr_no_commas '^' expr_no_commas  */
 #line 525 "c-parse.y"
                 { (yyval.ttype) = parser_build_binary_op ((yyvsp[-1].code), (yyvsp[-2].ttype), (yyvsp[0].ttype)); }
-#line 3156 "c-p85593.c"
+#line 3156 "c-p7982.c"
     break;
 
   case 73: /* $@9: %empty  */
@@ -3160,14 +3160,14 @@ yyreduce:
                 { (yyvsp[-1].ttype) = c_common_truthvalue_conversion
 		    (default_conversion ((yyvsp[-1].ttype)));
 		  skip_evaluation += (yyvsp[-1].ttype) == boolean_false_node; }
-#line 3164 "c-p85593.c"
+#line 3164 "c-p7982.c"
     break;
 
   case 74: /* expr_no_commas: expr_no_commas ANDAND $@9 expr_no_commas  */
 #line 531 "c-parse.y"
                 { skip_evaluation -= (yyvsp[-3].ttype) == boolean_false_node;
 		  (yyval.ttype) = parser_build_binary_op (TRUTH_ANDIF_EXPR, (yyvsp[-3].ttype), (yyvsp[0].ttype)); }
-#line 3171 "c-p85593.c"
+#line 3171 "c-p7982.c"
     break;
 
   case 75: /* $@10: %empty  */
@@ -3175,14 +3175,14 @@ yyreduce:
                 { (yyvsp[-1].ttype) = c_common_truthvalue_conversion
 		    (default_conversion ((yyvsp[-1].ttype)));
 		  skip_evaluation += (yyvsp[-1].ttype) == boolean_true_node; }
-#line 3179 "c-p85593.c"
+#line 3179 "c-p7982.c"
     break;
 
   case 76: /* expr_no_commas: expr_no_commas OROR $@10 expr_no_commas  */
 #line 538 "c-parse.y"
                 { skip_evaluation -= (yyvsp[-3].ttype) == boolean_true_node;
 		  (yyval.ttype) = parser_build_binary_op (TRUTH_ORIF_EXPR, (yyvsp[-3].ttype), (yyvsp[0].ttype)); }
-#line 3186 "c-p85593.c"
+#line 3186 "c-p7982.c"
     break;
 
   case 77: /* $@11: %empty  */
@@ -3190,21 +3190,21 @@ yyreduce:
                 { (yyvsp[-1].ttype) = c_common_truthvalue_conversion
 		    (default_conversion ((yyvsp[-1].ttype)));
 		  skip_evaluation += (yyvsp[-1].ttype) == boolean_false_node; }
-#line 3194 "c-p85593.c"
+#line 3194 "c-p7982.c"
     break;
 
   case 78: /* $@12: %empty  */
 #line 545 "c-parse.y"
                 { skip_evaluation += (((yyvsp[-4].ttype) == boolean_true_node)
 				      - ((yyvsp[-4].ttype) == boolean_false_node)); }
-#line 3201 "c-p85593.c"
+#line 3201 "c-p7982.c"
     break;
 
   case 79: /* expr_no_commas: expr_no_commas '?' $@11 expr ':' $@12 expr_no_commas  */
 #line 548 "c-parse.y"
                 { skip_evaluation -= (yyvsp[-6].ttype) == boolean_true_node;
 		  (yyval.ttype) = build_conditional_expr ((yyvsp[-6].ttype), (yyvsp[-3].ttype), (yyvsp[0].ttype)); }
-#line 3208 "c-p85593.c"
+#line 3208 "c-p7982.c"
     break;
 
   case 80: /* $@13: %empty  */
@@ -3216,14 +3216,14 @@ yyreduce:
 		  (yyvsp[-1].ttype) = c_common_truthvalue_conversion
 		    (default_conversion ((yyvsp[0].ttype)));
 		  skip_evaluation += (yyvsp[-1].ttype) == boolean_true_node; }
-#line 3220 "c-p85593.c"
+#line 3220 "c-p7982.c"
     break;
 
   case 81: /* expr_no_commas: expr_no_commas '?' $@13 ':' expr_no_commas  */
 #line 559 "c-parse.y"
                 { skip_evaluation -= (yyvsp[-4].ttype) == boolean_true_node;
 		  (yyval.ttype) = build_conditional_expr ((yyvsp[-4].ttype), (yyvsp[-3].ttype), (yyvsp[0].ttype)); }
-#line 3227 "c-p85593.c"
+#line 3227 "c-p7982.c"
     break;
 
   case 82: /* expr_no_commas: expr_no_commas '=' expr_no_commas  */
@@ -3234,7 +3234,7 @@ yyreduce:
 		  if (IS_EXPR_CODE_CLASS (class))
 		    C_SET_EXP_ORIGINAL_CODE ((yyval.ttype), MODIFY_EXPR);
 		}
-#line 3238 "c-p85593.c"
+#line 3238 "c-p7982.c"
     break;
 
   case 83: /* expr_no_commas: expr_no_commas ASSIGN expr_no_commas  */
@@ -3247,7 +3247,7 @@ yyreduce:
 		  if (IS_EXPR_CODE_CLASS (class))
 		    C_SET_EXP_ORIGINAL_CODE ((yyval.ttype), ERROR_MARK);
 		}
-#line 3251 "c-p85593.c"
+#line 3251 "c-p7982.c"
     break;
 
   case 84: /* primary: IDENTIFIER  */
@@ -3257,19 +3257,19 @@ yyreduce:
 		    yychar = YYLEX;
 		  (yyval.ttype) = build_external_ref ((yyvsp[0].ttype), yychar == '(');
 		}
-#line 3261 "c-p85593.c"
+#line 3261 "c-p7982.c"
     break;
 
   case 86: /* primary: string  */
 #line 588 "c-parse.y"
                 { (yyval.ttype) = combine_strings ((yyvsp[0].ttype)); }
-#line 3267 "c-p85593.c"
+#line 3267 "c-p7982.c"
     break;
 
   case 87: /* primary: VAR_FUNC_NAME  */
 #line 590 "c-parse.y"
                 { (yyval.ttype) = fname_decl (C_RID_CODE ((yyval.ttype)), (yyval.ttype)); }
-#line 3273 "c-p85593.c"
+#line 3273 "c-p7982.c"
     break;
 
   case 88: /* $@14: %empty  */
@@ -3277,7 +3277,7 @@ yyreduce:
                 { start_init (NULL_TREE, NULL, 0);
 		  (yyvsp[-2].ttype) = groktypename ((yyvsp[-2].ttype));
 		  really_start_incremental_init ((yyvsp[-2].ttype)); }
-#line 3281 "c-p85593.c"
+#line 3281 "c-p7982.c"
     break;
 
   case 89: /* primary: '(' typename ')' '{' $@14 initlist_maybe_comma '}'  */
@@ -3290,7 +3290,7 @@ yyreduce:
 		    pedwarn ("ISO C89 forbids compound literals");
 		  (yyval.ttype) = build_compound_literal (type, constructor);
 		}
-#line 3294 "c-p85593.c"
+#line 3294 "c-p7982.c"
     break;
 
   case 90: /* primary: '(' expr ')'  */
@@ -3299,13 +3299,13 @@ yyreduce:
 		  if (IS_EXPR_CODE_CLASS (class))
 		    C_SET_EXP_ORIGINAL_CODE ((yyvsp[-1].ttype), ERROR_MARK);
 		  (yyval.ttype) = (yyvsp[-1].ttype); }
-#line 3303 "c-p85593.c"
+#line 3303 "c-p7982.c"
     break;
 
   case 91: /* primary: '(' error ')'  */
 #line 610 "c-parse.y"
                 { (yyval.ttype) = error_mark_node; }
-#line 3309 "c-p85593.c"
+#line 3309 "c-p7982.c"
     break;
 
   case 92: /* primary: compstmt_primary_start compstmt_nostart ')'  */
@@ -3325,7 +3325,7 @@ yyreduce:
 		  (yyval.ttype) = build1 (STMT_EXPR, last_expr_type, (yyvsp[-2].ttype));
 		  TREE_SIDE_EFFECTS ((yyval.ttype)) = 1;
 		}
-#line 3329 "c-p85593.c"
+#line 3329 "c-p7982.c"
     break;
 
   case 93: /* primary: compstmt_primary_start error ')'  */
@@ -3336,19 +3336,19 @@ yyreduce:
 		  TREE_CHAIN (last_tree) = NULL_TREE;
 		  (yyval.ttype) = error_mark_node;
 		}
-#line 3340 "c-p85593.c"
+#line 3340 "c-p7982.c"
     break;
 
   case 94: /* primary: primary '(' exprlist ')'  */
 #line 635 "c-parse.y"
                 { (yyval.ttype) = build_function_call ((yyvsp[-3].ttype), (yyvsp[-1].ttype)); }
-#line 3346 "c-p85593.c"
+#line 3346 "c-p7982.c"
     break;
 
   case 95: /* primary: VA_ARG '(' expr_no_commas ',' typename ')'  */
 #line 637 "c-parse.y"
                 { (yyval.ttype) = build_va_arg ((yyvsp[-3].ttype), groktypename ((yyvsp[-1].ttype))); }
-#line 3352 "c-p85593.c"
+#line 3352 "c-p7982.c"
     break;
 
   case 96: /* primary: CHOOSE_EXPR '(' expr_no_commas ',' expr_no_commas ',' expr_no_commas ')'  */
@@ -3362,7 +3362,7 @@ yyreduce:
                     error ("first argument to __builtin_choose_expr not a constant");
                   (yyval.ttype) = integer_zerop (c) ? (yyvsp[-1].ttype) : (yyvsp[-3].ttype);
 		}
-#line 3366 "c-p85593.c"
+#line 3366 "c-p7982.c"
     break;
 
   case 97: /* primary: TYPES_COMPATIBLE_P '(' typename ',' typename ')'  */
@@ -3376,13 +3376,13 @@ yyreduce:
 		  (yyval.ttype) = comptypes (e1, e2)
 		    ? build_int_2 (1, 0) : build_int_2 (0, 0);
 		}
-#line 3380 "c-p85593.c"
+#line 3380 "c-p7982.c"
     break;
 
   case 98: /* primary: primary '[' expr ']'  */
 #line 660 "c-parse.y"
                 { (yyval.ttype) = build_array_ref ((yyvsp[-3].ttype), (yyvsp[-1].ttype)); }
-#line 3386 "c-p85593.c"
+#line 3386 "c-p7982.c"
     break;
 
   case 99: /* primary: primary '.' identifier  */
@@ -3390,7 +3390,7 @@ yyreduce:
                 {
 		      (yyval.ttype) = build_component_ref ((yyvsp[-2].ttype), (yyvsp[0].ttype));
 		}
-#line 3394 "c-p85593.c"
+#line 3394 "c-p7982.c"
     break;
 
   case 100: /* primary: primary POINTSAT identifier  */
@@ -3400,19 +3400,19 @@ yyreduce:
 
 			(yyval.ttype) = build_component_ref (expr, (yyvsp[0].ttype));
 		}
-#line 3404 "c-p85593.c"
+#line 3404 "c-p7982.c"
     break;
 
   case 101: /* primary: primary PLUSPLUS  */
 #line 672 "c-parse.y"
                 { (yyval.ttype) = build_unary_op (POSTINCREMENT_EXPR, (yyvsp[-1].ttype), 0); }
-#line 3410 "c-p85593.c"
+#line 3410 "c-p7982.c"
     break;
 
   case 102: /* primary: primary MINUSMINUS  */
 #line 674 "c-parse.y"
                 { (yyval.ttype) = build_unary_op (POSTDECREMENT_EXPR, (yyvsp[-1].ttype), 0); }
-#line 3416 "c-p85593.c"
+#line 3416 "c-p7982.c"
     break;
 
   case 104: /* string: string STRING  */
@@ -3430,7 +3430,7 @@ yyreduce:
 		      last_input_filename = input_filename;
 		    }
 		}
-#line 3434 "c-p85593.c"
+#line 3434 "c-p7982.c"
     break;
 
   case 107: /* old_style_parm_decls: datadecls ELLIPSIS  */
@@ -3438,44 +3438,44 @@ yyreduce:
                 { c_mark_varargs ();
 		  if (pedantic)
 		    pedwarn ("ISO C does not permit use of `varargs.h'"); }
-#line 3442 "c-p85593.c"
+#line 3442 "c-p7982.c"
     break;
 
   case 108: /* lineno_datadecl: save_filename save_lineno datadecl  */
 #line 712 "c-parse.y"
                 { }
-#line 3448 "c-p85593.c"
+#line 3448 "c-p7982.c"
     break;
 
   case 113: /* datadecl: declspecs_ts_nosa setspecs initdecls ';'  */
 #line 728 "c-parse.y"
                 { POP_DECLSPEC_STACK; }
-#line 3454 "c-p85593.c"
+#line 3454 "c-p7982.c"
     break;
 
   case 114: /* datadecl: declspecs_nots_nosa setspecs notype_initdecls ';'  */
 #line 730 "c-parse.y"
                 { POP_DECLSPEC_STACK; }
-#line 3460 "c-p85593.c"
+#line 3460 "c-p7982.c"
     break;
 
   case 115: /* datadecl: declspecs_ts_nosa ';'  */
 #line 732 "c-parse.y"
                 { shadow_tag_warned ((yyvsp[-1].ttype), 1);
 		  pedwarn ("empty declaration"); }
-#line 3467 "c-p85593.c"
+#line 3467 "c-p7982.c"
     break;
 
   case 116: /* datadecl: declspecs_nots_nosa ';'  */
 #line 735 "c-parse.y"
                 { pedwarn ("empty declaration"); }
-#line 3473 "c-p85593.c"
+#line 3473 "c-p7982.c"
     break;
 
   case 117: /* lineno_decl: save_filename save_lineno decl  */
 #line 744 "c-parse.y"
                 { }
-#line 3479 "c-p85593.c"
+#line 3479 "c-p7982.c"
     break;
 
   case 118: /* setspecs: %empty  */
@@ -3485,294 +3485,294 @@ yyreduce:
 		  split_specs_attrs ((yyvsp[0].ttype),
 				     &current_declspecs, &prefix_attributes);
 		  all_prefix_attributes = prefix_attributes; }
-#line 3489 "c-p85593.c"
+#line 3489 "c-p7982.c"
     break;
 
   case 119: /* maybe_resetattrs: maybe_attribute  */
 #line 763 "c-parse.y"
                 { all_prefix_attributes = chainon ((yyvsp[0].ttype), prefix_attributes); }
-#line 3495 "c-p85593.c"
+#line 3495 "c-p7982.c"
     break;
 
   case 120: /* decl: declspecs_ts setspecs initdecls ';'  */
 #line 768 "c-parse.y"
                 { POP_DECLSPEC_STACK; }
-#line 3501 "c-p85593.c"
+#line 3501 "c-p7982.c"
     break;
 
   case 121: /* decl: declspecs_nots setspecs notype_initdecls ';'  */
 #line 770 "c-parse.y"
                 { POP_DECLSPEC_STACK; }
-#line 3507 "c-p85593.c"
+#line 3507 "c-p7982.c"
     break;
 
   case 122: /* decl: declspecs_ts setspecs nested_function  */
 #line 772 "c-parse.y"
                 { POP_DECLSPEC_STACK; }
-#line 3513 "c-p85593.c"
+#line 3513 "c-p7982.c"
     break;
 
   case 123: /* decl: declspecs_nots setspecs notype_nested_function  */
 #line 774 "c-parse.y"
                 { POP_DECLSPEC_STACK; }
-#line 3519 "c-p85593.c"
+#line 3519 "c-p7982.c"
     break;
 
   case 124: /* decl: declspecs ';'  */
 #line 776 "c-parse.y"
                 { shadow_tag ((yyvsp[-1].ttype)); }
-#line 3525 "c-p85593.c"
+#line 3525 "c-p7982.c"
     break;
 
   case 125: /* decl: extension decl  */
 #line 778 "c-parse.y"
                 { RESTORE_WARN_FLAGS ((yyvsp[-1].ttype)); }
-#line 3531 "c-p85593.c"
+#line 3531 "c-p7982.c"
     break;
 
   case 126: /* declspecs_nosc_nots_nosa_noea: TYPE_QUAL  */
 #line 835 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), NULL_TREE);
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3538 "c-p85593.c"
+#line 3538 "c-p7982.c"
     break;
 
   case 127: /* declspecs_nosc_nots_nosa_noea: declspecs_nosc_nots_nosa_noea TYPE_QUAL  */
 #line 838 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3545 "c-p85593.c"
+#line 3545 "c-p7982.c"
     break;
 
   case 128: /* declspecs_nosc_nots_nosa_noea: declspecs_nosc_nots_nosa_ea TYPE_QUAL  */
 #line 841 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3552 "c-p85593.c"
+#line 3552 "c-p7982.c"
     break;
 
   case 129: /* declspecs_nosc_nots_nosa_ea: declspecs_nosc_nots_nosa_noea attributes  */
 #line 847 "c-parse.y"
                 { (yyval.ttype) = tree_cons ((yyvsp[0].ttype), NULL_TREE, (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 3559 "c-p85593.c"
+#line 3559 "c-p7982.c"
     break;
 
   case 130: /* declspecs_nosc_nots_sa_noea: declspecs_nosc_nots_sa_noea TYPE_QUAL  */
 #line 853 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3566 "c-p85593.c"
+#line 3566 "c-p7982.c"
     break;
 
   case 131: /* declspecs_nosc_nots_sa_noea: declspecs_nosc_nots_sa_ea TYPE_QUAL  */
 #line 856 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3573 "c-p85593.c"
+#line 3573 "c-p7982.c"
     break;
 
   case 132: /* declspecs_nosc_nots_sa_ea: attributes  */
 #line 862 "c-parse.y"
                 { (yyval.ttype) = tree_cons ((yyvsp[0].ttype), NULL_TREE, NULL_TREE);
 		  TREE_STATIC ((yyval.ttype)) = 0; }
-#line 3580 "c-p85593.c"
+#line 3580 "c-p7982.c"
     break;
 
   case 133: /* declspecs_nosc_nots_sa_ea: declspecs_nosc_nots_sa_noea attributes  */
 #line 865 "c-parse.y"
                 { (yyval.ttype) = tree_cons ((yyvsp[0].ttype), NULL_TREE, (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 3587 "c-p85593.c"
+#line 3587 "c-p7982.c"
     break;
 
   case 134: /* declspecs_nosc_ts_nosa_noea: typespec_nonattr  */
 #line 871 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), NULL_TREE);
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3594 "c-p85593.c"
+#line 3594 "c-p7982.c"
     break;
 
   case 135: /* declspecs_nosc_ts_nosa_noea: declspecs_nosc_ts_nosa_noea TYPE_QUAL  */
 #line 874 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3601 "c-p85593.c"
+#line 3601 "c-p7982.c"
     break;
 
   case 136: /* declspecs_nosc_ts_nosa_noea: declspecs_nosc_ts_nosa_ea TYPE_QUAL  */
 #line 877 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3608 "c-p85593.c"
+#line 3608 "c-p7982.c"
     break;
 
   case 137: /* declspecs_nosc_ts_nosa_noea: declspecs_nosc_ts_nosa_noea typespec_reserved_nonattr  */
 #line 880 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3615 "c-p85593.c"
+#line 3615 "c-p7982.c"
     break;
 
   case 138: /* declspecs_nosc_ts_nosa_noea: declspecs_nosc_ts_nosa_ea typespec_reserved_nonattr  */
 #line 883 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3622 "c-p85593.c"
+#line 3622 "c-p7982.c"
     break;
 
   case 139: /* declspecs_nosc_ts_nosa_noea: declspecs_nosc_nots_nosa_noea typespec_nonattr  */
 #line 886 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3629 "c-p85593.c"
+#line 3629 "c-p7982.c"
     break;
 
   case 140: /* declspecs_nosc_ts_nosa_noea: declspecs_nosc_nots_nosa_ea typespec_nonattr  */
 #line 889 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3636 "c-p85593.c"
+#line 3636 "c-p7982.c"
     break;
 
   case 141: /* declspecs_nosc_ts_nosa_ea: typespec_attr  */
 #line 895 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), NULL_TREE);
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3643 "c-p85593.c"
+#line 3643 "c-p7982.c"
     break;
 
   case 142: /* declspecs_nosc_ts_nosa_ea: declspecs_nosc_ts_nosa_noea attributes  */
 #line 898 "c-parse.y"
                 { (yyval.ttype) = tree_cons ((yyvsp[0].ttype), NULL_TREE, (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 3650 "c-p85593.c"
+#line 3650 "c-p7982.c"
     break;
 
   case 143: /* declspecs_nosc_ts_nosa_ea: declspecs_nosc_ts_nosa_noea typespec_reserved_attr  */
 #line 901 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3657 "c-p85593.c"
+#line 3657 "c-p7982.c"
     break;
 
   case 144: /* declspecs_nosc_ts_nosa_ea: declspecs_nosc_ts_nosa_ea typespec_reserved_attr  */
 #line 904 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3664 "c-p85593.c"
+#line 3664 "c-p7982.c"
     break;
 
   case 145: /* declspecs_nosc_ts_nosa_ea: declspecs_nosc_nots_nosa_noea typespec_attr  */
 #line 907 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3671 "c-p85593.c"
+#line 3671 "c-p7982.c"
     break;
 
   case 146: /* declspecs_nosc_ts_nosa_ea: declspecs_nosc_nots_nosa_ea typespec_attr  */
 #line 910 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3678 "c-p85593.c"
+#line 3678 "c-p7982.c"
     break;
 
   case 147: /* declspecs_nosc_ts_sa_noea: declspecs_nosc_ts_sa_noea TYPE_QUAL  */
 #line 916 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3685 "c-p85593.c"
+#line 3685 "c-p7982.c"
     break;
 
   case 148: /* declspecs_nosc_ts_sa_noea: declspecs_nosc_ts_sa_ea TYPE_QUAL  */
 #line 919 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3692 "c-p85593.c"
+#line 3692 "c-p7982.c"
     break;
 
   case 149: /* declspecs_nosc_ts_sa_noea: declspecs_nosc_ts_sa_noea typespec_reserved_nonattr  */
 #line 922 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3699 "c-p85593.c"
+#line 3699 "c-p7982.c"
     break;
 
   case 150: /* declspecs_nosc_ts_sa_noea: declspecs_nosc_ts_sa_ea typespec_reserved_nonattr  */
 #line 925 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3706 "c-p85593.c"
+#line 3706 "c-p7982.c"
     break;
 
   case 151: /* declspecs_nosc_ts_sa_noea: declspecs_nosc_nots_sa_noea typespec_nonattr  */
 #line 928 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3713 "c-p85593.c"
+#line 3713 "c-p7982.c"
     break;
 
   case 152: /* declspecs_nosc_ts_sa_noea: declspecs_nosc_nots_sa_ea typespec_nonattr  */
 #line 931 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3720 "c-p85593.c"
+#line 3720 "c-p7982.c"
     break;
 
   case 153: /* declspecs_nosc_ts_sa_ea: declspecs_nosc_ts_sa_noea attributes  */
 #line 937 "c-parse.y"
                 { (yyval.ttype) = tree_cons ((yyvsp[0].ttype), NULL_TREE, (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 3727 "c-p85593.c"
+#line 3727 "c-p7982.c"
     break;
 
   case 154: /* declspecs_nosc_ts_sa_ea: declspecs_nosc_ts_sa_noea typespec_reserved_attr  */
 #line 940 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3734 "c-p85593.c"
+#line 3734 "c-p7982.c"
     break;
 
   case 155: /* declspecs_nosc_ts_sa_ea: declspecs_nosc_ts_sa_ea typespec_reserved_attr  */
 #line 943 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3741 "c-p85593.c"
+#line 3741 "c-p7982.c"
     break;
 
   case 156: /* declspecs_nosc_ts_sa_ea: declspecs_nosc_nots_sa_noea typespec_attr  */
 #line 946 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3748 "c-p85593.c"
+#line 3748 "c-p7982.c"
     break;
 
   case 157: /* declspecs_nosc_ts_sa_ea: declspecs_nosc_nots_sa_ea typespec_attr  */
 #line 949 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3755 "c-p85593.c"
+#line 3755 "c-p7982.c"
     break;
 
   case 158: /* declspecs_sc_nots_nosa_noea: scspec  */
 #line 955 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), NULL_TREE);
 		  TREE_STATIC ((yyval.ttype)) = 0; }
-#line 3762 "c-p85593.c"
+#line 3762 "c-p7982.c"
     break;
 
   case 159: /* declspecs_sc_nots_nosa_noea: declspecs_sc_nots_nosa_noea TYPE_QUAL  */
 #line 958 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3769 "c-p85593.c"
+#line 3769 "c-p7982.c"
     break;
 
   case 160: /* declspecs_sc_nots_nosa_noea: declspecs_sc_nots_nosa_ea TYPE_QUAL  */
 #line 961 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3776 "c-p85593.c"
+#line 3776 "c-p7982.c"
     break;
 
   case 161: /* declspecs_sc_nots_nosa_noea: declspecs_nosc_nots_nosa_noea scspec  */
@@ -3782,7 +3782,7 @@ yyreduce:
 			     IDENTIFIER_POINTER ((yyvsp[0].ttype)));
 		  (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 3786 "c-p85593.c"
+#line 3786 "c-p7982.c"
     break;
 
   case 162: /* declspecs_sc_nots_nosa_noea: declspecs_nosc_nots_nosa_ea scspec  */
@@ -3792,7 +3792,7 @@ yyreduce:
 			     IDENTIFIER_POINTER ((yyvsp[0].ttype)));
 		  (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 3796 "c-p85593.c"
+#line 3796 "c-p7982.c"
     break;
 
   case 163: /* declspecs_sc_nots_nosa_noea: declspecs_sc_nots_nosa_noea scspec  */
@@ -3802,7 +3802,7 @@ yyreduce:
 			     IDENTIFIER_POINTER ((yyvsp[0].ttype)));
 		  (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 3806 "c-p85593.c"
+#line 3806 "c-p7982.c"
     break;
 
   case 164: /* declspecs_sc_nots_nosa_noea: declspecs_sc_nots_nosa_ea scspec  */
@@ -3812,28 +3812,28 @@ yyreduce:
 			     IDENTIFIER_POINTER ((yyvsp[0].ttype)));
 		  (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 3816 "c-p85593.c"
+#line 3816 "c-p7982.c"
     break;
 
   case 165: /* declspecs_sc_nots_nosa_ea: declspecs_sc_nots_nosa_noea attributes  */
 #line 991 "c-parse.y"
                 { (yyval.ttype) = tree_cons ((yyvsp[0].ttype), NULL_TREE, (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 3823 "c-p85593.c"
+#line 3823 "c-p7982.c"
     break;
 
   case 166: /* declspecs_sc_nots_sa_noea: declspecs_sc_nots_sa_noea TYPE_QUAL  */
 #line 997 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3830 "c-p85593.c"
+#line 3830 "c-p7982.c"
     break;
 
   case 167: /* declspecs_sc_nots_sa_noea: declspecs_sc_nots_sa_ea TYPE_QUAL  */
 #line 1000 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3837 "c-p85593.c"
+#line 3837 "c-p7982.c"
     break;
 
   case 168: /* declspecs_sc_nots_sa_noea: declspecs_nosc_nots_sa_noea scspec  */
@@ -3843,7 +3843,7 @@ yyreduce:
 			     IDENTIFIER_POINTER ((yyvsp[0].ttype)));
 		  (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 3847 "c-p85593.c"
+#line 3847 "c-p7982.c"
     break;
 
   case 169: /* declspecs_sc_nots_sa_noea: declspecs_nosc_nots_sa_ea scspec  */
@@ -3853,7 +3853,7 @@ yyreduce:
 			     IDENTIFIER_POINTER ((yyvsp[0].ttype)));
 		  (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 3857 "c-p85593.c"
+#line 3857 "c-p7982.c"
     break;
 
   case 170: /* declspecs_sc_nots_sa_noea: declspecs_sc_nots_sa_noea scspec  */
@@ -3863,7 +3863,7 @@ yyreduce:
 			     IDENTIFIER_POINTER ((yyvsp[0].ttype)));
 		  (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 3867 "c-p85593.c"
+#line 3867 "c-p7982.c"
     break;
 
   case 171: /* declspecs_sc_nots_sa_noea: declspecs_sc_nots_sa_ea scspec  */
@@ -3873,56 +3873,56 @@ yyreduce:
 			     IDENTIFIER_POINTER ((yyvsp[0].ttype)));
 		  (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 3877 "c-p85593.c"
+#line 3877 "c-p7982.c"
     break;
 
   case 172: /* declspecs_sc_nots_sa_ea: declspecs_sc_nots_sa_noea attributes  */
 #line 1030 "c-parse.y"
                 { (yyval.ttype) = tree_cons ((yyvsp[0].ttype), NULL_TREE, (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 3884 "c-p85593.c"
+#line 3884 "c-p7982.c"
     break;
 
   case 173: /* declspecs_sc_ts_nosa_noea: declspecs_sc_ts_nosa_noea TYPE_QUAL  */
 #line 1036 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3891 "c-p85593.c"
+#line 3891 "c-p7982.c"
     break;
 
   case 174: /* declspecs_sc_ts_nosa_noea: declspecs_sc_ts_nosa_ea TYPE_QUAL  */
 #line 1039 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3898 "c-p85593.c"
+#line 3898 "c-p7982.c"
     break;
 
   case 175: /* declspecs_sc_ts_nosa_noea: declspecs_sc_ts_nosa_noea typespec_reserved_nonattr  */
 #line 1042 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3905 "c-p85593.c"
+#line 3905 "c-p7982.c"
     break;
 
   case 176: /* declspecs_sc_ts_nosa_noea: declspecs_sc_ts_nosa_ea typespec_reserved_nonattr  */
 #line 1045 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3912 "c-p85593.c"
+#line 3912 "c-p7982.c"
     break;
 
   case 177: /* declspecs_sc_ts_nosa_noea: declspecs_sc_nots_nosa_noea typespec_nonattr  */
 #line 1048 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3919 "c-p85593.c"
+#line 3919 "c-p7982.c"
     break;
 
   case 178: /* declspecs_sc_ts_nosa_noea: declspecs_sc_nots_nosa_ea typespec_nonattr  */
 #line 1051 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3926 "c-p85593.c"
+#line 3926 "c-p7982.c"
     break;
 
   case 179: /* declspecs_sc_ts_nosa_noea: declspecs_nosc_ts_nosa_noea scspec  */
@@ -3932,7 +3932,7 @@ yyreduce:
 			     IDENTIFIER_POINTER ((yyvsp[0].ttype)));
 		  (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 3936 "c-p85593.c"
+#line 3936 "c-p7982.c"
     break;
 
   case 180: /* declspecs_sc_ts_nosa_noea: declspecs_nosc_ts_nosa_ea scspec  */
@@ -3942,7 +3942,7 @@ yyreduce:
 			     IDENTIFIER_POINTER ((yyvsp[0].ttype)));
 		  (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 3946 "c-p85593.c"
+#line 3946 "c-p7982.c"
     break;
 
   case 181: /* declspecs_sc_ts_nosa_noea: declspecs_sc_ts_nosa_noea scspec  */
@@ -3952,7 +3952,7 @@ yyreduce:
 			     IDENTIFIER_POINTER ((yyvsp[0].ttype)));
 		  (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 3956 "c-p85593.c"
+#line 3956 "c-p7982.c"
     break;
 
   case 182: /* declspecs_sc_ts_nosa_noea: declspecs_sc_ts_nosa_ea scspec  */
@@ -3962,84 +3962,84 @@ yyreduce:
 			     IDENTIFIER_POINTER ((yyvsp[0].ttype)));
 		  (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 3966 "c-p85593.c"
+#line 3966 "c-p7982.c"
     break;
 
   case 183: /* declspecs_sc_ts_nosa_ea: declspecs_sc_ts_nosa_noea attributes  */
 #line 1081 "c-parse.y"
                 { (yyval.ttype) = tree_cons ((yyvsp[0].ttype), NULL_TREE, (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 3973 "c-p85593.c"
+#line 3973 "c-p7982.c"
     break;
 
   case 184: /* declspecs_sc_ts_nosa_ea: declspecs_sc_ts_nosa_noea typespec_reserved_attr  */
 #line 1084 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3980 "c-p85593.c"
+#line 3980 "c-p7982.c"
     break;
 
   case 185: /* declspecs_sc_ts_nosa_ea: declspecs_sc_ts_nosa_ea typespec_reserved_attr  */
 #line 1087 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3987 "c-p85593.c"
+#line 3987 "c-p7982.c"
     break;
 
   case 186: /* declspecs_sc_ts_nosa_ea: declspecs_sc_nots_nosa_noea typespec_attr  */
 #line 1090 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 3994 "c-p85593.c"
+#line 3994 "c-p7982.c"
     break;
 
   case 187: /* declspecs_sc_ts_nosa_ea: declspecs_sc_nots_nosa_ea typespec_attr  */
 #line 1093 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 4001 "c-p85593.c"
+#line 4001 "c-p7982.c"
     break;
 
   case 188: /* declspecs_sc_ts_sa_noea: declspecs_sc_ts_sa_noea TYPE_QUAL  */
 #line 1099 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 4008 "c-p85593.c"
+#line 4008 "c-p7982.c"
     break;
 
   case 189: /* declspecs_sc_ts_sa_noea: declspecs_sc_ts_sa_ea TYPE_QUAL  */
 #line 1102 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 4015 "c-p85593.c"
+#line 4015 "c-p7982.c"
     break;
 
   case 190: /* declspecs_sc_ts_sa_noea: declspecs_sc_ts_sa_noea typespec_reserved_nonattr  */
 #line 1105 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 4022 "c-p85593.c"
+#line 4022 "c-p7982.c"
     break;
 
   case 191: /* declspecs_sc_ts_sa_noea: declspecs_sc_ts_sa_ea typespec_reserved_nonattr  */
 #line 1108 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 4029 "c-p85593.c"
+#line 4029 "c-p7982.c"
     break;
 
   case 192: /* declspecs_sc_ts_sa_noea: declspecs_sc_nots_sa_noea typespec_nonattr  */
 #line 1111 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 4036 "c-p85593.c"
+#line 4036 "c-p7982.c"
     break;
 
   case 193: /* declspecs_sc_ts_sa_noea: declspecs_sc_nots_sa_ea typespec_nonattr  */
 #line 1114 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 4043 "c-p85593.c"
+#line 4043 "c-p7982.c"
     break;
 
   case 194: /* declspecs_sc_ts_sa_noea: declspecs_nosc_ts_sa_noea scspec  */
@@ -4049,7 +4049,7 @@ yyreduce:
 			     IDENTIFIER_POINTER ((yyvsp[0].ttype)));
 		  (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 4053 "c-p85593.c"
+#line 4053 "c-p7982.c"
     break;
 
   case 195: /* declspecs_sc_ts_sa_noea: declspecs_nosc_ts_sa_ea scspec  */
@@ -4059,7 +4059,7 @@ yyreduce:
 			     IDENTIFIER_POINTER ((yyvsp[0].ttype)));
 		  (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 4063 "c-p85593.c"
+#line 4063 "c-p7982.c"
     break;
 
   case 196: /* declspecs_sc_ts_sa_noea: declspecs_sc_ts_sa_noea scspec  */
@@ -4069,7 +4069,7 @@ yyreduce:
 			     IDENTIFIER_POINTER ((yyvsp[0].ttype)));
 		  (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 4073 "c-p85593.c"
+#line 4073 "c-p7982.c"
     break;
 
   case 197: /* declspecs_sc_ts_sa_noea: declspecs_sc_ts_sa_ea scspec  */
@@ -4079,60 +4079,60 @@ yyreduce:
 			     IDENTIFIER_POINTER ((yyvsp[0].ttype)));
 		  (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 4083 "c-p85593.c"
+#line 4083 "c-p7982.c"
     break;
 
   case 198: /* declspecs_sc_ts_sa_ea: declspecs_sc_ts_sa_noea attributes  */
 #line 1144 "c-parse.y"
                 { (yyval.ttype) = tree_cons ((yyvsp[0].ttype), NULL_TREE, (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = TREE_STATIC ((yyvsp[-1].ttype)); }
-#line 4090 "c-p85593.c"
+#line 4090 "c-p7982.c"
     break;
 
   case 199: /* declspecs_sc_ts_sa_ea: declspecs_sc_ts_sa_noea typespec_reserved_attr  */
 #line 1147 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 4097 "c-p85593.c"
+#line 4097 "c-p7982.c"
     break;
 
   case 200: /* declspecs_sc_ts_sa_ea: declspecs_sc_ts_sa_ea typespec_reserved_attr  */
 #line 1150 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 4104 "c-p85593.c"
+#line 4104 "c-p7982.c"
     break;
 
   case 201: /* declspecs_sc_ts_sa_ea: declspecs_sc_nots_sa_noea typespec_attr  */
 #line 1153 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 4111 "c-p85593.c"
+#line 4111 "c-p7982.c"
     break;
 
   case 202: /* declspecs_sc_ts_sa_ea: declspecs_sc_nots_sa_ea typespec_attr  */
 #line 1156 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, (yyvsp[0].ttype), (yyvsp[-1].ttype));
 		  TREE_STATIC ((yyval.ttype)) = 1; }
-#line 4118 "c-p85593.c"
+#line 4118 "c-p7982.c"
     break;
 
   case 259: /* maybe_type_quals_attrs: %empty  */
 #line 1244 "c-parse.y"
                 { (yyval.ttype) = NULL_TREE; }
-#line 4124 "c-p85593.c"
+#line 4124 "c-p7982.c"
     break;
 
   case 260: /* maybe_type_quals_attrs: declspecs_nosc_nots  */
 #line 1246 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[0].ttype); }
-#line 4130 "c-p85593.c"
+#line 4130 "c-p7982.c"
     break;
 
   case 264: /* typespec_reserved_nonattr: TYPESPEC  */
 #line 1281 "c-parse.y"
                 { OBJC_NEED_RAW_IDENTIFIER (1);	}
-#line 4136 "c-p85593.c"
+#line 4136 "c-p7982.c"
     break;
 
   case 267: /* typespec_nonreserved_nonattr: TYPENAME  */
@@ -4140,25 +4140,25 @@ yyreduce:
                 { /* For a typedef name, record the meaning, not the name.
 		     In case of `foo foo, bar;'.  */
 		  (yyval.ttype) = lookup_name ((yyvsp[0].ttype)); }
-#line 4144 "c-p85593.c"
+#line 4144 "c-p7982.c"
     break;
 
   case 268: /* typespec_nonreserved_nonattr: TYPEOF '(' expr ')'  */
 #line 1295 "c-parse.y"
                 { (yyval.ttype) = TREE_TYPE ((yyvsp[-1].ttype)); }
-#line 4150 "c-p85593.c"
+#line 4150 "c-p7982.c"
     break;
 
   case 269: /* typespec_nonreserved_nonattr: TYPEOF '(' typename ')'  */
 #line 1297 "c-parse.y"
                 { (yyval.ttype) = groktypename ((yyvsp[-1].ttype)); }
-#line 4156 "c-p85593.c"
+#line 4156 "c-p7982.c"
     break;
 
   case 274: /* maybeasm: %empty  */
 #line 1314 "c-parse.y"
                 { (yyval.ttype) = NULL_TREE; }
-#line 4162 "c-p85593.c"
+#line 4162 "c-p7982.c"
     break;
 
   case 275: /* maybeasm: ASM_KEYWORD '(' string ')'  */
@@ -4166,7 +4166,7 @@ yyreduce:
                 { if (TREE_CHAIN ((yyvsp[-1].ttype))) (yyvsp[-1].ttype) = combine_strings ((yyvsp[-1].ttype));
 		  (yyval.ttype) = (yyvsp[-1].ttype);
 		}
-#line 4170 "c-p85593.c"
+#line 4170 "c-p7982.c"
     break;
 
   case 276: /* @15: %empty  */
@@ -4174,14 +4174,14 @@ yyreduce:
                 { (yyval.ttype) = start_decl ((yyvsp[-3].ttype), current_declspecs, 1,
 					  chainon ((yyvsp[-1].ttype), all_prefix_attributes));
 		  start_init ((yyval.ttype), (yyvsp[-2].ttype), global_bindings_p ()); }
-#line 4178 "c-p85593.c"
+#line 4178 "c-p7982.c"
     break;
 
   case 277: /* initdcl: declarator maybeasm maybe_attribute '=' @15 init  */
 #line 1328 "c-parse.y"
                 { finish_init ();
 		  finish_decl ((yyvsp[-1].ttype), (yyvsp[0].ttype), (yyvsp[-4].ttype)); }
-#line 4185 "c-p85593.c"
+#line 4185 "c-p7982.c"
     break;
 
   case 278: /* initdcl: declarator maybeasm maybe_attribute  */
@@ -4190,7 +4190,7 @@ yyreduce:
 				       chainon ((yyvsp[0].ttype), all_prefix_attributes));
 		  finish_decl (d, NULL_TREE, (yyvsp[-1].ttype)); 
                 }
-#line 4194 "c-p85593.c"
+#line 4194 "c-p7982.c"
     break;
 
   case 279: /* @16: %empty  */
@@ -4198,14 +4198,14 @@ yyreduce:
                 { (yyval.ttype) = start_decl ((yyvsp[-3].ttype), current_declspecs, 1,
 					  chainon ((yyvsp[-1].ttype), all_prefix_attributes));
 		  start_init ((yyval.ttype), (yyvsp[-2].ttype), global_bindings_p ()); }
-#line 4202 "c-p85593.c"
+#line 4202 "c-p7982.c"
     break;
 
   case 280: /* notype_initdcl: notype_declarator maybeasm maybe_attribute '=' @16 init  */
 #line 1344 "c-parse.y"
                 { finish_init ();
 		  finish_decl ((yyvsp[-1].ttype), (yyvsp[0].ttype), (yyvsp[-4].ttype)); }
-#line 4209 "c-p85593.c"
+#line 4209 "c-p7982.c"
     break;
 
   case 281: /* notype_initdcl: notype_declarator maybeasm maybe_attribute  */
@@ -4213,118 +4213,118 @@ yyreduce:
                 { tree d = start_decl ((yyvsp[-2].ttype), current_declspecs, 0,
 				       chainon ((yyvsp[0].ttype), all_prefix_attributes));
 		  finish_decl (d, NULL_TREE, (yyvsp[-1].ttype)); }
-#line 4217 "c-p85593.c"
+#line 4217 "c-p7982.c"
     break;
 
   case 282: /* maybe_attribute: %empty  */
 #line 1355 "c-parse.y"
                 { (yyval.ttype) = NULL_TREE; }
-#line 4223 "c-p85593.c"
+#line 4223 "c-p7982.c"
     break;
 
   case 283: /* maybe_attribute: attributes  */
 #line 1357 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[0].ttype); }
-#line 4229 "c-p85593.c"
+#line 4229 "c-p7982.c"
     break;
 
   case 284: /* attributes: attribute  */
 #line 1362 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[0].ttype); }
-#line 4235 "c-p85593.c"
+#line 4235 "c-p7982.c"
     break;
 
   case 285: /* attributes: attributes attribute  */
 #line 1364 "c-parse.y"
                 { (yyval.ttype) = chainon ((yyvsp[-1].ttype), (yyvsp[0].ttype)); }
-#line 4241 "c-p85593.c"
+#line 4241 "c-p7982.c"
     break;
 
   case 286: /* attribute: ATTRIBUTE '(' '(' attribute_list ')' ')'  */
 #line 1369 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[-2].ttype); }
-#line 4247 "c-p85593.c"
+#line 4247 "c-p7982.c"
     break;
 
   case 287: /* attribute_list: attrib  */
 #line 1374 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[0].ttype); }
-#line 4253 "c-p85593.c"
+#line 4253 "c-p7982.c"
     break;
 
   case 288: /* attribute_list: attribute_list ',' attrib  */
 #line 1376 "c-parse.y"
                 { (yyval.ttype) = chainon ((yyvsp[-2].ttype), (yyvsp[0].ttype)); }
-#line 4259 "c-p85593.c"
+#line 4259 "c-p7982.c"
     break;
 
   case 289: /* attrib: %empty  */
 #line 1381 "c-parse.y"
                 { (yyval.ttype) = NULL_TREE; }
-#line 4265 "c-p85593.c"
+#line 4265 "c-p7982.c"
     break;
 
   case 290: /* attrib: any_word  */
 #line 1383 "c-parse.y"
                 { (yyval.ttype) = build_tree_list ((yyvsp[0].ttype), NULL_TREE); }
-#line 4271 "c-p85593.c"
+#line 4271 "c-p7982.c"
     break;
 
   case 291: /* attrib: any_word '(' IDENTIFIER ')'  */
 #line 1385 "c-parse.y"
                 { (yyval.ttype) = build_tree_list ((yyvsp[-3].ttype), build_tree_list (NULL_TREE, (yyvsp[-1].ttype))); }
-#line 4277 "c-p85593.c"
+#line 4277 "c-p7982.c"
     break;
 
   case 292: /* attrib: any_word '(' IDENTIFIER ',' nonnull_exprlist ')'  */
 #line 1387 "c-parse.y"
                 { (yyval.ttype) = build_tree_list ((yyvsp[-5].ttype), tree_cons (NULL_TREE, (yyvsp[-3].ttype), (yyvsp[-1].ttype))); }
-#line 4283 "c-p85593.c"
+#line 4283 "c-p7982.c"
     break;
 
   case 293: /* attrib: any_word '(' exprlist ')'  */
 #line 1389 "c-parse.y"
                 { (yyval.ttype) = build_tree_list ((yyvsp[-3].ttype), (yyvsp[-1].ttype)); }
-#line 4289 "c-p85593.c"
+#line 4289 "c-p7982.c"
     break;
 
   case 301: /* $@17: %empty  */
 #line 1412 "c-parse.y"
                 { really_start_incremental_init (NULL_TREE); }
-#line 4295 "c-p85593.c"
+#line 4295 "c-p7982.c"
     break;
 
   case 302: /* init: '{' $@17 initlist_maybe_comma '}'  */
 #line 1414 "c-parse.y"
                 { (yyval.ttype) = pop_init_level (0); }
-#line 4301 "c-p85593.c"
+#line 4301 "c-p7982.c"
     break;
 
   case 303: /* init: error  */
 #line 1416 "c-parse.y"
                 { (yyval.ttype) = error_mark_node; }
-#line 4307 "c-p85593.c"
+#line 4307 "c-p7982.c"
     break;
 
   case 304: /* initlist_maybe_comma: %empty  */
 #line 1422 "c-parse.y"
                 { if (pedantic)
 		    pedwarn ("ISO C forbids empty initializer braces"); }
-#line 4314 "c-p85593.c"
+#line 4314 "c-p7982.c"
     break;
 
   case 308: /* initelt: designator_list '=' initval  */
 #line 1436 "c-parse.y"
                 { if (pedantic && ! flag_isoc99)
 		    pedwarn ("ISO C89 forbids specifying subobject to initialize"); }
-#line 4321 "c-p85593.c"
+#line 4321 "c-p7982.c"
     break;
 
   case 309: /* initelt: designator initval  */
 #line 1439 "c-parse.y"
                 { if (pedantic)
 		    pedwarn ("obsolete use of designated initializer without `='"); }
-#line 4328 "c-p85593.c"
+#line 4328 "c-p7982.c"
     break;
 
   case 310: /* $@18: %empty  */
@@ -4332,31 +4332,31 @@ yyreduce:
                 { set_init_label ((yyvsp[-1].ttype));
 		  if (pedantic)
 		    pedwarn ("obsolete use of designated initializer with `:'"); }
-#line 4336 "c-p85593.c"
+#line 4336 "c-p7982.c"
     break;
 
   case 313: /* $@19: %empty  */
 #line 1451 "c-parse.y"
                 { push_init_level (0); }
-#line 4342 "c-p85593.c"
+#line 4342 "c-p7982.c"
     break;
 
   case 314: /* initval: '{' $@19 initlist_maybe_comma '}'  */
 #line 1453 "c-parse.y"
                 { process_init_element (pop_init_level (0)); }
-#line 4348 "c-p85593.c"
+#line 4348 "c-p7982.c"
     break;
 
   case 315: /* initval: expr_no_commas  */
 #line 1455 "c-parse.y"
                 { process_init_element ((yyvsp[0].ttype)); }
-#line 4354 "c-p85593.c"
+#line 4354 "c-p7982.c"
     break;
 
   case 319: /* designator: '.' identifier  */
 #line 1466 "c-parse.y"
                 { set_init_label ((yyvsp[0].ttype)); }
-#line 4360 "c-p85593.c"
+#line 4360 "c-p7982.c"
     break;
 
   case 320: /* designator: '[' expr_no_commas ELLIPSIS expr_no_commas ']'  */
@@ -4364,13 +4364,13 @@ yyreduce:
                 { set_init_index ((yyvsp[-3].ttype), (yyvsp[-1].ttype));
 		  if (pedantic)
 		    pedwarn ("ISO C forbids specifying range of elements to initialize"); }
-#line 4368 "c-p85593.c"
+#line 4368 "c-p7982.c"
     break;
 
   case 321: /* designator: '[' expr_no_commas ']'  */
 #line 1475 "c-parse.y"
                 { set_init_index ((yyvsp[-1].ttype), NULL_TREE); }
-#line 4374 "c-p85593.c"
+#line 4374 "c-p7982.c"
     break;
 
   case 322: /* $@20: %empty  */
@@ -4386,13 +4386,13 @@ yyreduce:
 		      YYERROR1;
 		    }
 		}
-#line 4390 "c-p85593.c"
+#line 4390 "c-p7982.c"
     break;
 
   case 323: /* $@21: %empty  */
 #line 1492 "c-parse.y"
                 { store_parm_decls (); }
-#line 4396 "c-p85593.c"
+#line 4396 "c-p7982.c"
     break;
 
   case 324: /* nested_function: declarator $@20 old_style_parm_decls $@21 save_filename save_lineno compstmt  */
@@ -4403,7 +4403,7 @@ yyreduce:
 		  finish_function (1, 1);
 		  pop_function_context (); 
 		  add_decl_stmt (decl); }
-#line 4407 "c-p85593.c"
+#line 4407 "c-p7982.c"
     break;
 
   case 325: /* $@22: %empty  */
@@ -4419,13 +4419,13 @@ yyreduce:
 		      YYERROR1;
 		    }
 		}
-#line 4423 "c-p85593.c"
+#line 4423 "c-p7982.c"
     break;
 
   case 326: /* $@23: %empty  */
 #line 1522 "c-parse.y"
                 { store_parm_decls (); }
-#line 4429 "c-p85593.c"
+#line 4429 "c-p7982.c"
     break;
 
   case 327: /* notype_nested_function: notype_declarator $@22 old_style_parm_decls $@23 save_filename save_lineno compstmt  */
@@ -4436,133 +4436,133 @@ yyreduce:
 		  finish_function (1, 1);
 		  pop_function_context (); 
 		  add_decl_stmt (decl); }
-#line 4440 "c-p85593.c"
+#line 4440 "c-p7982.c"
     break;
 
   case 330: /* after_type_declarator: '(' maybe_attribute after_type_declarator ')'  */
 #line 1550 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[-2].ttype) ? tree_cons ((yyvsp[-2].ttype), (yyvsp[-1].ttype), NULL_TREE) : (yyvsp[-1].ttype); }
-#line 4446 "c-p85593.c"
+#line 4446 "c-p7982.c"
     break;
 
   case 331: /* after_type_declarator: after_type_declarator '(' parmlist_or_identifiers  */
 #line 1552 "c-parse.y"
                 { (yyval.ttype) = build_nt (CALL_EXPR, (yyvsp[-2].ttype), (yyvsp[0].ttype), NULL_TREE); }
-#line 4452 "c-p85593.c"
+#line 4452 "c-p7982.c"
     break;
 
   case 332: /* after_type_declarator: after_type_declarator array_declarator  */
 #line 1557 "c-parse.y"
                 { (yyval.ttype) = set_array_declarator_type ((yyvsp[0].ttype), (yyvsp[-1].ttype), 0); }
-#line 4458 "c-p85593.c"
+#line 4458 "c-p7982.c"
     break;
 
   case 333: /* after_type_declarator: '*' maybe_type_quals_attrs after_type_declarator  */
 #line 1559 "c-parse.y"
                 { (yyval.ttype) = make_pointer_declarator ((yyvsp[-1].ttype), (yyvsp[0].ttype)); }
-#line 4464 "c-p85593.c"
+#line 4464 "c-p7982.c"
     break;
 
   case 337: /* parm_declarator_starttypename: parm_declarator_starttypename '(' parmlist_or_identifiers  */
 #line 1574 "c-parse.y"
                 { (yyval.ttype) = build_nt (CALL_EXPR, (yyvsp[-2].ttype), (yyvsp[0].ttype), NULL_TREE); }
-#line 4470 "c-p85593.c"
+#line 4470 "c-p7982.c"
     break;
 
   case 338: /* parm_declarator_starttypename: parm_declarator_starttypename array_declarator  */
 #line 1579 "c-parse.y"
                 { (yyval.ttype) = set_array_declarator_type ((yyvsp[0].ttype), (yyvsp[-1].ttype), 0); }
-#line 4476 "c-p85593.c"
+#line 4476 "c-p7982.c"
     break;
 
   case 340: /* parm_declarator_nostarttypename: parm_declarator_nostarttypename '(' parmlist_or_identifiers  */
 #line 1585 "c-parse.y"
                 { (yyval.ttype) = build_nt (CALL_EXPR, (yyvsp[-2].ttype), (yyvsp[0].ttype), NULL_TREE); }
-#line 4482 "c-p85593.c"
+#line 4482 "c-p7982.c"
     break;
 
   case 341: /* parm_declarator_nostarttypename: parm_declarator_nostarttypename array_declarator  */
 #line 1590 "c-parse.y"
                 { (yyval.ttype) = set_array_declarator_type ((yyvsp[0].ttype), (yyvsp[-1].ttype), 0); }
-#line 4488 "c-p85593.c"
+#line 4488 "c-p7982.c"
     break;
 
   case 342: /* parm_declarator_nostarttypename: '*' maybe_type_quals_attrs parm_declarator_starttypename  */
 #line 1592 "c-parse.y"
                 { (yyval.ttype) = make_pointer_declarator ((yyvsp[-1].ttype), (yyvsp[0].ttype)); }
-#line 4494 "c-p85593.c"
+#line 4494 "c-p7982.c"
     break;
 
   case 343: /* parm_declarator_nostarttypename: '*' maybe_type_quals_attrs parm_declarator_nostarttypename  */
 #line 1594 "c-parse.y"
                 { (yyval.ttype) = make_pointer_declarator ((yyvsp[-1].ttype), (yyvsp[0].ttype)); }
-#line 4500 "c-p85593.c"
+#line 4500 "c-p7982.c"
     break;
 
   case 344: /* parm_declarator_nostarttypename: '(' maybe_attribute parm_declarator_nostarttypename ')'  */
 #line 1596 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[-2].ttype) ? tree_cons ((yyvsp[-2].ttype), (yyvsp[-1].ttype), NULL_TREE) : (yyvsp[-1].ttype); }
-#line 4506 "c-p85593.c"
+#line 4506 "c-p7982.c"
     break;
 
   case 345: /* notype_declarator: notype_declarator '(' parmlist_or_identifiers  */
 #line 1604 "c-parse.y"
                 { (yyval.ttype) = build_nt (CALL_EXPR, (yyvsp[-2].ttype), (yyvsp[0].ttype), NULL_TREE); }
-#line 4512 "c-p85593.c"
+#line 4512 "c-p7982.c"
     break;
 
   case 346: /* notype_declarator: '(' maybe_attribute notype_declarator ')'  */
 #line 1609 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[-2].ttype) ? tree_cons ((yyvsp[-2].ttype), (yyvsp[-1].ttype), NULL_TREE) : (yyvsp[-1].ttype); }
-#line 4518 "c-p85593.c"
+#line 4518 "c-p7982.c"
     break;
 
   case 347: /* notype_declarator: '*' maybe_type_quals_attrs notype_declarator  */
 #line 1611 "c-parse.y"
                 { (yyval.ttype) = make_pointer_declarator ((yyvsp[-1].ttype), (yyvsp[0].ttype)); }
-#line 4524 "c-p85593.c"
+#line 4524 "c-p7982.c"
     break;
 
   case 348: /* notype_declarator: notype_declarator array_declarator  */
 #line 1613 "c-parse.y"
                 { (yyval.ttype) = set_array_declarator_type ((yyvsp[0].ttype), (yyvsp[-1].ttype), 0); }
-#line 4530 "c-p85593.c"
+#line 4530 "c-p7982.c"
     break;
 
   case 350: /* struct_head: STRUCT  */
 #line 1619 "c-parse.y"
                 { (yyval.ttype) = NULL_TREE; }
-#line 4536 "c-p85593.c"
+#line 4536 "c-p7982.c"
     break;
 
   case 351: /* struct_head: STRUCT attributes  */
 #line 1621 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[0].ttype); }
-#line 4542 "c-p85593.c"
+#line 4542 "c-p7982.c"
     break;
 
   case 352: /* union_head: UNION  */
 #line 1626 "c-parse.y"
                 { (yyval.ttype) = NULL_TREE; }
-#line 4548 "c-p85593.c"
+#line 4548 "c-p7982.c"
     break;
 
   case 353: /* union_head: UNION attributes  */
 #line 1628 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[0].ttype); }
-#line 4554 "c-p85593.c"
+#line 4554 "c-p7982.c"
     break;
 
   case 354: /* enum_head: ENUM  */
 #line 1633 "c-parse.y"
                 { (yyval.ttype) = NULL_TREE; }
-#line 4560 "c-p85593.c"
+#line 4560 "c-p7982.c"
     break;
 
   case 355: /* enum_head: ENUM attributes  */
 #line 1635 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[0].ttype); }
-#line 4566 "c-p85593.c"
+#line 4566 "c-p7982.c"
     break;
 
   case 356: /* @24: %empty  */
@@ -4570,13 +4570,13 @@ yyreduce:
                 { (yyval.ttype) = start_struct (RECORD_TYPE, (yyvsp[-1].ttype));
 		  /* Start scope of tag before parsing components.  */
 		}
-#line 4574 "c-p85593.c"
+#line 4574 "c-p7982.c"
     break;
 
   case 357: /* structsp_attr: struct_head identifier '{' @24 component_decl_list '}' maybe_attribute  */
 #line 1650 "c-parse.y"
                 { (yyval.ttype) = finish_struct ((yyvsp[-3].ttype), (yyvsp[-2].ttype), chainon ((yyvsp[-6].ttype), (yyvsp[0].ttype))); }
-#line 4580 "c-p85593.c"
+#line 4580 "c-p7982.c"
     break;
 
   case 358: /* structsp_attr: struct_head '{' component_decl_list '}' maybe_attribute  */
@@ -4584,19 +4584,19 @@ yyreduce:
                 { (yyval.ttype) = finish_struct (start_struct (RECORD_TYPE, NULL_TREE),
 				      (yyvsp[-2].ttype), chainon ((yyvsp[-4].ttype), (yyvsp[0].ttype)));
 		}
-#line 4588 "c-p85593.c"
+#line 4588 "c-p7982.c"
     break;
 
   case 359: /* @25: %empty  */
 #line 1656 "c-parse.y"
                 { (yyval.ttype) = start_struct (UNION_TYPE, (yyvsp[-1].ttype)); }
-#line 4594 "c-p85593.c"
+#line 4594 "c-p7982.c"
     break;
 
   case 360: /* structsp_attr: union_head identifier '{' @25 component_decl_list '}' maybe_attribute  */
 #line 1658 "c-parse.y"
                 { (yyval.ttype) = finish_struct ((yyvsp[-3].ttype), (yyvsp[-2].ttype), chainon ((yyvsp[-6].ttype), (yyvsp[0].ttype))); }
-#line 4600 "c-p85593.c"
+#line 4600 "c-p7982.c"
     break;
 
   case 361: /* structsp_attr: union_head '{' component_decl_list '}' maybe_attribute  */
@@ -4604,45 +4604,45 @@ yyreduce:
                 { (yyval.ttype) = finish_struct (start_struct (UNION_TYPE, NULL_TREE),
 				      (yyvsp[-2].ttype), chainon ((yyvsp[-4].ttype), (yyvsp[0].ttype)));
 		}
-#line 4608 "c-p85593.c"
+#line 4608 "c-p7982.c"
     break;
 
   case 362: /* @26: %empty  */
 #line 1664 "c-parse.y"
                 { (yyval.ttype) = start_enum ((yyvsp[-1].ttype)); }
-#line 4614 "c-p85593.c"
+#line 4614 "c-p7982.c"
     break;
 
   case 363: /* structsp_attr: enum_head identifier '{' @26 enumlist maybecomma_warn '}' maybe_attribute  */
 #line 1666 "c-parse.y"
                 { (yyval.ttype) = finish_enum ((yyvsp[-4].ttype), nreverse ((yyvsp[-3].ttype)),
 				    chainon ((yyvsp[-7].ttype), (yyvsp[0].ttype))); }
-#line 4621 "c-p85593.c"
+#line 4621 "c-p7982.c"
     break;
 
   case 364: /* @27: %empty  */
 #line 1669 "c-parse.y"
                 { (yyval.ttype) = start_enum (NULL_TREE); }
-#line 4627 "c-p85593.c"
+#line 4627 "c-p7982.c"
     break;
 
   case 365: /* structsp_attr: enum_head '{' @27 enumlist maybecomma_warn '}' maybe_attribute  */
 #line 1671 "c-parse.y"
                 { (yyval.ttype) = finish_enum ((yyvsp[-4].ttype), nreverse ((yyvsp[-3].ttype)),
 				    chainon ((yyvsp[-6].ttype), (yyvsp[0].ttype))); }
-#line 4634 "c-p85593.c"
+#line 4634 "c-p7982.c"
     break;
 
   case 366: /* structsp_nonattr: struct_head identifier  */
 #line 1677 "c-parse.y"
                 { (yyval.ttype) = xref_tag (RECORD_TYPE, (yyvsp[0].ttype)); }
-#line 4640 "c-p85593.c"
+#line 4640 "c-p7982.c"
     break;
 
   case 367: /* structsp_nonattr: union_head identifier  */
 #line 1679 "c-parse.y"
                 { (yyval.ttype) = xref_tag (UNION_TYPE, (yyvsp[0].ttype)); }
-#line 4646 "c-p85593.c"
+#line 4646 "c-p7982.c"
     break;
 
   case 368: /* structsp_nonattr: enum_head identifier  */
@@ -4652,53 +4652,53 @@ yyreduce:
 		     only if already defined.  */
 		  if (pedantic && !COMPLETE_TYPE_P ((yyval.ttype)))
 		    pedwarn ("ISO C forbids forward references to `enum' types"); }
-#line 4656 "c-p85593.c"
+#line 4656 "c-p7982.c"
     break;
 
   case 372: /* maybecomma_warn: ','  */
 #line 1696 "c-parse.y"
                 { if (pedantic && ! flag_isoc99)
 		    pedwarn ("comma at end of enumerator list"); }
-#line 4663 "c-p85593.c"
+#line 4663 "c-p7982.c"
     break;
 
   case 373: /* component_decl_list: component_decl_list2  */
 #line 1702 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[0].ttype); }
-#line 4669 "c-p85593.c"
+#line 4669 "c-p7982.c"
     break;
 
   case 374: /* component_decl_list: component_decl_list2 component_decl  */
 #line 1704 "c-parse.y"
                 { (yyval.ttype) = chainon ((yyvsp[-1].ttype), (yyvsp[0].ttype));
 		  pedwarn ("no semicolon at end of struct or union"); }
-#line 4676 "c-p85593.c"
+#line 4676 "c-p7982.c"
     break;
 
   case 375: /* component_decl_list2: %empty  */
 #line 1709 "c-parse.y"
                 { (yyval.ttype) = NULL_TREE; }
-#line 4682 "c-p85593.c"
+#line 4682 "c-p7982.c"
     break;
 
   case 376: /* component_decl_list2: component_decl_list2 component_decl ';'  */
 #line 1711 "c-parse.y"
                 { (yyval.ttype) = chainon ((yyvsp[-2].ttype), (yyvsp[-1].ttype)); }
-#line 4688 "c-p85593.c"
+#line 4688 "c-p7982.c"
     break;
 
   case 377: /* component_decl_list2: component_decl_list2 ';'  */
 #line 1713 "c-parse.y"
                 { if (pedantic)
 		    pedwarn ("extra semicolon in struct or union specified"); }
-#line 4695 "c-p85593.c"
+#line 4695 "c-p7982.c"
     break;
 
   case 378: /* component_decl: declspecs_nosc_ts setspecs components  */
 #line 1719 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[0].ttype);
 		  POP_DECLSPEC_STACK; }
-#line 4702 "c-p85593.c"
+#line 4702 "c-p7982.c"
     break;
 
   case 379: /* component_decl: declspecs_nosc_ts setspecs save_filename save_lineno  */
@@ -4712,14 +4712,14 @@ yyreduce:
 
 		  (yyval.ttype) = grokfield((yyvsp[-1].filename), (yyvsp[0].lineno), NULL, current_declspecs, NULL_TREE);
 		  POP_DECLSPEC_STACK; }
-#line 4716 "c-p85593.c"
+#line 4716 "c-p7982.c"
     break;
 
   case 380: /* component_decl: declspecs_nosc_nots setspecs components_notype  */
 #line 1732 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[0].ttype);
 		  POP_DECLSPEC_STACK; }
-#line 4723 "c-p85593.c"
+#line 4723 "c-p7982.c"
     break;
 
   case 381: /* component_decl: declspecs_nosc_nots  */
@@ -4728,74 +4728,74 @@ yyreduce:
 		    pedwarn ("ISO C forbids member declarations with no members");
 		  shadow_tag((yyvsp[0].ttype));
 		  (yyval.ttype) = NULL_TREE; }
-#line 4732 "c-p85593.c"
+#line 4732 "c-p7982.c"
     break;
 
   case 382: /* component_decl: error  */
 #line 1740 "c-parse.y"
                 { (yyval.ttype) = NULL_TREE; }
-#line 4738 "c-p85593.c"
+#line 4738 "c-p7982.c"
     break;
 
   case 383: /* component_decl: extension component_decl  */
 #line 1742 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[0].ttype);
 		  RESTORE_WARN_FLAGS ((yyvsp[-1].ttype)); }
-#line 4745 "c-p85593.c"
+#line 4745 "c-p7982.c"
     break;
 
   case 385: /* components: components ',' maybe_resetattrs component_declarator  */
 #line 1749 "c-parse.y"
                 { (yyval.ttype) = chainon ((yyvsp[-3].ttype), (yyvsp[0].ttype)); }
-#line 4751 "c-p85593.c"
+#line 4751 "c-p7982.c"
     break;
 
   case 387: /* components_notype: components_notype ',' maybe_resetattrs component_notype_declarator  */
 #line 1755 "c-parse.y"
                 { (yyval.ttype) = chainon ((yyvsp[-3].ttype), (yyvsp[0].ttype)); }
-#line 4757 "c-p85593.c"
+#line 4757 "c-p7982.c"
     break;
 
   case 388: /* component_declarator: save_filename save_lineno declarator maybe_attribute  */
 #line 1760 "c-parse.y"
                 { (yyval.ttype) = grokfield ((yyvsp[-3].filename), (yyvsp[-2].lineno), (yyvsp[-1].ttype), current_declspecs, NULL_TREE);
 		  decl_attributes (&(yyval.ttype), chainon ((yyvsp[0].ttype), all_prefix_attributes), 0); }
-#line 4764 "c-p85593.c"
+#line 4764 "c-p7982.c"
     break;
 
   case 389: /* component_declarator: save_filename save_lineno declarator ':' expr_no_commas maybe_attribute  */
 #line 1764 "c-parse.y"
                 { (yyval.ttype) = grokfield ((yyvsp[-5].filename), (yyvsp[-4].lineno), (yyvsp[-3].ttype), current_declspecs, (yyvsp[-1].ttype));
 		  decl_attributes (&(yyval.ttype), chainon ((yyvsp[0].ttype), all_prefix_attributes), 0); }
-#line 4771 "c-p85593.c"
+#line 4771 "c-p7982.c"
     break;
 
   case 390: /* component_declarator: save_filename save_lineno ':' expr_no_commas maybe_attribute  */
 #line 1767 "c-parse.y"
                 { (yyval.ttype) = grokfield ((yyvsp[-4].filename), (yyvsp[-3].lineno), NULL_TREE, current_declspecs, (yyvsp[-1].ttype));
 		  decl_attributes (&(yyval.ttype), chainon ((yyvsp[0].ttype), all_prefix_attributes), 0); }
-#line 4778 "c-p85593.c"
+#line 4778 "c-p7982.c"
     break;
 
   case 391: /* component_notype_declarator: save_filename save_lineno notype_declarator maybe_attribute  */
 #line 1773 "c-parse.y"
                 { (yyval.ttype) = grokfield ((yyvsp[-3].filename), (yyvsp[-2].lineno), (yyvsp[-1].ttype), current_declspecs, NULL_TREE);
 		  decl_attributes (&(yyval.ttype), chainon ((yyvsp[0].ttype), all_prefix_attributes), 0); }
-#line 4785 "c-p85593.c"
+#line 4785 "c-p7982.c"
     break;
 
   case 392: /* component_notype_declarator: save_filename save_lineno notype_declarator ':' expr_no_commas maybe_attribute  */
 #line 1777 "c-parse.y"
                 { (yyval.ttype) = grokfield ((yyvsp[-5].filename), (yyvsp[-4].lineno), (yyvsp[-3].ttype), current_declspecs, (yyvsp[-1].ttype));
 		  decl_attributes (&(yyval.ttype), chainon ((yyvsp[0].ttype), all_prefix_attributes), 0); }
-#line 4792 "c-p85593.c"
+#line 4792 "c-p7982.c"
     break;
 
   case 393: /* component_notype_declarator: save_filename save_lineno ':' expr_no_commas maybe_attribute  */
 #line 1780 "c-parse.y"
                 { (yyval.ttype) = grokfield ((yyvsp[-4].filename), (yyvsp[-3].lineno), NULL_TREE, current_declspecs, (yyvsp[-1].ttype));
 		  decl_attributes (&(yyval.ttype), chainon ((yyvsp[0].ttype), all_prefix_attributes), 0); }
-#line 4799 "c-p85593.c"
+#line 4799 "c-p7982.c"
     break;
 
   case 395: /* enumlist: enumlist ',' enumerator  */
@@ -4804,44 +4804,44 @@ yyreduce:
 		    (yyval.ttype) = (yyvsp[-2].ttype);
 		  else
 		    (yyval.ttype) = chainon ((yyvsp[0].ttype), (yyvsp[-2].ttype)); }
-#line 4808 "c-p85593.c"
+#line 4808 "c-p7982.c"
     break;
 
   case 396: /* enumlist: error  */
 #line 1797 "c-parse.y"
                 { (yyval.ttype) = error_mark_node; }
-#line 4814 "c-p85593.c"
+#line 4814 "c-p7982.c"
     break;
 
   case 397: /* enumerator: identifier  */
 #line 1803 "c-parse.y"
                 { (yyval.ttype) = build_enumerator ((yyvsp[0].ttype), NULL_TREE); }
-#line 4820 "c-p85593.c"
+#line 4820 "c-p7982.c"
     break;
 
   case 398: /* enumerator: identifier '=' expr_no_commas  */
 #line 1805 "c-parse.y"
                 { (yyval.ttype) = build_enumerator ((yyvsp[-2].ttype), (yyvsp[0].ttype)); }
-#line 4826 "c-p85593.c"
+#line 4826 "c-p7982.c"
     break;
 
   case 399: /* @28: %empty  */
 #line 1810 "c-parse.y"
                 { pending_xref_error ();
 		  (yyval.ttype) = (yyvsp[0].ttype); }
-#line 4833 "c-p85593.c"
+#line 4833 "c-p7982.c"
     break;
 
   case 400: /* typename: declspecs_nosc @28 absdcl  */
 #line 1813 "c-parse.y"
                 { (yyval.ttype) = build_tree_list ((yyvsp[-1].ttype), (yyvsp[0].ttype)); }
-#line 4839 "c-p85593.c"
+#line 4839 "c-p7982.c"
     break;
 
   case 401: /* absdcl: %empty  */
 #line 1818 "c-parse.y"
                 { (yyval.ttype) = NULL_TREE; }
-#line 4845 "c-p85593.c"
+#line 4845 "c-p7982.c"
     break;
 
   case 403: /* absdcl_maybe_attribute: %empty  */
@@ -4849,7 +4849,7 @@ yyreduce:
                 { (yyval.ttype) = build_tree_list (build_tree_list (current_declspecs,
 							 NULL_TREE),
 					all_prefix_attributes); }
-#line 4853 "c-p85593.c"
+#line 4853 "c-p7982.c"
     break;
 
   case 404: /* absdcl_maybe_attribute: absdcl1  */
@@ -4857,7 +4857,7 @@ yyreduce:
                 { (yyval.ttype) = build_tree_list (build_tree_list (current_declspecs,
 							 (yyvsp[0].ttype)),
 					all_prefix_attributes); }
-#line 4861 "c-p85593.c"
+#line 4861 "c-p7982.c"
     break;
 
   case 405: /* absdcl_maybe_attribute: absdcl1_noea attributes  */
@@ -4865,85 +4865,85 @@ yyreduce:
                 { (yyval.ttype) = build_tree_list (build_tree_list (current_declspecs,
 							 (yyvsp[-1].ttype)),
 					chainon ((yyvsp[0].ttype), all_prefix_attributes)); }
-#line 4869 "c-p85593.c"
+#line 4869 "c-p7982.c"
     break;
 
   case 409: /* absdcl1_noea: '*' maybe_type_quals_attrs absdcl1_noea  */
 #line 1845 "c-parse.y"
                 { (yyval.ttype) = make_pointer_declarator ((yyvsp[-1].ttype), (yyvsp[0].ttype)); }
-#line 4875 "c-p85593.c"
+#line 4875 "c-p7982.c"
     break;
 
   case 410: /* absdcl1_ea: '*' maybe_type_quals_attrs  */
 #line 1850 "c-parse.y"
                 { (yyval.ttype) = make_pointer_declarator ((yyvsp[0].ttype), NULL_TREE); }
-#line 4881 "c-p85593.c"
+#line 4881 "c-p7982.c"
     break;
 
   case 411: /* absdcl1_ea: '*' maybe_type_quals_attrs absdcl1_ea  */
 #line 1852 "c-parse.y"
                 { (yyval.ttype) = make_pointer_declarator ((yyvsp[-1].ttype), (yyvsp[0].ttype)); }
-#line 4887 "c-p85593.c"
+#line 4887 "c-p7982.c"
     break;
 
   case 412: /* direct_absdcl1: '(' maybe_attribute absdcl1 ')'  */
 #line 1857 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[-2].ttype) ? tree_cons ((yyvsp[-2].ttype), (yyvsp[-1].ttype), NULL_TREE) : (yyvsp[-1].ttype); }
-#line 4893 "c-p85593.c"
+#line 4893 "c-p7982.c"
     break;
 
   case 413: /* direct_absdcl1: direct_absdcl1 '(' parmlist  */
 #line 1859 "c-parse.y"
                 { (yyval.ttype) = build_nt (CALL_EXPR, (yyvsp[-2].ttype), (yyvsp[0].ttype), NULL_TREE); }
-#line 4899 "c-p85593.c"
+#line 4899 "c-p7982.c"
     break;
 
   case 414: /* direct_absdcl1: direct_absdcl1 array_declarator  */
 #line 1861 "c-parse.y"
                 { (yyval.ttype) = set_array_declarator_type ((yyvsp[0].ttype), (yyvsp[-1].ttype), 1); }
-#line 4905 "c-p85593.c"
+#line 4905 "c-p7982.c"
     break;
 
   case 415: /* direct_absdcl1: '(' parmlist  */
 #line 1863 "c-parse.y"
                 { (yyval.ttype) = build_nt (CALL_EXPR, NULL_TREE, (yyvsp[0].ttype), NULL_TREE); }
-#line 4911 "c-p85593.c"
+#line 4911 "c-p7982.c"
     break;
 
   case 416: /* direct_absdcl1: array_declarator  */
 #line 1865 "c-parse.y"
                 { (yyval.ttype) = set_array_declarator_type ((yyvsp[0].ttype), NULL_TREE, 1); }
-#line 4917 "c-p85593.c"
+#line 4917 "c-p7982.c"
     break;
 
   case 417: /* array_declarator: '[' maybe_type_quals_attrs expr ']'  */
 #line 1872 "c-parse.y"
                 { (yyval.ttype) = build_array_declarator ((yyvsp[-1].ttype), (yyvsp[-2].ttype), 0, 0); }
-#line 4923 "c-p85593.c"
+#line 4923 "c-p7982.c"
     break;
 
   case 418: /* array_declarator: '[' maybe_type_quals_attrs ']'  */
 #line 1874 "c-parse.y"
                 { (yyval.ttype) = build_array_declarator (NULL_TREE, (yyvsp[-1].ttype), 0, 0); }
-#line 4929 "c-p85593.c"
+#line 4929 "c-p7982.c"
     break;
 
   case 419: /* array_declarator: '[' maybe_type_quals_attrs '*' ']'  */
 #line 1876 "c-parse.y"
                 { (yyval.ttype) = build_array_declarator (NULL_TREE, (yyvsp[-2].ttype), 0, 1); }
-#line 4935 "c-p85593.c"
+#line 4935 "c-p7982.c"
     break;
 
   case 420: /* array_declarator: '[' STATIC maybe_type_quals_attrs expr ']'  */
 #line 1878 "c-parse.y"
                 { (yyval.ttype) = build_array_declarator ((yyvsp[-1].ttype), (yyvsp[-2].ttype), 1, 0); }
-#line 4941 "c-p85593.c"
+#line 4941 "c-p7982.c"
     break;
 
   case 421: /* array_declarator: '[' declspecs_nosc_nots STATIC expr ']'  */
 #line 1881 "c-parse.y"
                 { (yyval.ttype) = build_array_declarator ((yyvsp[-1].ttype), (yyvsp[-3].ttype), 1, 0); }
-#line 4947 "c-p85593.c"
+#line 4947 "c-p7982.c"
     break;
 
   case 424: /* stmts_and_decls: lineno_stmt_decl_or_labels_ending_label  */
@@ -4951,14 +4951,14 @@ yyreduce:
                 {
 		  pedwarn ("deprecated use of label at end of compound statement");
 		}
-#line 4955 "c-p85593.c"
+#line 4955 "c-p7982.c"
     break;
 
   case 432: /* lineno_stmt_decl_or_labels_ending_decl: lineno_stmt_decl_or_labels_ending_stmt lineno_decl  */
 #line 1911 "c-parse.y"
                 { if (pedantic && !flag_isoc99)
 		    pedwarn ("ISO C89 forbids mixed declarations and code"); }
-#line 4962 "c-p85593.c"
+#line 4962 "c-p7982.c"
     break;
 
   case 447: /* pushlevel: %empty  */
@@ -4967,13 +4967,13 @@ yyreduce:
 		  clear_last_expr ();
 		  add_scope_stmt (/*begin_p=*/1, /*partial_p=*/0);
 		}
-#line 4971 "c-p85593.c"
+#line 4971 "c-p7982.c"
     break;
 
   case 448: /* poplevel: %empty  */
 #line 1948 "c-parse.y"
                 { (yyval.ttype) = add_scope_stmt (/*begin_p=*/0, /*partial_p=*/0); }
-#line 4977 "c-p85593.c"
+#line 4977 "c-p7982.c"
     break;
 
   case 449: /* c99_block_start: %empty  */
@@ -4988,7 +4988,7 @@ yyreduce:
 		  else
 		    (yyval.ttype) = NULL_TREE;
 		}
-#line 4992 "c-p85593.c"
+#line 4992 "c-p7982.c"
     break;
 
   case 450: /* c99_block_end: %empty  */
@@ -5003,14 +5003,14 @@ yyreduce:
 		    }
 		  else
 		    (yyval.ttype) = NULL_TREE; }
-#line 5007 "c-p85593.c"
+#line 5007 "c-p7982.c"
     break;
 
   case 452: /* maybe_label_decls: label_decls  */
 #line 1986 "c-parse.y"
                 { if (pedantic)
 		    pedwarn ("ISO C forbids label declarations"); }
-#line 5014 "c-p85593.c"
+#line 5014 "c-p7982.c"
     break;
 
   case 455: /* label_decl: LABEL identifiers_or_typenames ';'  */
@@ -5023,26 +5023,26 @@ yyreduce:
 		      add_decl_stmt (label);
 		    }
 		}
-#line 5027 "c-p85593.c"
+#line 5027 "c-p7982.c"
     break;
 
   case 456: /* compstmt_or_error: compstmt  */
 #line 2011 "c-parse.y"
                 {}
-#line 5033 "c-p85593.c"
+#line 5033 "c-p7982.c"
     break;
 
   case 458: /* compstmt_start: '{'  */
 #line 2015 "c-parse.y"
                     { compstmt_count++;
                       (yyval.ttype) = c_begin_compound_stmt (); }
-#line 5040 "c-p85593.c"
+#line 5040 "c-p7982.c"
     break;
 
   case 459: /* compstmt_nostart: '}'  */
 #line 2020 "c-parse.y"
                 { (yyval.ttype) = convert (void_type_node, integer_zero_node); }
-#line 5046 "c-p85593.c"
+#line 5046 "c-p7982.c"
     break;
 
   case 460: /* compstmt_nostart: pushlevel maybe_label_decls compstmt_contents_nonempty '}' poplevel  */
@@ -5051,7 +5051,7 @@ yyreduce:
 		  SCOPE_STMT_BLOCK (TREE_PURPOSE ((yyvsp[0].ttype))) 
 		    = SCOPE_STMT_BLOCK (TREE_VALUE ((yyvsp[0].ttype)))
 		    = (yyval.ttype); }
-#line 5055 "c-p85593.c"
+#line 5055 "c-p7982.c"
     break;
 
   case 463: /* compstmt_primary_start: '(' '{'  */
@@ -5070,7 +5070,7 @@ yyreduce:
 		  compstmt_count++;
 		  (yyval.ttype) = add_stmt (build_stmt (COMPOUND_STMT, last_tree));
 		}
-#line 5074 "c-p85593.c"
+#line 5074 "c-p7982.c"
     break;
 
   case 464: /* compstmt: compstmt_start compstmt_nostart  */
@@ -5078,19 +5078,19 @@ yyreduce:
                 { RECHAIN_STMTS ((yyvsp[-1].ttype), COMPOUND_BODY ((yyvsp[-1].ttype))); 
 		  last_expr_type = NULL_TREE;
                   (yyval.ttype) = (yyvsp[-1].ttype); }
-#line 5082 "c-p85593.c"
+#line 5082 "c-p7982.c"
     break;
 
   case 465: /* simple_if: if_prefix c99_block_lineno_labeled_stmt  */
 #line 2060 "c-parse.y"
                 { c_finish_then (); }
-#line 5088 "c-p85593.c"
+#line 5088 "c-p7982.c"
     break;
 
   case 467: /* @29: %empty  */
 #line 2077 "c-parse.y"
                 { (yyval.ttype) = c_begin_if_stmt (); }
-#line 5094 "c-p85593.c"
+#line 5094 "c-p7982.c"
     break;
 
   case 468: /* if_prefix: IF @29 '(' expr ')'  */
@@ -5100,7 +5100,7 @@ yyreduce:
 		  (yyval.itype) = stmt_count;
 		  if_stmt_file = (yyvsp[(-2) - (5)].filename);
 		  if_stmt_line = (yyvsp[(-1) - (5)].lineno); }
-#line 5104 "c-p85593.c"
+#line 5104 "c-p7982.c"
     break;
 
   case 469: /* @30: %empty  */
@@ -5115,14 +5115,14 @@ yyreduce:
 		     condition now.  Otherwise, we can get crashes at
 		     RTL-generation time.  */
 		  DO_COND ((yyval.ttype)) = error_mark_node; }
-#line 5119 "c-p85593.c"
+#line 5119 "c-p7982.c"
     break;
 
   case 470: /* do_stmt_start: DO @30 c99_block_lineno_labeled_stmt WHILE  */
 #line 2102 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[-2].ttype);
 		  RECHAIN_STMTS ((yyval.ttype), DO_BODY ((yyval.ttype))); }
-#line 5126 "c-p85593.c"
+#line 5126 "c-p7982.c"
     break;
 
   case 471: /* save_filename: %empty  */
@@ -5130,7 +5130,7 @@ yyreduce:
                 { if (yychar == YYEMPTY)
 		    yychar = YYLEX;
 		  (yyval.filename) = input_filename; }
-#line 5134 "c-p85593.c"
+#line 5134 "c-p7982.c"
     break;
 
   case 472: /* save_lineno: %empty  */
@@ -5138,14 +5138,14 @@ yyreduce:
                 { if (yychar == YYEMPTY)
 		    yychar = YYLEX;
 		  (yyval.lineno) = lineno; }
-#line 5142 "c-p85593.c"
+#line 5142 "c-p7982.c"
     break;
 
   case 475: /* c99_block_lineno_labeled_stmt: c99_block_start lineno_labeled_stmt c99_block_end  */
 #line 2129 "c-parse.y"
                 { if (flag_isoc99)
 		    RECHAIN_STMTS ((yyvsp[-2].ttype), COMPOUND_BODY ((yyvsp[-2].ttype))); }
-#line 5149 "c-p85593.c"
+#line 5149 "c-p7982.c"
     break;
 
   case 476: /* lineno_stmt: save_filename save_lineno stmt  */
@@ -5160,7 +5160,7 @@ yyreduce:
 			 doing inlining at the tree level.  */
 		    }
 		}
-#line 5164 "c-p85593.c"
+#line 5164 "c-p7982.c"
     break;
 
   case 477: /* lineno_label: save_filename save_lineno label  */
@@ -5170,14 +5170,14 @@ yyreduce:
 		      STMT_LINENO ((yyvsp[0].ttype)) = (yyvsp[-1].lineno);
 		    }
 		}
-#line 5174 "c-p85593.c"
+#line 5174 "c-p7982.c"
     break;
 
   case 478: /* $@31: %empty  */
 #line 2158 "c-parse.y"
                 { c_expand_start_else ();
 		  (yyvsp[-1].itype) = stmt_count; }
-#line 5181 "c-p85593.c"
+#line 5181 "c-p7982.c"
     break;
 
   case 479: /* select_or_iter_stmt: simple_if ELSE $@31 c99_block_lineno_labeled_stmt  */
@@ -5186,7 +5186,7 @@ yyreduce:
 		  c_expand_end_cond ();
 		  if (extra_warnings && stmt_count == (yyvsp[-3].itype))
 		    warning ("empty body in an else-statement"); }
-#line 5190 "c-p85593.c"
+#line 5190 "c-p7982.c"
     break;
 
   case 480: /* select_or_iter_stmt: simple_if  */
@@ -5199,20 +5199,20 @@ yyreduce:
 		  if (extra_warnings && stmt_count++ == (yyvsp[0].itype))
 		    warning_with_file_and_line (if_stmt_file, if_stmt_line,
 						"empty body in an if-statement"); }
-#line 5203 "c-p85593.c"
+#line 5203 "c-p7982.c"
     break;
 
   case 481: /* select_or_iter_stmt: simple_if ELSE error  */
 #line 2178 "c-parse.y"
                 { c_expand_end_cond (); }
-#line 5209 "c-p85593.c"
+#line 5209 "c-p7982.c"
     break;
 
   case 482: /* @32: %empty  */
 #line 2188 "c-parse.y"
                 { stmt_count++; 
 		  (yyval.ttype) = c_begin_while_stmt (); }
-#line 5216 "c-p85593.c"
+#line 5216 "c-p7982.c"
     break;
 
   case 483: /* @33: %empty  */
@@ -5221,25 +5221,25 @@ yyreduce:
 		  c_finish_while_stmt_cond
 		    (c_common_truthvalue_conversion ((yyvsp[-1].ttype)), (yyvsp[-3].ttype));
 		  (yyval.ttype) = add_stmt ((yyvsp[-3].ttype)); }
-#line 5225 "c-p85593.c"
+#line 5225 "c-p7982.c"
     break;
 
   case 484: /* select_or_iter_stmt: WHILE @32 '(' expr ')' @33 c99_block_lineno_labeled_stmt  */
 #line 2196 "c-parse.y"
                 { RECHAIN_STMTS ((yyvsp[-1].ttype), WHILE_BODY ((yyvsp[-1].ttype))); }
-#line 5231 "c-p85593.c"
+#line 5231 "c-p7982.c"
     break;
 
   case 485: /* select_or_iter_stmt: do_stmt_start '(' expr ')' ';'  */
 #line 2199 "c-parse.y"
                 { DO_COND ((yyvsp[-4].ttype)) = c_common_truthvalue_conversion ((yyvsp[-2].ttype)); }
-#line 5237 "c-p85593.c"
+#line 5237 "c-p7982.c"
     break;
 
   case 486: /* select_or_iter_stmt: do_stmt_start error  */
 #line 2201 "c-parse.y"
                 { }
-#line 5243 "c-p85593.c"
+#line 5243 "c-p7982.c"
     break;
 
   case 487: /* @34: %empty  */
@@ -5247,14 +5247,14 @@ yyreduce:
                 { (yyval.ttype) = build_stmt (FOR_STMT, NULL_TREE, NULL_TREE,
 					  NULL_TREE, NULL_TREE);
 		  add_stmt ((yyval.ttype)); }
-#line 5251 "c-p85593.c"
+#line 5251 "c-p7982.c"
     break;
 
   case 488: /* $@35: %empty  */
 #line 2207 "c-parse.y"
                 { stmt_count++;
 		  RECHAIN_STMTS ((yyvsp[-2].ttype), FOR_INIT_STMT ((yyvsp[-2].ttype))); }
-#line 5258 "c-p85593.c"
+#line 5258 "c-p7982.c"
     break;
 
   case 489: /* $@36: %empty  */
@@ -5262,57 +5262,57 @@ yyreduce:
                 { if ((yyvsp[-1].ttype)) 
 		    FOR_COND ((yyvsp[-5].ttype))
 		      = c_common_truthvalue_conversion ((yyvsp[-1].ttype)); }
-#line 5266 "c-p85593.c"
+#line 5266 "c-p7982.c"
     break;
 
   case 490: /* $@37: %empty  */
 #line 2214 "c-parse.y"
                 { FOR_EXPR ((yyvsp[-8].ttype)) = (yyvsp[-1].ttype); }
-#line 5272 "c-p85593.c"
+#line 5272 "c-p7982.c"
     break;
 
   case 491: /* select_or_iter_stmt: FOR @34 '(' for_init_stmt $@35 xexpr ';' $@36 xexpr ')' $@37 c99_block_lineno_labeled_stmt  */
 #line 2216 "c-parse.y"
                 { RECHAIN_STMTS ((yyvsp[-10].ttype), FOR_BODY ((yyvsp[-10].ttype))); }
-#line 5278 "c-p85593.c"
+#line 5278 "c-p7982.c"
     break;
 
   case 492: /* @38: %empty  */
 #line 2218 "c-parse.y"
                 { stmt_count++;
 		  (yyval.ttype) = c_start_case ((yyvsp[-1].ttype)); }
-#line 5285 "c-p85593.c"
+#line 5285 "c-p7982.c"
     break;
 
   case 493: /* select_or_iter_stmt: SWITCH '(' expr ')' @38 c99_block_lineno_labeled_stmt  */
 #line 2221 "c-parse.y"
                 { c_finish_case (); }
-#line 5291 "c-p85593.c"
+#line 5291 "c-p7982.c"
     break;
 
   case 494: /* for_init_stmt: xexpr ';'  */
 #line 2226 "c-parse.y"
                 { add_stmt (build_stmt (EXPR_STMT, (yyvsp[-1].ttype))); }
-#line 5297 "c-p85593.c"
+#line 5297 "c-p7982.c"
     break;
 
   case 495: /* for_init_stmt: decl  */
 #line 2228 "c-parse.y"
                 { check_for_loop_decls (); }
-#line 5303 "c-p85593.c"
+#line 5303 "c-p7982.c"
     break;
 
   case 496: /* stmt: compstmt  */
 #line 2234 "c-parse.y"
                 { stmt_count++; (yyval.ttype) = (yyvsp[0].ttype); }
-#line 5309 "c-p85593.c"
+#line 5309 "c-p7982.c"
     break;
 
   case 497: /* stmt: expr ';'  */
 #line 2236 "c-parse.y"
                 { stmt_count++;
 		  (yyval.ttype) = c_expand_expr_stmt ((yyvsp[-1].ttype)); }
-#line 5316 "c-p85593.c"
+#line 5316 "c-p7982.c"
     break;
 
   case 498: /* stmt: c99_block_start select_or_iter_stmt c99_block_end  */
@@ -5320,63 +5320,63 @@ yyreduce:
                 { if (flag_isoc99)
 		    RECHAIN_STMTS ((yyvsp[-2].ttype), COMPOUND_BODY ((yyvsp[-2].ttype)));
 		  (yyval.ttype) = NULL_TREE; }
-#line 5324 "c-p85593.c"
+#line 5324 "c-p7982.c"
     break;
 
   case 499: /* stmt: BREAK ';'  */
 #line 2243 "c-parse.y"
                 { stmt_count++;
 		  (yyval.ttype) = add_stmt (build_break_stmt ()); }
-#line 5331 "c-p85593.c"
+#line 5331 "c-p7982.c"
     break;
 
   case 500: /* stmt: CONTINUE ';'  */
 #line 2246 "c-parse.y"
                 { stmt_count++;
 		  (yyval.ttype) = add_stmt (build_continue_stmt ()); }
-#line 5338 "c-p85593.c"
+#line 5338 "c-p7982.c"
     break;
 
   case 501: /* stmt: RETURN ';'  */
 #line 2249 "c-parse.y"
                 { stmt_count++;
 		  (yyval.ttype) = c_expand_return (NULL_TREE); }
-#line 5345 "c-p85593.c"
+#line 5345 "c-p7982.c"
     break;
 
   case 502: /* stmt: RETURN expr ';'  */
 #line 2252 "c-parse.y"
                 { stmt_count++;
 		  (yyval.ttype) = c_expand_return ((yyvsp[-1].ttype)); }
-#line 5352 "c-p85593.c"
+#line 5352 "c-p7982.c"
     break;
 
   case 503: /* stmt: ASM_KEYWORD maybe_type_qual '(' expr ')' ';'  */
 #line 2255 "c-parse.y"
                 { stmt_count++;
 		  (yyval.ttype) = simple_asm_stmt ((yyvsp[-2].ttype)); }
-#line 5359 "c-p85593.c"
+#line 5359 "c-p7982.c"
     break;
 
   case 504: /* stmt: ASM_KEYWORD maybe_type_qual '(' expr ':' asm_operands ')' ';'  */
 #line 2259 "c-parse.y"
                 { stmt_count++;
 		  (yyval.ttype) = build_asm_stmt ((yyvsp[-6].ttype), (yyvsp[-4].ttype), (yyvsp[-2].ttype), NULL_TREE, NULL_TREE); }
-#line 5366 "c-p85593.c"
+#line 5366 "c-p7982.c"
     break;
 
   case 505: /* stmt: ASM_KEYWORD maybe_type_qual '(' expr ':' asm_operands ':' asm_operands ')' ';'  */
 #line 2264 "c-parse.y"
                 { stmt_count++;
 		  (yyval.ttype) = build_asm_stmt ((yyvsp[-8].ttype), (yyvsp[-6].ttype), (yyvsp[-4].ttype), (yyvsp[-2].ttype), NULL_TREE); }
-#line 5373 "c-p85593.c"
+#line 5373 "c-p7982.c"
     break;
 
   case 506: /* stmt: ASM_KEYWORD maybe_type_qual '(' expr ':' asm_operands ':' asm_operands ':' asm_clobbers ')' ';'  */
 #line 2269 "c-parse.y"
                 { stmt_count++;
 		  (yyval.ttype) = build_asm_stmt ((yyvsp[-10].ttype), (yyvsp[-8].ttype), (yyvsp[-6].ttype), (yyvsp[-4].ttype), (yyvsp[-2].ttype)); }
-#line 5380 "c-p85593.c"
+#line 5380 "c-p7982.c"
     break;
 
   case 507: /* stmt: GOTO identifier ';'  */
@@ -5392,7 +5392,7 @@ yyreduce:
 		  else
 		    (yyval.ttype) = NULL_TREE;
 		}
-#line 5396 "c-p85593.c"
+#line 5396 "c-p7982.c"
     break;
 
   case 508: /* stmt: GOTO '*' expr ';'  */
@@ -5402,34 +5402,34 @@ yyreduce:
 		  stmt_count++;
 		  (yyvsp[-1].ttype) = convert (ptr_type_node, (yyvsp[-1].ttype));
 		  (yyval.ttype) = add_stmt (build_stmt (GOTO_STMT, (yyvsp[-1].ttype))); }
-#line 5406 "c-p85593.c"
+#line 5406 "c-p7982.c"
     break;
 
   case 509: /* stmt: ';'  */
 #line 2290 "c-parse.y"
                 { (yyval.ttype) = NULL_TREE; }
-#line 5412 "c-p85593.c"
+#line 5412 "c-p7982.c"
     break;
 
   case 510: /* label: CASE expr_no_commas ':'  */
 #line 2298 "c-parse.y"
                 { stmt_count++;
 		  (yyval.ttype) = do_case ((yyvsp[-1].ttype), NULL_TREE); }
-#line 5419 "c-p85593.c"
+#line 5419 "c-p7982.c"
     break;
 
   case 511: /* label: CASE expr_no_commas ELLIPSIS expr_no_commas ':'  */
 #line 2301 "c-parse.y"
                 { stmt_count++;
 		  (yyval.ttype) = do_case ((yyvsp[-3].ttype), (yyvsp[-1].ttype)); }
-#line 5426 "c-p85593.c"
+#line 5426 "c-p7982.c"
     break;
 
   case 512: /* label: DEFAULT ':'  */
 #line 2304 "c-parse.y"
                 { stmt_count++;
 		  (yyval.ttype) = do_case (NULL_TREE, NULL_TREE); }
-#line 5433 "c-p85593.c"
+#line 5433 "c-p7982.c"
     break;
 
   case 513: /* label: identifier save_filename save_lineno ':' maybe_attribute  */
@@ -5444,44 +5444,44 @@ yyreduce:
 		  else
 		    (yyval.ttype) = NULL_TREE;
 		}
-#line 5448 "c-p85593.c"
+#line 5448 "c-p7982.c"
     break;
 
   case 514: /* maybe_type_qual: %empty  */
 #line 2323 "c-parse.y"
                 { emit_line_note (input_filename, lineno);
 		  (yyval.ttype) = NULL_TREE; }
-#line 5455 "c-p85593.c"
+#line 5455 "c-p7982.c"
     break;
 
   case 515: /* maybe_type_qual: TYPE_QUAL  */
 #line 2326 "c-parse.y"
                 { emit_line_note (input_filename, lineno); }
-#line 5461 "c-p85593.c"
+#line 5461 "c-p7982.c"
     break;
 
   case 516: /* xexpr: %empty  */
 #line 2331 "c-parse.y"
                 { (yyval.ttype) = NULL_TREE; }
-#line 5467 "c-p85593.c"
+#line 5467 "c-p7982.c"
     break;
 
   case 518: /* asm_operands: %empty  */
 #line 2338 "c-parse.y"
                 { (yyval.ttype) = NULL_TREE; }
-#line 5473 "c-p85593.c"
+#line 5473 "c-p7982.c"
     break;
 
   case 521: /* nonnull_asm_operands: nonnull_asm_operands ',' asm_operand  */
 #line 2345 "c-parse.y"
                 { (yyval.ttype) = chainon ((yyvsp[-2].ttype), (yyvsp[0].ttype)); }
-#line 5479 "c-p85593.c"
+#line 5479 "c-p7982.c"
     break;
 
   case 522: /* asm_operand: STRING '(' expr ')'  */
 #line 2350 "c-parse.y"
                 { (yyval.ttype) = build_tree_list (build_tree_list (NULL_TREE, (yyvsp[-3].ttype)), (yyvsp[-1].ttype)); }
-#line 5485 "c-p85593.c"
+#line 5485 "c-p7982.c"
     break;
 
   case 523: /* asm_operand: '[' identifier ']' STRING '(' expr ')'  */
@@ -5489,19 +5489,19 @@ yyreduce:
                 { (yyvsp[-5].ttype) = build_string (IDENTIFIER_LENGTH ((yyvsp[-5].ttype)),
 				     IDENTIFIER_POINTER ((yyvsp[-5].ttype)));
 		  (yyval.ttype) = build_tree_list (build_tree_list ((yyvsp[-5].ttype), (yyvsp[-3].ttype)), (yyvsp[-1].ttype)); }
-#line 5493 "c-p85593.c"
+#line 5493 "c-p7982.c"
     break;
 
   case 524: /* asm_clobbers: string  */
 #line 2359 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, combine_strings ((yyvsp[0].ttype)), NULL_TREE); }
-#line 5499 "c-p85593.c"
+#line 5499 "c-p7982.c"
     break;
 
   case 525: /* asm_clobbers: asm_clobbers ',' string  */
 #line 2361 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, combine_strings ((yyvsp[0].ttype)), (yyvsp[-2].ttype)); }
-#line 5505 "c-p85593.c"
+#line 5505 "c-p7982.c"
     break;
 
   case 526: /* $@39: %empty  */
@@ -5509,7 +5509,7 @@ yyreduce:
                 { pushlevel (0);
 		  clear_parm_order ();
 		  declare_parm_level (0); }
-#line 5513 "c-p85593.c"
+#line 5513 "c-p7982.c"
     break;
 
   case 527: /* parmlist: maybe_attribute $@39 parmlist_1  */
@@ -5517,7 +5517,7 @@ yyreduce:
                 { (yyval.ttype) = (yyvsp[0].ttype);
 		  parmlist_tags_warning ();
 		  poplevel (0, 0, 0); }
-#line 5521 "c-p85593.c"
+#line 5521 "c-p7982.c"
     break;
 
   case 529: /* $@40: %empty  */
@@ -5529,32 +5529,32 @@ yyreduce:
 		  for (parm = getdecls (); parm; parm = TREE_CHAIN (parm))
 		    TREE_ASM_WRITTEN (parm) = 1;
 		  clear_parm_order (); }
-#line 5533 "c-p85593.c"
+#line 5533 "c-p7982.c"
     break;
 
   case 530: /* $@41: %empty  */
 #line 2391 "c-parse.y"
                 { /* Dummy action so attributes are in known place
 		     on parser stack.  */ }
-#line 5540 "c-p85593.c"
+#line 5540 "c-p7982.c"
     break;
 
   case 531: /* parmlist_1: parms ';' $@40 maybe_attribute $@41 parmlist_1  */
 #line 2394 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[0].ttype); }
-#line 5546 "c-p85593.c"
+#line 5546 "c-p7982.c"
     break;
 
   case 532: /* parmlist_1: error ')'  */
 #line 2396 "c-parse.y"
                 { (yyval.ttype) = tree_cons (NULL_TREE, NULL_TREE, NULL_TREE); }
-#line 5552 "c-p85593.c"
+#line 5552 "c-p7982.c"
     break;
 
   case 533: /* parmlist_2: %empty  */
 #line 2402 "c-parse.y"
                 { (yyval.ttype) = get_parm_info (0); }
-#line 5558 "c-p85593.c"
+#line 5558 "c-p7982.c"
     break;
 
   case 534: /* parmlist_2: ELLIPSIS  */
@@ -5568,31 +5568,31 @@ yyreduce:
 		     correctly.  */
 		  error ("ISO C requires a named argument before `...'");
 		}
-#line 5572 "c-p85593.c"
+#line 5572 "c-p7982.c"
     break;
 
   case 535: /* parmlist_2: parms  */
 #line 2414 "c-parse.y"
                 { (yyval.ttype) = get_parm_info (1); }
-#line 5578 "c-p85593.c"
+#line 5578 "c-p7982.c"
     break;
 
   case 536: /* parmlist_2: parms ',' ELLIPSIS  */
 #line 2416 "c-parse.y"
                 { (yyval.ttype) = get_parm_info (0); }
-#line 5584 "c-p85593.c"
+#line 5584 "c-p7982.c"
     break;
 
   case 537: /* parms: firstparm  */
 #line 2421 "c-parse.y"
                 { push_parm_decl ((yyvsp[0].ttype)); }
-#line 5590 "c-p85593.c"
+#line 5590 "c-p7982.c"
     break;
 
   case 538: /* parms: parms ',' parm  */
 #line 2423 "c-parse.y"
                 { push_parm_decl ((yyvsp[0].ttype)); }
-#line 5596 "c-p85593.c"
+#line 5596 "c-p7982.c"
     break;
 
   case 539: /* parm: declspecs_ts setspecs parm_declarator maybe_attribute  */
@@ -5601,7 +5601,7 @@ yyreduce:
 							 (yyvsp[-1].ttype)),
 					chainon ((yyvsp[0].ttype), all_prefix_attributes));
 		  POP_DECLSPEC_STACK; }
-#line 5605 "c-p85593.c"
+#line 5605 "c-p7982.c"
     break;
 
   case 540: /* parm: declspecs_ts setspecs notype_declarator maybe_attribute  */
@@ -5610,14 +5610,14 @@ yyreduce:
 							 (yyvsp[-1].ttype)),
 					chainon ((yyvsp[0].ttype), all_prefix_attributes)); 
 		  POP_DECLSPEC_STACK; }
-#line 5614 "c-p85593.c"
+#line 5614 "c-p7982.c"
     break;
 
   case 541: /* parm: declspecs_ts setspecs absdcl_maybe_attribute  */
 #line 2440 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[0].ttype);
 		  POP_DECLSPEC_STACK; }
-#line 5621 "c-p85593.c"
+#line 5621 "c-p7982.c"
     break;
 
   case 542: /* parm: declspecs_nots setspecs notype_declarator maybe_attribute  */
@@ -5626,14 +5626,14 @@ yyreduce:
 							 (yyvsp[-1].ttype)),
 					chainon ((yyvsp[0].ttype), all_prefix_attributes));
 		  POP_DECLSPEC_STACK; }
-#line 5630 "c-p85593.c"
+#line 5630 "c-p7982.c"
     break;
 
   case 543: /* parm: declspecs_nots setspecs absdcl_maybe_attribute  */
 #line 2449 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[0].ttype);
 		  POP_DECLSPEC_STACK; }
-#line 5637 "c-p85593.c"
+#line 5637 "c-p7982.c"
     break;
 
   case 544: /* firstparm: declspecs_ts_nosa setspecs_fp parm_declarator maybe_attribute  */
@@ -5642,7 +5642,7 @@ yyreduce:
 							 (yyvsp[-1].ttype)),
 					chainon ((yyvsp[0].ttype), all_prefix_attributes));
 		  POP_DECLSPEC_STACK; }
-#line 5646 "c-p85593.c"
+#line 5646 "c-p7982.c"
     break;
 
   case 545: /* firstparm: declspecs_ts_nosa setspecs_fp notype_declarator maybe_attribute  */
@@ -5651,14 +5651,14 @@ yyreduce:
 							 (yyvsp[-1].ttype)),
 					chainon ((yyvsp[0].ttype), all_prefix_attributes)); 
 		  POP_DECLSPEC_STACK; }
-#line 5655 "c-p85593.c"
+#line 5655 "c-p7982.c"
     break;
 
   case 546: /* firstparm: declspecs_ts_nosa setspecs_fp absdcl_maybe_attribute  */
 #line 2467 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[0].ttype);
 		  POP_DECLSPEC_STACK; }
-#line 5662 "c-p85593.c"
+#line 5662 "c-p7982.c"
     break;
 
   case 547: /* firstparm: declspecs_nots_nosa setspecs_fp notype_declarator maybe_attribute  */
@@ -5667,21 +5667,21 @@ yyreduce:
 							 (yyvsp[-1].ttype)),
 					chainon ((yyvsp[0].ttype), all_prefix_attributes));
 		  POP_DECLSPEC_STACK; }
-#line 5671 "c-p85593.c"
+#line 5671 "c-p7982.c"
     break;
 
   case 548: /* firstparm: declspecs_nots_nosa setspecs_fp absdcl_maybe_attribute  */
 #line 2476 "c-parse.y"
                 { (yyval.ttype) = (yyvsp[0].ttype);
 		  POP_DECLSPEC_STACK; }
-#line 5678 "c-p85593.c"
+#line 5678 "c-p7982.c"
     break;
 
   case 549: /* setspecs_fp: setspecs  */
 #line 2482 "c-parse.y"
                 { prefix_attributes = chainon (prefix_attributes, (yyvsp[(-2) - (1)].ttype));
 		  all_prefix_attributes = prefix_attributes; }
-#line 5685 "c-p85593.c"
+#line 5685 "c-p7982.c"
     break;
 
   case 550: /* $@42: %empty  */
@@ -5689,7 +5689,7 @@ yyreduce:
                 { pushlevel (0);
 		  clear_parm_order ();
 		  declare_parm_level (1); }
-#line 5693 "c-p85593.c"
+#line 5693 "c-p7982.c"
     break;
 
   case 551: /* parmlist_or_identifiers: maybe_attribute $@42 parmlist_or_identifiers_1  */
@@ -5697,7 +5697,7 @@ yyreduce:
                 { (yyval.ttype) = (yyvsp[0].ttype);
 		  parmlist_tags_warning ();
 		  poplevel (0, 0, 0); }
-#line 5701 "c-p85593.c"
+#line 5701 "c-p7982.c"
     break;
 
   case 553: /* parmlist_or_identifiers_1: identifiers ')'  */
@@ -5715,31 +5715,31 @@ yyreduce:
 			  || TREE_CODE (TREE_PURPOSE ((yyval.ttype))) != PARM_DECL))
 		    YYERROR1;
 		}
-#line 5719 "c-p85593.c"
+#line 5719 "c-p7982.c"
     break;
 
   case 554: /* identifiers: IDENTIFIER  */
 #line 2521 "c-parse.y"
                 { (yyval.ttype) = build_tree_list (NULL_TREE, (yyvsp[0].ttype)); }
-#line 5725 "c-p85593.c"
+#line 5725 "c-p7982.c"
     break;
 
   case 555: /* identifiers: identifiers ',' IDENTIFIER  */
 #line 2523 "c-parse.y"
                 { (yyval.ttype) = chainon ((yyvsp[-2].ttype), build_tree_list (NULL_TREE, (yyvsp[0].ttype))); }
-#line 5731 "c-p85593.c"
+#line 5731 "c-p7982.c"
     break;
 
   case 556: /* identifiers_or_typenames: identifier  */
 #line 2529 "c-parse.y"
                 { (yyval.ttype) = build_tree_list (NULL_TREE, (yyvsp[0].ttype)); }
-#line 5737 "c-p85593.c"
+#line 5737 "c-p7982.c"
     break;
 
   case 557: /* identifiers_or_typenames: identifiers_or_typenames ',' identifier  */
 #line 2531 "c-parse.y"
                 { (yyval.ttype) = chainon ((yyvsp[-2].ttype), build_tree_list (NULL_TREE, (yyvsp[0].ttype))); }
-#line 5743 "c-p85593.c"
+#line 5743 "c-p7982.c"
     break;
 
   case 558: /* extension: EXTENSION  */
@@ -5748,11 +5748,11 @@ yyreduce:
 		  pedantic = 0;
 		  warn_pointer_arith = 0;
 		  warn_traditional = 0; }
-#line 5752 "c-p85593.c"
+#line 5752 "c-p7982.c"
     break;
 
 
-#line 5756 "c-p85593.c"
+#line 5756 "c-p7982.c"
 
       default: break;
     }

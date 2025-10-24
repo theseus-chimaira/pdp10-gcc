@@ -231,7 +231,7 @@ struct insns_for_mem_entry
 /* Forward declarations.  */
 
 static rtx assign_stack_local_1 PARAMS ((enum machine_mode, HOST_WIDE_INT,
-					 int, struct function *));
+					 int, struct function *, tree));
 static struct temp_slot *find_temp_slot_from_address  PARAMS ((rtx));
 static void put_reg_into_stack	PARAMS ((struct function *, rtx, tree,
 					 enum machine_mode, enum machine_mode,
@@ -533,22 +533,24 @@ get_frame_size ()
 
    FUNCTION specifies the function to allocate in.  */
 
-/* PDP-10: ugly hack: global variable to signal that an array is to be
-   allocated.  */
-int pdp10_array_stack_slot = 0;
+#ifndef STACK_SLOT_SUBWORD_BITPOS
+#define STACK_SLOT_SUBWORD_BITPOS(TYPE, MODE, SIZE, OFFSET, DEFAULT_POS) \
+  (DEFAULT_POS)
+#endif
 
 static rtx
-assign_stack_local_1 (mode, size, align, function)
+assign_stack_local_1 (mode, size, align, function, slot_type)
      enum machine_mode mode;
      HOST_WIDE_INT size;
      int align;
      struct function *function;
+     tree slot_type;
 {
   rtx x, addr;
   int bigend_correction = 0;
   int alignment;
   int frame_off, frame_alignment, frame_phase;
-  tree type;
+  tree mode_type;
 
   if (align == 0)
     {
@@ -559,9 +561,9 @@ assign_stack_local_1 (mode, size, align, function)
 
       /* Allow the target to (possibly) increase the alignment of this
 	 stack slot.  */
-      type = (*lang_hooks.types.type_for_mode) (mode, 0);
-      if (type)
-	alignment = LOCAL_ALIGNMENT (type, alignment);
+      mode_type = (*lang_hooks.types.type_for_mode) (mode, 0);
+      if (mode_type)
+	alignment = LOCAL_ALIGNMENT (mode_type, alignment);
 
       alignment /= BITS_PER_UNIT;
     }
@@ -575,9 +577,9 @@ assign_stack_local_1 (mode, size, align, function)
 
   /* Allow the target to (possibly) increase the size of this stack
      slot.  */
-  type = (*lang_hooks.types.type_for_mode) (mode, 0);
-  if (type)
-    size = LOCAL_SIZE (type, size);
+  mode_type = (*lang_hooks.types.type_for_mode) (mode, 0);
+  if (mode_type)
+    size = LOCAL_SIZE (mode_type, size);
 
   /* Temporary PDP-10 check.  No stack slots smaller than a word
      should be allocated.  */
@@ -642,8 +644,7 @@ assign_stack_local_1 (mode, size, align, function)
       {
 	int pos = BITS_PER_UNIT * (offset % 4);
 
-	if (pdp10_array_stack_slot)
-	  pos = 0;
+	pos = STACK_SLOT_SUBWORD_BITPOS (slot_type, mode, size, offset, pos);
 
 	PUT_MODE (x, word_mode);
 	x = gen_rtx_ZERO_EXTRACT (word_mode, x,
@@ -673,7 +674,7 @@ assign_stack_local (mode, size, align)
      HOST_WIDE_INT size;
      int align;
 {
-  return assign_stack_local_1 (mode, size, align, cfun);
+  return assign_stack_local_1 (mode, size, align, cfun, NULL_TREE);
 }
 
 /* Allocate a temporary stack slot and record it for possible later
@@ -792,16 +793,11 @@ assign_stack_temp_for_type (mode, size, keep, type)
 	 BIGGEST_ALIGNMENT.  */
       if (mode == BLKmode && align < BIGGEST_ALIGNMENT)
 	abort ();
-      /* PDP-10: special hack for arrays.  */
-      if (TREE_CODE (type) == ARRAY_TYPE)
-	pdp10_array_stack_slot = 1;
-      p->slot = assign_stack_local (mode,
-				    (mode == BLKmode
-				     ? CEIL_ROUND (size, align / BITS_PER_UNIT)
-				     : size),
-				    align);
-      /* PDP-10.  */
-      pdp10_array_stack_slot = 0;
+      p->slot = assign_stack_local_1 (mode,
+				      (mode == BLKmode
+				       ? CEIL_ROUND (size, align / BITS_PER_UNIT)
+				       : size),
+				      align, cfun, type);
 
       p->align = align;
 
@@ -1567,7 +1563,7 @@ put_reg_into_stack (function, reg, type, promoted_mode, decl_mode, volatile_p,
     new = func->x_parm_reg_stack_loc[regno];
 
   if (new == 0)
-    new = assign_stack_local_1 (decl_mode, GET_MODE_SIZE (decl_mode), 0, func);
+    new = assign_stack_local_1 (decl_mode, GET_MODE_SIZE (decl_mode), 0, func, type);
 
 #if REAL_BITS_PER_UNIT == 36
   PUT_CODE (reg, GET_CODE (new));
@@ -6032,7 +6028,7 @@ trampoline_address (function)
 #define TRAMPOLINE_REAL_SIZE (TRAMPOLINE_SIZE)
 #endif
   tramp = assign_stack_local_1 (BLKmode, TRAMPOLINE_REAL_SIZE, 0,
-				fp ? fp : cfun);
+			fp ? fp : cfun, NULL_TREE);
 #endif
 
   /* Record the trampoline for reuse and note it for later initialization
@@ -7423,7 +7419,7 @@ get_arg_pointer_save_area (f)
 
   if (! ret)
     {
-      ret = assign_stack_local_1 (Pmode, GET_MODE_SIZE (Pmode), 0, f);
+      ret = assign_stack_local_1 (Pmode, GET_MODE_SIZE (Pmode), 0, f, NULL_TREE);
       f->x_arg_pointer_save_area = ret;
     }
 

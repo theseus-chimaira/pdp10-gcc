@@ -210,6 +210,13 @@ static char direct_store[NUM_MACHINE_MODES];
   (move_by_pieces_ninsns (SIZE, ALIGN) < (unsigned int) MOVE_RATIO)
 #endif
 
+/* Some word-addressed targets need a byte-sized field fetched through
+   extract_bit_field even when the generic MEM alignment metadata would
+   normally allow an ordinary narrow MEM reference.  */
+#ifndef EXTRACT_FIELD_AS_BITFIELD_P
+#define EXTRACT_FIELD_AS_BITFIELD_P(OP0, MODE1, BITSIZE) 0
+#endif
+
 /* This array records the insn_code of insns to perform block moves.  */
 enum insn_code movstr_optab[NUM_MACHINE_MODES];
 
@@ -3623,16 +3630,10 @@ emit_push_insn (x, mode, type, size, align, partial, reg, extra,
       /* Loop over all the words allocated on the stack for this arg.  */
       /* We can do it by words, because any scalar bigger than a word
 	 has a size a multiple of a word.  */
-#ifdef __PDP10_H__
-      /* PDP-10: special hack.  */
-      for (i = 0; i < size - not_stack; i++)
-	if (i < not_stack + offset)
-	  emit_push_insn (operand_subword_force (x, i, mode),
-			  word_mode, NULL_TREE, NULL_RTX, align, 0, NULL_RTX,
-			  0, args_addr,
-			  GEN_INT (args_offset + ((i /* - not_stack */ + skip)
-						  * UNITS_PER_WORD)),
-			  reg_parm_stack_space, alignment_pad);
+#ifdef PUSH_PARTIAL_REG_STACK_ARG
+      PUSH_PARTIAL_REG_STACK_ARG (x, mode, size, not_stack, offset, skip,
+				  align, args_addr, args_offset,
+				  reg_parm_stack_space, alignment_pad);
 #else
 #ifndef PUSH_ARGS_REVERSED
       for (i = not_stack; i < size; i++)
@@ -8027,16 +8028,7 @@ expand_expr (exp, target, tmode, modifier)
 		    == INTEGER_CST)
 		&& 0 != compare_tree_int (TYPE_SIZE (TREE_TYPE (exp)),
 					  bitsize))
-#if REAL_BITS_PER_UNIT == 36
-	    || (bitsize < BITS_PER_UNIT
-		&& (GET_CODE (op0) != MEM
-		    || MEM_ALIGN (op0) >= BITS_PER_WORD
-		    /* PDP-10 FIXME: This shouldn't be necessary.  */
-		    || MEM_ALIGN (op0) > GET_MODE_ALIGNMENT (GET_MODE (op0))
-		    /* PDP-10 FIXME: Can we assume all BLKmode MEMs
-		       are aligned, even though MEM_ALIGN says not?  */
-		    || GET_MODE (op0) == BLKmode))
-#endif
+	    || EXTRACT_FIELD_AS_BITFIELD_P (op0, mode1, bitsize)
 	    )
 	  {
 	    enum machine_mode ext_mode = mode;

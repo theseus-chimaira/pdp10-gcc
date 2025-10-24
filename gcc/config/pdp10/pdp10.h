@@ -467,6 +467,24 @@ extern char *pdp10_char_bytesize_arg;
 #define REAL_BITS_PER_UNIT 36
 #define REAL_UNITS_PER_WORD 1
 
+/* The generic COMPONENT_REF expander can sometimes treat a small field as
+   an ordinary narrow MEM reference when MEM_ALIGN says the containing word is
+   aligned enough.  On the PDP-10, addressable C bytes are packed inside a
+   36-bit word, while MEM addresses are word addresses; a narrow field inside
+   a word must keep the bit position and use the target bit-field/byte-pointer
+   extraction path.
+
+   Also force BLKmode through that path here: packed records and unions often
+   reach expand_expr as BLKmode MEMs whose MEM_ALIGN is conservative or
+   inherited from the containing object, but the subword position still matters
+   more than the MEM mode.  */
+#define EXTRACT_FIELD_AS_BITFIELD_P(OP0, MODE1, BITSIZE) \
+  ((BITSIZE) < BITS_PER_UNIT \
+   && (GET_CODE (OP0) != MEM \
+       || MEM_ALIGN (OP0) >= BITS_PER_WORD \
+       || MEM_ALIGN (OP0) > GET_MODE_ALIGNMENT (GET_MODE (OP0)) \
+       || GET_MODE (OP0) == BLKmode))
+
 /* Number of bits per memory unit used to access a bitfield.  */
 #define BITS_PER_BITFIELD_UNIT 36
 
@@ -558,6 +576,14 @@ extern char *pdp10_char_bytesize_arg;
    for the stack pointer.  ALIGN is the alignment in storage units.  */
 #define ALIGN_STACK_POINTER(X, ALIGN) \
   pdp10_align_stack_pointer ((X), (ALIGN))
+
+/* Local array temporaries that are represented as subword stack MEMs must
+   start at the first PDP-10 byte position of their containing word.  Generic
+   stack-slot allocation may otherwise pick the offset-derived byte position
+   for a scalar subword slot.  Keep this word-addressed stack-slot policy in
+   the target instead of signaling it through global state in function.c.  */
+#define STACK_SLOT_SUBWORD_BITPOS(TYPE, MODE, SIZE, OFFSET, DEFAULT_POS) \
+  ((TYPE) != NULL_TREE && TREE_CODE (TYPE) == ARRAY_TYPE ? 0 : (DEFAULT_POS))
 
 /* Alignment in bits to be given to a structure bit field that follows
    an empty field such as int : 0;  */
@@ -968,13 +994,36 @@ enum reg_class
    argument, must be put in registers.  The value must be zero for
    arguments that are passed entirely in registers or that are
    entirely pushed on the stack.  */
-#define FUNCTION_ARG_PARTIAL_NREGS(CUM, MODE, TYPE, NAMED)		\
-  ((NAMED)								\
-   && (CUM) < pdp10_regparm						\
-   && pdp10_regparm < (CUM) + (((MODE) == BLKmode			\
-				? int_size_in_bytes (TYPE)		\
-				: GET_MODE_SIZE (MODE)) + 3) / 4	\
+#define FUNCTION_ARG_PARTIAL_NREGS(CUM, MODE, TYPE, NAMED)                \
+  ((NAMED)                                                              \
+   && (CUM) < pdp10_regparm                                             \
+   && pdp10_regparm < (CUM) + (((MODE) == BLKmode                       \
+                                ? int_size_in_bytes (TYPE)              \
+                                : GET_MODE_SIZE (MODE)) + 3) / 4        \
    ? pdp10_regparm - (CUM) : 0)
+
+/* When a scalar argument straddles the register argument window and the
+   outgoing stack area, GCC's generic partial-argument stack loop stores the
+   trailing words.  PDP-10 argument registers hold the low-address words of
+   the argument instead; the stack spill must therefore store the leading
+   subwords at the target stack offsets.  Keep this target-specific word
+   ordering policy here rather than open-coding it in expr.c.  */
+#define PUSH_PARTIAL_REG_STACK_ARG(X, MODE, SIZE, NOT_STACK, OFFSET, SKIP, \
+                                   ALIGN, ARGS_ADDR, ARGS_OFFSET, \
+                                   REG_PARM_STACK_SPACE, ALIGNMENT_PAD) \
+  do { \
+    int pdp10_push_i; \
+    for (pdp10_push_i = 0; pdp10_push_i < (SIZE) - (NOT_STACK); \
+         pdp10_push_i++) \
+      if (pdp10_push_i < (NOT_STACK) + (OFFSET)) \
+        emit_push_insn (operand_subword_force ((X), pdp10_push_i, (MODE)), \
+                        word_mode, NULL_TREE, NULL_RTX, (ALIGN), \
+                        0, NULL_RTX, 0, (ARGS_ADDR), \
+                        GEN_INT ((ARGS_OFFSET) \
+                                 + ((pdp10_push_i + (SKIP)) \
+                                    * UNITS_PER_WORD)), \
+                        (REG_PARM_STACK_SPACE), (ALIGNMENT_PAD)); \
+  } while (0)
 
 /* A C type for declaring a variable that is used as the first
    argument of FUNCTION_ARG and other related values.
