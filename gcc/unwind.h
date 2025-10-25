@@ -26,7 +26,11 @@ extern "C" {
 #endif
 
 #ifdef __pdp10__
-/* Ugly hack: The PDP-10 has only 6 significant characters in symbols.  */
+/* Legacy PDP-10/TOPS-20 external symbols have only six significant
+   characters.  Keep the historical short _Unwind aliases for that path.
+   The active DAIMON/GAS target predefines __PDP10__ instead, so it keeps
+   the normal GCC unwind names until a native exception/unwind ABI is
+   specified.  */
 #define _Unwind_DeleteException		_UDE
 #define _Unwind_ForcedUnwind_Phase2	_UFUP2
 #define _Unwind_GetDataRelBase		_UGDRB

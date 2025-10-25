@@ -4780,8 +4780,10 @@ init_libfuncs (optable, first_mode, last_mode, opname, suffix)
       p = libfunc_name;
       *p++ = '_';
 #ifndef __PDP10_MACRO_H__
-      /* Ugly hack: The PDP-10 has only 6 significant characters in
-         symbols.  */
+      /* The active GAS-style PDP-10 targets use the normal GCC
+         double-underscore libfunc spelling.  The old MACRO/TOPS-20
+         path omits this second underscore so its libfunc references
+         match the six-significant-character external symbol policy.  */
       *p++ = '_';
 #endif
       for (q = opname; *q; )
@@ -5040,6 +5042,10 @@ init_optabs ()
   udiv_optab->handlers[(int) DImode].libfunc
     = init_one_libfunc (UDIVDI3_LIBCALL);
 #endif
+#ifdef UDIVMODDI4_LIBCALL
+  udivmod_optab->handlers[(int) DImode].libfunc
+    = init_one_libfunc (UDIVMODDI4_LIBCALL);
+#endif
 
 #ifdef MODSI3_LIBCALL
   smod_optab->handlers[(int) SImode].libfunc
@@ -5144,7 +5150,10 @@ init_optabs ()
   unordtf2_libfunc = init_one_libfunc ("__unordtf2");
 
 #ifdef __PDP10_MACRO_H__
-  /* Ugly hack: The PDP-10 has only 6 significant characters in symbols.  */
+  /* MACRO/TOPS-20 external symbols keep only six significant characters.
+     Use the same short conversion-libfunc spellings that libgcc2.h emits
+     for the MACRO assembler path.  GAS-style DAIMON targets below keep the
+     normal GCC double-underscore names.  */
 
   floatsisf_libfunc = init_one_libfunc ("_flsisf");
   floatdisf_libfunc = init_one_libfunc ("_fldisf");

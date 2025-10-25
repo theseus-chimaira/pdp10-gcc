@@ -31,7 +31,11 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 
 
 #ifdef __pdp10__
-/* Ugly hack: The PDP-10 has only 6 significant characters in symbols.  */
+/* Legacy PDP-10/TOPS-20 external symbols have only six significant
+   characters.  Keep the historical short exception-frame registration
+   aliases for that path.  The active DAIMON/GAS target predefines
+   __PDP10__ instead, so it keeps the normal GCC names until a native
+   exception/unwind ABI is specified.  */
 #define __deregister_frame			_drf
 #define __deregister_frame_info			_drfi
 #define __deregister_frame_info_bases		_drfib

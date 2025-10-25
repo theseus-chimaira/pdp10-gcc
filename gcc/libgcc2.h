@@ -200,7 +200,9 @@ typedef int word_type __attribute__ ((mode (__word__)));
 #define __cmpdi2	__NDW(cmp,2)
 #define __ucmpdi2	__NDW(ucmp,2)
 #ifdef __PDP10_MACRO_H__
-/* Ugly hack: The PDP-10 has only 6 significant characters in symbols.  */
+/* MACRO/TOPS-20 external symbols keep only six significant characters.
+   Use a short unique spelling for the internal double-word divmod helper,
+   matching the PDP-10 libfunc naming policy used by optabs.  */
 #define __udivmoddi4	__NDW(udm,4)
 #else
 #define __udivmoddi4	__NDW(udivmod,4)

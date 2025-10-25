@@ -274,5 +274,6 @@ do {							\
 
 #define UMODDI3_LIBCALL "_umoddi3"
 #define UDIVDI3_LIBCALL "_udivdi3"
+#define UDIVMODDI4_LIBCALL "_udmdi4"
 
 #endif /* __PDP10_MACRO_H__ */
