@@ -327,8 +327,13 @@
 
 ;; TSC, TSO, TSZ.  TSNE, TSNN.
 
-;; Converting from double float to single float (truncdfsf2) needs
-;; rounding.
+;; Converting from double float to single float by merely dropping the
+;; low-order word is intentionally conservative for now.  Correct PDP-10
+;; D-float to single rounding is not just an add-one-bit transform: negative
+;; double-length floating fractions are represented as a two-word two's
+;; complement string, and rounded results may need the same carry/renormalize
+;; behavior as the hardware rounded floating instructions.  Keep this simple
+;; truncation until the PDP-10 floating-point runtime has dedicated tests.
 
 ;; ANDCMI really faster than TRZ?
 
@@ -350,22 +355,13 @@
 
 ;; Test-modify-skip instructions?
 
-;; In case anyone would like to play strange games, this could be
-;; optimized to use a PUSHJ instruction:
-;;   static
-;;   foo (void **p, void *f)	FOO:
-;;   {					PUSHJ 1,(2)
-;;     *++p = &&label;			POPJ 17,
-;;     goto *f;
-;;    label:
-;;     return;
-;;   }
-;; And POPJ:
-;;   static void
-;;   bar (void **p)		BAR:
-;;   {					POPJ 1,
-;;     goto *p--;
-;;   }
+;; The old notes below suggested recognizing unusual hand-written
+;; label-value call/return idioms as PUSHJ/POPJ.  That transformation is not
+;; enabled.  It would only be correct when the label value stored on the stack
+;; is exactly the return PC of the generated PUSHJ/POPJ sequence, and GCC's
+;; label-value RTL may be a PDP-10 byte-pointer constant rather than a plain
+;; CODE_LABEL.  Do not add a peephole for this without a helper that proves the
+;; return-label identity after final block layout.
 
 ;; Use JSP to call functions with __attribute__ ((fastcall)) or similar.
 
@@ -5431,7 +5427,9 @@
   "")
 
 ;; Truncate from D-float by just dropping the low-order word.
-;; FIXME: this is not good enough, rounding needed.  Or is it??
+;; See the floating-point note above: full PDP-10-compatible rounding is
+;; deferred until the floating-point runtime has coverage for positive and
+;; negative double-length fraction edge cases.
 (define_insn "*truncdfsf2"
   [(set (match_operand:SF 0 "nonimmediate_operand" "=r,m,r,m")
 	(float_truncate:SF
@@ -6200,30 +6198,7 @@
 		      (pc)))]
   ""
   {
-    static const char *asms[] =
-    { "jump%3 %1,%F0",
-      "skip%3 %@%1",
-      "cai%3 %1,%2",
-      "cam%3 %1,[%X2]",
-      "cam%3 %1,%2" };
-    if (which_alternative != 0)
-      pdp10_remove_unnecessary_label (insn, operands[0]);
-    /* ADDRESS: unextended code can store the symbol in the immediate
-       field.  */
-    if (which_alternative == 3 && !TARGET_EXTENDED
-	&& GET_CODE (operands[2]) == CONST)
-      which_alternative = 2;
-    if (get_attr_length (insn) == 1)
-      return asms[which_alternative];
-    else
-      {
-	/* Reverse the skip condition and output a JRST.  */
-	operands[3] = gen_rtx_fmt_ee (reverse_condition
-				      (GET_CODE (operands[3])),
-				      VOIDmode, NULL_RTX, NULL_RTX);
-	output_asm_insn (asms[which_alternative], operands);
-	return pdp10_output_jrst (operands[0]);
-      }
+    return pdp10_output_cbranch (insn, operands, which_alternative, 0);
   }
   [(set (attr "length")
 	(if_then_else (ior (eq_attr "alternative" "0")
@@ -6294,17 +6269,7 @@
 		      (pc)))]
   ""
   {
-    /* TODO: Copy from cbranchsi.  Maybe create an output function for
-       both?  */
-    const char *asms[][2] =
-    { { "jump%3 %1,%F0",	0 },
-      { "skip%3 %@%1",		"skip%R3 %@%1\;jrst %l0" },
-      { "cai%3 %1,%2",		"cai%R3 %1,%2\;jrst %l0" },
-      { "cam%3 %1,[%2]",	"cam%R3 %1,[%2]\;jrst %l0" },
-      { "cam%3 %1,%2",		"cam%R3 %1,%2\;jrst %l0" } };
-    if (which_alternative != 0)
-      pdp10_remove_unnecessary_label (insn, operands[0]);
-    return asms[which_alternative][get_attr_length (insn) - 1];
+    return pdp10_output_cbranch (insn, operands, which_alternative, 1);
   }
   [(set (attr "length")
 	(if_then_else (ior (eq_attr "alternative" "0")
@@ -6767,15 +6732,19 @@
   "!TARGET_EXTENDED && pdp10_push_operand (operands[0], SImode)"
   "push %P0,%1")
 
+;; This combine form is only safe for the real PDP-10 stack pointer.
+;; PUSH updates both halves of the stack pointer word; using it for an
+;; ordinary C pointer would corrupt the left half of the pointer value.
 (define_insn "*pushsi_combine"
   [(parallel
     [(set (mem:SI (plus:SI (match_operand:SI 0 "register_operand" "r")
 			   (const_int 1)))
-	  ;; FIXME: empty predicate allowed?
-	  (match_operand:SI 1 "" "rm"))
+	  (match_operand:SI 1 "reg_or_mem_operand" "rm"))
      (set (match_operand:SI 2 "register_operand" "=0")
 	  (plus:SI (match_dup 0) (const_int 1)))])]
-  "0"
+  "!TARGET_EXTENDED
+   && REG_P (operands[0])
+   && REGNO (operands[0]) == STACK_POINTER_REGNUM"
   "push %0,%1")
 
 (define_insn "*pushsf_combine"
@@ -6964,8 +6933,11 @@
 	(ior:SI (ashift:SI (match_dup 1) (const_int 18))
 		 (const:SI (plus:SI (match_dup 1) (const_int 1)))))])
 
-;; Generate a PUSHJ instruction from an equivalent sequence of
-;; instructions.
+;; Do not generate PUSHJ from the equivalent hand-written label-value
+;; sequence here.  The sequence is only equivalent to PUSHJ if the stored
+;; label value is exactly the return PC of the new call instruction.  Proving
+;; that after GCC's PDP-10 label-value byte-pointer canonicalization needs an
+;; explicit target helper; until then this intentionally remains disabled.
 (define_peephole2
   [(set (match_operand:SI 0 "register_operand" "")
 	(label_ref:SI (match_operand 1 "" "")))
@@ -6977,7 +6949,6 @@
 	  (plus:SI (match_dup 2) (const_int 1)))])
    (set (pc)
 	(match_operand:SI 4 "" ""))]
-  ;; TODO: find code_label corresponding to operands[1].
   "0 && TARGET_EXTENDED"
   [(parallel
     [(call (mem:SI (match_dup 4)) (const_int 0))
@@ -7331,12 +7302,24 @@
   "soja %0,%l1")
 
 ;; AOS m1
-;; JRST m2			->	AOSA m1,m2 (if possible)
-;; TODO.
+;; JRST m2			->	no general AOSA fold
+;;
+;; Do not fold this into AOSA in the general case.  PDP-10 AOSA is an
+;; increment-and-always-skip instruction; it does not encode an arbitrary
+;; branch target.  A narrow fold would only be correct when m2 is exactly the
+;; instruction after the one physical instruction skipped by AOSA.  That rare
+;; post-layout condition is not exposed cleanly to this peephole, and the
+;; degenerate JRST-to-immediate-fallthrough case should instead be handled by
+;; generic jump cleanup.
 
 ;; SOS m1
-;; JRST m2			->	SOSA m1,m2 (if possible)
-;; TODO.
+;; JRST m2			->	no general SOSA fold
+;;
+;; Do not fold this into SOSA in the general case.  PDP-10 SOSA is a
+;; decrement-and-always-skip instruction; it does not encode an arbitrary
+;; branch target.  The only safe special case is the same rare post-layout
+;; skip-over-one-instruction shape described for AOSA above, so keep this out
+;; of the normal PDP-6/KA10 peephole set.
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
