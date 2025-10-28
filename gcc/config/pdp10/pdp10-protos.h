@@ -214,6 +214,9 @@ do {									\
 } while (0)
 extern const char *
 		pdp10_output_test_and_skip PARAMS ((rtx insn, rtx *operands));
+extern const char *
+		pdp10_output_cbranch PARAMS ((rtx insn, rtx *operands,
+					    int alternative, int float_p));
 
 /* Function Prologue and Epilogue.  */
 extern void	pdp10_expand_prologue PARAMS ((void));

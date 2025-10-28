@@ -6059,6 +6059,56 @@ single_insn (insn, label1, label2)
    last if the comparison should be inverted.  If the JRST jump target
    is just one instruction, the JRST may be replaced by that
    instruction.  */
+
+/* Output an integer or single-float conditional branch.  The PDP-10
+   branch patterns have two forms: a direct one-word branch/skip when the
+   label is immediately reachable, and a two-word skip-over-JRST form for
+   non-adjacent labels.  Keep the reversed condition in a local operands
+   copy so callers do not mutate recog's operand vector.  */
+const char *
+pdp10_output_cbranch (insn, ops, alternative, float_p)
+     rtx insn;
+     rtx *ops;
+     int alternative;
+     int float_p;
+{
+  static const char *const si_asms[] =
+  { "jump%3 %1,%F0",
+    "skip%3 %@%1",
+    "cai%3 %1,%2",
+    "cam%3 %1,[%X2]",
+    "cam%3 %1,%2" };
+  static const char *const sf_asms[] =
+  { "jump%3 %1,%F0",
+    "skip%3 %@%1",
+    "cai%3 %1,%2",
+    "cam%3 %1,[%2]",
+    "cam%3 %1,%2" };
+  rtx operands[4];
+  const char *const *asms;
+
+  memcpy (operands, ops, sizeof operands);
+
+  if (alternative != 0)
+    pdp10_remove_unnecessary_label (insn, operands[0]);
+
+  asms = float_p ? sf_asms : si_asms;
+
+  /* ADDRESS: unextended code can store the symbol in the immediate
+     field.  */
+  if (!float_p && alternative == 3 && !TARGET_EXTENDED
+      && GET_CODE (operands[2]) == CONST)
+    alternative = 2;
+
+  if (get_attr_length (insn) == 1)
+    return asms[alternative];
+
+  operands[3] = gen_rtx_fmt_ee (reverse_condition (GET_CODE (operands[3])),
+                                VOIDmode, NULL_RTX, NULL_RTX);
+  output_asm_insn (asms[alternative], operands);
+  return pdp10_output_jrst (operands[0]);
+}
+
 const char *
 pdp10_output_range_compare (insn, ops, trna)
      rtx insn;
