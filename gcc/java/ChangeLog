@@ -33,7 +33,6 @@
 	* Make-lang.in: Compile jcf-path with version info for use in
 	identifying the appropriate libgcj.jar.
 
->>>>>>> 1.982
 2002-04-08  Tom Tromey  <tromey@redhat.com>
 
 	For PR libgcj/5303:
