@@ -23,6 +23,9 @@ PREFIX="${PDP10_GCC_PREFIX:-/usr/local}"
 AS="${PDP10_GCC_AS:-$PREFIX/bin/$TARGET-as}"
 INSTALL="doas make install"
 CONFIGURE_HOST=""
+if [ -n "${PDP10_GCC_BUILD_ALIAS:-}" ] || [ -n "${PDP10_GCC_HOST_ALIAS:-}" ]; then
+	CONFIGURE_HOST="--build=${PDP10_GCC_BUILD_ALIAS:-x86_64-unknown-linux-gnu} --host=${PDP10_GCC_HOST_ALIAS:-${PDP10_GCC_BUILD_ALIAS:-x86_64-unknown-linux-gnu}}"
+fi
 
 if [ -d /system ] || [ "$(uname -o 2>/dev/null || true)" = Android ]; then
 	if [ -z "${PDP10_GCC_PREFIX+x}" ]; then
@@ -33,7 +36,9 @@ if [ -d /system ] || [ "$(uname -o 2>/dev/null || true)" = Android ]; then
 	fi
 	AS="${PDP10_GCC_AS:-$PREFIX/bin/$TARGET-as}"
 	INSTALL="make install"
-	CONFIGURE_HOST="--build=${PDP10_GCC_BUILD_ALIAS:-x86_64-unknown-linux-gnu} --host=${PDP10_GCC_HOST_ALIAS:-x86_64-unknown-linux-gnu}"
+	if [ -z "$CONFIGURE_HOST" ]; then
+		CONFIGURE_HOST="--build=${PDP10_GCC_BUILD_ALIAS:-x86_64-unknown-linux-gnu} --host=${PDP10_GCC_HOST_ALIAS:-x86_64-unknown-linux-gnu}"
+	fi
 fi
 
 if [ -d /system ] || [ "$(uname -o 2>/dev/null || true)" = Android ]; then
