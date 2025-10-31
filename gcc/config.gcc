@@ -418,6 +418,16 @@ a29k-*-udi | a29k-*-coff)
 	tm_file="${tm_file} dbxcoff.h"
 	tmake_file=a29k/t-a29kbare
 	;;
+aarch64*-*-linux*)
+	# GCC 3.2 has no AArch64 backend, but it can still be built on an
+	# AArch64 GNU/Linux host when targeting another machine.
+	if test "$machine" = "$target"; then
+		echo "Configuration $machine not supported" 1>&2
+		exit 1
+	fi
+	tm_file=
+	xm_defines=POSIX
+	;;
 a29k*-*-rtems*)
 	xm_defines=POSIX
 	tm_file="a29k/a29k.h a29k/rtems.h rtems.h"
