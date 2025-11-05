@@ -21,9 +21,10 @@
 #02111-1307, USA.
 
 # Initialization and defaults
-AC_PREREQ(2.13)
-AC_INIT(tree.c)
-AC_CONFIG_HEADER(auto-host.h:config.in)
+AC_PREREQ([2.72])
+AC_INIT
+AC_CONFIG_SRCDIR([tree.c])
+AC_CONFIG_HEADERS([auto-host.h:config.in])
 
 remove=rm
 hard_link=ln
@@ -333,7 +334,7 @@ AC_ARG_ENABLE(shared,
 AC_SUBST(enable_shared)
 
 # Determine the host, build, and target systems
-AC_CANONICAL_SYSTEM
+AC_CANONICAL_TARGET
 
 # Set program_transform_name
 AC_ARG_PROGRAM
@@ -357,8 +358,7 @@ AC_CACHE_CHECK(whether ${CC-cc} accepts -Wno-long-long,
 ac_cv_prog_cc_no_long_long,
 [save_CFLAGS="$CFLAGS"
 CFLAGS="-Wno-long-long"
-AC_TRY_COMPILE(,,ac_cv_prog_cc_no_long_long=yes,
-	       ac_cv_prog_cc_no_long_long=no)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[]])],[ac_cv_prog_cc_no_long_long=yes],[ac_cv_prog_cc_no_long_long=no])
 CFLAGS="$save_CFLAGS"])
 
 if test x$have_gnat != xno ; then 
@@ -439,11 +439,11 @@ AC_PROG_MAKE_SET
 
 AC_MSG_CHECKING([whether a default assembler was specified])
 if test x"${DEFAULT_ASSEMBLER+set}" = x"set"; then
-    if test x"$gas_flag" = x"no"; then
-    	AC_MSG_RESULT([yes ($DEFAULT_ASSEMBLER)])
-    else
+  if test x"$gas_flag" = x"no"; then
+    AC_MSG_RESULT([yes ($DEFAULT_ASSEMBLER)])
+  else
 	AC_MSG_RESULT([yes ($DEFAULT_ASSEMBLER - GNU as)])
-    fi
+  fi
 else
     AC_MSG_RESULT(no)
 fi
@@ -461,13 +461,10 @@ fi
 
 AC_MSG_CHECKING(for GNU C library)
 AC_CACHE_VAL(gcc_cv_glibc,
-[AC_TRY_COMPILE(
-  [#include <features.h>],[
+[AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <features.h>]], [[
 #if ! (defined __GLIBC__ || defined __GNU_LIBRARY__)
 #error Not a GNU C library system
-#endif], 
-  [gcc_cv_glibc=yes], 
-  gcc_cv_glibc=no)])
+#endif]])],[gcc_cv_glibc=yes],[gcc_cv_glibc=no])])
 AC_MSG_RESULT($gcc_cv_glibc)
 if test $gcc_cv_glibc = yes; then
   AC_DEFINE(_GNU_SOURCE, 1, [Always define this when using the GNU C Library])
@@ -480,8 +477,15 @@ gcc_AC_PROG_LN_S
 AC_PROG_RANLIB
 gcc_AC_PROG_INSTALL
 
-AC_HEADER_STDC
-AC_HEADER_TIME
+AC_DEFINE([STDC_HEADERS], [1],
+  [Define to 1 if you have the ANSI C header files.])
+
+AC_CHECK_HEADERS([sys/time.h])
+if test $ac_cv_header_sys_time_h = yes; then
+  AC_DEFINE([TIME_WITH_SYS_TIME], [1],
+    [Define if you can safely include both <sys/time.h> and <time.h>.])
+fi
+
 gcc_AC_HEADER_STDBOOL
 gcc_AC_HEADER_STRING
 AC_HEADER_SYS_WAIT
@@ -511,8 +515,8 @@ else
   # See if makeinfo has been installed and is modern enough
   # that we can use it.
   gcc_AC_CHECK_PROG_VER(MAKEINFO, makeinfo, --version,
-  [GNU texinfo.* \([0-9][0-9.]*\)],
-  [4.[1-9]*])
+  [GNU texinfo[^0-9]*\([0-9][0-9.]*\)],
+  [4.[1-9]*|[5-9].*|[1-9][0-9].*])
 fi
 
 if test $gcc_cv_prog_makeinfo_modern = no; then
@@ -560,7 +564,7 @@ for libs in '' -lld -lmld \
 		'-L/usr/lib/cmplrs/cc3.11 -lmld'
 do
 	LIBS="$libs"
-	AC_TRY_LINK_FUNC(ldopen,
+	AC_LINK_IFELSE([AC_LANG_CALL([], [ldopen])],
 		[gcc_cv_collect2_libs="$libs"; break])
 done
 LIBS="$save_LIBS"
@@ -588,12 +592,8 @@ AC_C_STRINGIZE
 # doesn't clash with <sys/types.h>, and declares intmax_t.
 AC_MSG_CHECKING(for inttypes.h)
 AC_CACHE_VAL(gcc_cv_header_inttypes_h,
-[AC_TRY_COMPILE(
-  [#include <sys/types.h>
-#include <inttypes.h>],
-  [intmax_t i = -1;],
-  [gcc_cv_header_inttypes_h=yes],
-  gcc_cv_header_inttypes_h=no)])
+[AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <sys/types.h>
+#include <inttypes.h>]], [[intmax_t i = -1;]])],[gcc_cv_header_inttypes_h=yes],[gcc_cv_header_inttypes_h=no])])
 AC_MSG_RESULT($gcc_cv_header_inttypes_h)
 if test $gcc_cv_header_inttypes_h = yes; then
   AC_DEFINE(HAVE_INTTYPES_H, 1,
@@ -644,7 +644,7 @@ case "${host}" in
   ac_cv_func_vfork_works=yes
   ;;
 esac
-AC_FUNC_VFORK
+AC_FUNC_FORK
 AC_FUNC_MMAP_ANYWHERE
 AC_FUNC_MMAP_FILE
 
@@ -678,13 +678,13 @@ gcc_AC_CHECK_DECLS(times, , ,[
 
 # More time-related stuff.
 AC_CACHE_CHECK(for struct tms, ac_cv_struct_tms, [
-AC_TRY_COMPILE([
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #include "ansidecl.h"
 #include "system.h"
 #ifdef HAVE_SYS_TIMES_H
 #include <sys/times.h>
 #endif
-], [struct tms tms;], ac_cv_struct_tms=yes, ac_cv_struct_tms=no)])
+]], [[struct tms tms;]])],[ac_cv_struct_tms=yes],[ac_cv_struct_tms=no])])
 if test $ac_cv_struct_tms = yes; then
   AC_DEFINE(HAVE_STRUCT_TMS, 1,
   [Define if <sys/times.h> defines struct tms.])
@@ -693,10 +693,10 @@ fi
 # use gcc_cv_* here because this doesn't match the behavior of AC_CHECK_TYPE.
 # revisit after autoconf 2.50.
 AC_CACHE_CHECK(for clock_t, gcc_cv_type_clock_t, [
-AC_TRY_COMPILE([
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #include "ansidecl.h"
 #include "system.h"
-], [clock_t x;], gcc_cv_type_clock_t=yes, gcc_cv_type_clock_t=no)])
+]], [[clock_t x;]])],[gcc_cv_type_clock_t=yes],[gcc_cv_type_clock_t=no])])
 if test $gcc_cv_type_clock_t = yes; then
   AC_DEFINE(HAVE_CLOCK_T, 1,
   [Define if <time.h> defines clock_t.])
@@ -2460,8 +2460,8 @@ fi
 
 # Create the Makefile
 # and configure language subdirectories
-AC_OUTPUT($all_outputs,
-[
+AC_CONFIG_FILES([$all_outputs])
+AC_CONFIG_COMMANDS([default],[
 case x$CONFIG_HEADERS in
 xauto-host.h:config.in)
 echo > cstamp-h ;;
@@ -2491,7 +2491,7 @@ if test -f intl/libintl.h; then
   echo creating libintl.h
   echo '#include "intl/libintl.h"' >libintl.h
 fi
-], 
-[subdirs='$subdirs'
+],[subdirs='$subdirs'
 symbolic_link='$symbolic_link'
 ])
+AC_OUTPUT

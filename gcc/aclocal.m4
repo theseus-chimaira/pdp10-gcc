@@ -2,9 +2,7 @@ dnl See if stdbool.h properly defines bool and true/false.
 AC_DEFUN(gcc_AC_HEADER_STDBOOL,
 [AC_CACHE_CHECK([for working stdbool.h],
   ac_cv_header_stdbool_h,
-[AC_TRY_COMPILE([#include <stdbool.h>],
-[bool foo = false;],
-ac_cv_header_stdbool_h=yes, ac_cv_header_stdbool_h=no)])
+[AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <stdbool.h>]], [[bool foo = false;]])],[ac_cv_header_stdbool_h=yes],[ac_cv_header_stdbool_h=no])])
 if test $ac_cv_header_stdbool_h = yes; then
   AC_DEFINE(HAVE_STDBOOL_H, 1,
   [Define if you have a working <stdbool.h> header file.])
@@ -15,8 +13,8 @@ dnl See whether we can include both string.h and strings.h.
 AC_DEFUN(gcc_AC_HEADER_STRING,
 [AC_CACHE_CHECK([whether string.h and strings.h may both be included],
   gcc_cv_header_string,
-[AC_TRY_COMPILE([#include <string.h>
-#include <strings.h>], , gcc_cv_header_string=yes, gcc_cv_header_string=no)])
+[AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <string.h>
+#include <strings.h>]], [[]])],[gcc_cv_header_string=yes],[gcc_cv_header_string=no])])
 if test $gcc_cv_header_string = yes; then
   AC_DEFINE(STRING_WITH_STRINGS, 1, [Define if you can safely include both <string.h> and <strings.h>.])
 fi
@@ -31,10 +29,9 @@ dnl 	[ACTION-IF-FOUND [, ACTION-IF-NOT-FOUND [, INCLUDES]]])
 AC_DEFUN(gcc_AC_CHECK_DECL,
 [AC_MSG_CHECKING([whether $1 is declared])
 AC_CACHE_VAL(gcc_cv_have_decl_$1,
-[AC_TRY_COMPILE([$4],
-[#ifndef $1
+[AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[$4]], [[#ifndef $1
 char *(*pfn) = (char *(*)) $1 ;
-#endif], eval "gcc_cv_have_decl_$1=yes", eval "gcc_cv_have_decl_$1=no")])
+#endif]])],[eval "gcc_cv_have_decl_$1=yes"],[eval "gcc_cv_have_decl_$1=no"])])
 if eval "test \"`echo '$gcc_cv_have_decl_'$1`\" = yes"; then
   AC_MSG_RESULT(yes) ; ifelse([$2], , :, [$2])
 else
@@ -79,7 +76,7 @@ dnl See if the printf functions in libc support %p in format strings.
 AC_DEFUN(gcc_AC_FUNC_PRINTF_PTR,
 [AC_CACHE_CHECK(whether the printf functions support %p,
   gcc_cv_func_printf_ptr,
-[AC_TRY_RUN([#include <stdio.h>
+[AC_RUN_IFELSE([AC_LANG_SOURCE([[#include <stdio.h>
 
 int main()
 {
@@ -88,8 +85,7 @@ int main()
   sprintf(buf, "%p", p);
   sscanf(buf, "%p", &q);
   return (p != q);
-}], gcc_cv_func_printf_ptr=yes, gcc_cv_func_printf_ptr=no,
-	gcc_cv_func_printf_ptr=no)
+}]])],[gcc_cv_func_printf_ptr=yes],[gcc_cv_func_printf_ptr=no],[gcc_cv_func_printf_ptr=no])
 rm -f core core.* *.core])
 if test $gcc_cv_func_printf_ptr = yes ; then
   AC_DEFINE(HAVE_PRINTF_PTR, 1, [Define if printf supports "%p".])
@@ -163,8 +159,7 @@ AC_SUBST(LN)dnl
 dnl See whether the stage1 host compiler accepts the volatile keyword.
 AC_DEFUN(gcc_AC_C_VOLATILE,
 [AC_CACHE_CHECK([for volatile], gcc_cv_c_volatile,
-[AC_TRY_COMPILE(, [volatile int foo;],
-        gcc_cv_c_volatile=yes, gcc_cv_c_volatile=no)])
+[AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[volatile int foo;]])],[gcc_cv_c_volatile=yes],[gcc_cv_c_volatile=no])])
 if test $gcc_cv_c_volatile = yes ; then
   AC_DEFINE(HAVE_VOLATILE, 1, [Define if your compiler understands volatile.])
 fi
@@ -177,12 +172,10 @@ AC_DEFUN(gcc_AC_C_LONG_DOUBLE,
 [if test "$GCC" = yes; then
   gcc_cv_c_long_double=yes
 else
-AC_TRY_COMPILE(,
-[/* The Stardent Vistra knows sizeof(long double), but does not support it.  */
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[/* The Stardent Vistra knows sizeof(long double), but does not support it.  */
 long double foo = 0.0;
 /* On Ultrix 4.3 cc, long double is 4 and double is 8.  */
-switch (0) case 0: case (sizeof(long double) >= sizeof(double)):;],
-gcc_cv_c_long_double=yes, gcc_cv_c_long_double=no)
+switch (0) case 0: case (sizeof(long double) >= sizeof(double)):;]])],[gcc_cv_c_long_double=yes],[gcc_cv_c_long_double=no])
 fi])
 if test $gcc_cv_c_long_double = yes; then
   AC_DEFINE(HAVE_LONG_DOUBLE, 1, 
@@ -193,9 +186,7 @@ fi
 dnl Check whether _Bool is built-in.
 AC_DEFUN(gcc_AC_C__BOOL,
 [AC_CACHE_CHECK(for built-in _Bool, gcc_cv_c__bool,
-[AC_TRY_COMPILE(,
-[_Bool foo;],
-gcc_cv_c__bool=yes, gcc_cv_c__bool=no)
+[AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[_Bool foo;]])],[gcc_cv_c__bool=yes],[gcc_cv_c__bool=no])
 ])
 if test $gcc_cv_c__bool = yes; then
   AC_DEFINE(HAVE__BOOL, 1, [Define if the \`_Bool' type is built-in.])
@@ -206,7 +197,7 @@ dnl Define MKDIR_TAKES_ONE_ARG if mkdir accepts only one argument instead
 dnl of the usual 2.
 AC_DEFUN(gcc_AC_FUNC_MKDIR_TAKES_ONE_ARG,
 [AC_CACHE_CHECK([if mkdir takes one argument], gcc_cv_mkdir_takes_one_arg,
-[AC_TRY_COMPILE([
+[AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #include <sys/types.h>
 #ifdef HAVE_SYS_STAT_H
 # include <sys/stat.h>
@@ -216,8 +207,7 @@ AC_DEFUN(gcc_AC_FUNC_MKDIR_TAKES_ONE_ARG,
 #endif
 #ifdef HAVE_DIRECT_H
 # include <direct.h>
-#endif], [mkdir ("foo", 0);], 
-        gcc_cv_mkdir_takes_one_arg=no, gcc_cv_mkdir_takes_one_arg=yes)])
+#endif]], [[mkdir ("foo", 0);]])],[gcc_cv_mkdir_takes_one_arg=no],[gcc_cv_mkdir_takes_one_arg=yes])])
 if test $gcc_cv_mkdir_takes_one_arg = yes ; then
   AC_DEFINE(MKDIR_TAKES_ONE_ARG, 1, [Define if host mkdir takes a single argument.])
 fi
@@ -297,8 +287,7 @@ dnl
 dnl Sets the shell variable have_gnat to yes or no as appropriate, and
 dnl substitutes GNATBIND and ADAC.
 AC_DEFUN([gcc_AC_PROG_GNAT],
-[AC_REQUIRE([AC_CHECK_TOOL_PREFIX])
-AC_CHECK_TOOL(GNATBIND, gnatbind, no)
+[AC_CHECK_TOOL(GNATBIND, gnatbind, no)
 AC_CACHE_CHECK([for compiler driver that understands Ada],
 		 gcc_cv_prog_adac,
 [cat >conftest.adb <<EOF
@@ -337,24 +326,6 @@ else
   have_gnat=no
 fi
 ])
-
-#serial 1
-dnl This test replaces the one in autoconf.
-dnl Currently this macro should have the same name as the autoconf macro
-dnl because gettext's gettext.m4 (distributed in the automake package)
-dnl still uses it.  Otherwise, the use in gettext.m4 makes autoheader
-dnl give these diagnostics:
-dnl   configure.in:556: AC_TRY_COMPILE was called before AC_ISC_POSIX
-dnl   configure.in:556: AC_TRY_RUN was called before AC_ISC_POSIX
-
-undefine([AC_ISC_POSIX])
-AC_DEFUN(AC_ISC_POSIX,
-  [
-    dnl This test replaces the obsolescent AC_ISC_POSIX kludge.
-    AC_CHECK_LIB(cposix, strerror, [LIBS="$LIBS -lcposix"])
-  ]
-)
-
 
 dnl GCC_PATH_PROG(VARIABLE, PROG-TO-CHECK-FOR [, VALUE-IF-NOT-FOUND [, PATH]])
 dnl like AC_PATH_PROG but use other cache variables
@@ -653,22 +624,18 @@ changequote([,])dnl
 
 AC_CACHE_CHECK(for working mmap from /dev/zero,
   ac_cv_func_mmap_dev_zero,
-[AC_TRY_RUN(
- [#include "ct-mmap.inc"],
- ac_cv_func_mmap_dev_zero=yes,
- [if test $? -lt 4
+[AC_RUN_IFELSE([AC_LANG_SOURCE([[#include "ct-mmap.inc"]])],[ac_cv_func_mmap_dev_zero=yes],[if test $? -lt 4
  then ac_cv_func_mmap_dev_zero=no
  else ac_cv_func_mmap_dev_zero=buggy
- fi],
- # If this is not cygwin, and /dev/zero is a character device, it's probably
- # safe to assume it works.
- [case "$host_os" in
+ fi],[# If this is not cygwin, and /dev/zero is a character device, it's
+ # probably safe to assume it works.
+ case "$host_os" in
    cygwin* | win32 | pe | mingw* ) ac_cv_func_mmap_dev_zero=buggy ;;
    * ) if test -c /dev/zero
        then ac_cv_func_mmap_dev_zero=yes
        else ac_cv_func_mmap_dev_zero=no
        fi ;;
-  esac])
+ esac])
 ])
 if test $ac_cv_func_mmap_dev_zero = yes; then
   AC_DEFINE(HAVE_MMAP_DEV_ZERO, 1,
@@ -677,17 +644,13 @@ fi
 
 AC_CACHE_CHECK([for working mmap with MAP_ANON(YMOUS)],
   ac_cv_func_mmap_anon,
-[AC_TRY_RUN(
- [#define USE_MAP_ANON
-#include "ct-mmap.inc"],
- ac_cv_func_mmap_anon=yes,
- [if test $? -lt 4
+[AC_RUN_IFELSE([AC_LANG_SOURCE([[#define USE_MAP_ANON
+#include "ct-mmap.inc"]])],[ac_cv_func_mmap_anon=yes],[if test $? -lt 4
  then ac_cv_func_mmap_anon=no
  else ac_cv_func_mmap_anon=buggy
- fi],
- # Unlike /dev/zero, it is not safe to assume MAP_ANON(YMOUS) works
+ fi],[# Unlike /dev/zero, it is not safe to assume MAP_ANON(YMOUS) works
  # just because it's there. Some SCO Un*xen define it but don't implement it.
- ac_cv_func_mmap_anon=no)
+ ac_cv_func_mmap_anon=no])
 ])
 if test $ac_cv_func_mmap_anon = yes; then
   AC_DEFINE(HAVE_MMAP_ANON, 1,
@@ -706,7 +669,7 @@ do echo $i $j xxxxx
 done
 done > conftestdata$$
 
-AC_TRY_RUN([
+AC_RUN_IFELSE([AC_LANG_SOURCE([[
 /* Test by Zack Weinberg.  Modified from MMAP_ANYWHERE test by
    Richard Henderson and Alexandre Oliva.
    Check whether read-only mmap of a plain file works. */
@@ -739,8 +702,7 @@ int main()
     exit(5);
 
   exit(0);
-}], ac_cv_func_mmap_file=yes, ac_cv_func_mmap_file=no,
-ac_cv_func_mmap_file=no)])
+}]])],[ac_cv_func_mmap_file=yes],[ac_cv_func_mmap_file=no],[ac_cv_func_mmap_file=no])])
 if test $ac_cv_func_mmap_file = yes; then
   AC_DEFINE(HAVE_MMAP_FILE, 1,
 	    [Define if read-only mmap of a plain file works.])
@@ -759,7 +721,7 @@ if test -n "[$]$1"; then
   ac_prog_version=`<<$>>$1 $3 2>&1 |
                    sed -n 's/^.*patsubst(<<$4>>,/,\/).*$/\1/p'`
 changequote([,])dnl
-  echo "configure:__oline__: version of $2 is $ac_prog_version" >&AC_FD_CC
+  echo "configure:__oline__: version of $2 is $ac_prog_version" >&AS_MESSAGE_LOG_FD
 changequote(<<,>>)dnl
   case $ac_prog_version in
     '')     gcc_cv_prog_$2_modern=no;;
@@ -779,7 +741,7 @@ dnl be either signed or unsigned.
 dnl
 AC_DEFUN(gcc_AC_C_ENUM_BF_UNSIGNED,
 [AC_CACHE_CHECK(for unsigned enumerated bitfields, gcc_cv_enum_bf_unsigned,
-[AC_TRY_RUN(#include <stdlib.h>
+[AC_RUN_IFELSE([AC_LANG_SOURCE([[#include <stdlib.h>
 enum t { BLAH = 128 } ;
 struct s_t { enum t member : 8; } s ;
 int main(void)
@@ -788,7 +750,7 @@ int main(void)
         if (s.member < 0) exit(1);
         exit(0);
 
-}, gcc_cv_enum_bf_unsigned=yes, gcc_cv_enum_bf_unsigned=no, gcc_cv_enum_bf_unsigned=yes)])
+}]])],[gcc_cv_enum_bf_unsigned=yes],[gcc_cv_enum_bf_unsigned=no],[gcc_cv_enum_bf_unsigned=yes])])
 if test $gcc_cv_enum_bf_unsigned = yes; then
   AC_DEFINE(ENUM_BITFIELDS_ARE_UNSIGNED, 1,
     [Define if enumerated bitfields are treated as unsigned values.])
@@ -807,10 +769,10 @@ changequote([, ])dnl
 AC_MSG_CHECKING(size of $1)
 AC_CACHE_VAL(AC_CV_NAME,
 [for ac_size in 4 8 1 2 16 $3 ; do # List sizes in rough order of prevalence.
-  AC_TRY_COMPILE([#include "confdefs.h"
+  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include "confdefs.h"
 #include <sys/types.h>
 $2
-], [switch (0) case 0: case (sizeof ($1) == $ac_size):;], AC_CV_NAME=$ac_size)
+]], [[switch (0) case 0: case (sizeof ($1) == $ac_size):;]])],[AC_CV_NAME=$ac_size],[])
   if test x$AC_CV_NAME != x ; then break; fi
 done
 ])
@@ -841,12 +803,10 @@ if test $gcc_cv_decl_char_bit = no; then
 [i=8
  gcc_cv_c_nbby=
  while test $i -lt 65; do
-   AC_TRY_COMPILE(,
-     [switch(0) {
+   AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[switch(0) {
   case (unsigned char)((unsigned long)1 << $i) == ((unsigned long)1 << $i):
   case (unsigned char)((unsigned long)1<<($i-1)) == ((unsigned long)1<<($i-1)):
-  ; }], 
-     [gcc_cv_c_nbby=$i; break])
+  ; }]])],[gcc_cv_c_nbby=$i; break],[])
    i=`expr $i + 1`
  done
  test -z "$gcc_cv_c_nbby" && gcc_cv_c_nbby=failed
@@ -865,17 +825,13 @@ dnl Added check for __int64, Zack Weinberg <zackw@stanford.edu>
 dnl
 AC_DEFUN([gcc_AC_C_LONG_LONG],
 [AC_CACHE_CHECK(for long long int, ac_cv_c_long_long,
-  [AC_TRY_COMPILE(,[long long int i;],
-         ac_cv_c_long_long=yes,
-         ac_cv_c_long_long=no)])
+  [AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[long long int i;]])],[ac_cv_c_long_long=yes],[ac_cv_c_long_long=no])])
   if test $ac_cv_c_long_long = yes; then
     AC_DEFINE(HAVE_LONG_LONG, 1,
       [Define if your compiler supports the \`long long' type.])
   fi
 AC_CACHE_CHECK(for __int64, ac_cv_c___int64,
-  [AC_TRY_COMPILE(,[__int64 i;],
-	ac_cv_c___int64=yes,
-	ac_cv_c___int64=no)])
+  [AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[__int64 i;]])],[ac_cv_c___int64=yes],[ac_cv_c___int64=no])])
   if test $ac_cv_c___int64 = yes; then
     AC_DEFINE(HAVE___INT64, 1,
       [Define if your compiler supports the \`__int64' type.])
@@ -927,8 +883,8 @@ dnl may be examined by the commands in the second argument.
 dnl
 AC_DEFUN([gcc_AC_EXAMINE_OBJECT],
 [AC_LANG_SAVE
-AC_LANG_C
-dnl Next bit cribbed from AC_TRY_COMPILE.
+AC_LANG([C])
+dnl Next bit cribbed from AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[]])],[],[]).
 cat > conftest.$ac_ext <<EOF
 [#line __oline__ "configure"
 #include "confdefs.h"
@@ -1113,22 +1069,18 @@ AC_DEFUN([AM_ICONV],
   AC_CACHE_CHECK(for iconv, am_cv_func_iconv, [
     am_cv_func_iconv="no, consider installing GNU libiconv"
     am_cv_lib_iconv=no
-    AC_TRY_LINK([#include <stdlib.h>
-#include <iconv.h>],
-      [iconv_t cd = iconv_open("","");
+    AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdlib.h>
+#include <iconv.h>]], [[iconv_t cd = iconv_open("","");
        iconv(cd,NULL,NULL,NULL,NULL);
-       iconv_close(cd);],
-      am_cv_func_iconv=yes)
+       iconv_close(cd);]])],[am_cv_func_iconv=yes],[])
     if test "$am_cv_func_iconv" != yes; then
       am_save_LIBS="$LIBS"
       LIBS="$LIBS $am_cv_libiconv_ldpath -liconv"
-      AC_TRY_LINK([#include <stdlib.h>
-#include <iconv.h>],
-        [iconv_t cd = iconv_open("","");
+      AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <stdlib.h>
+#include <iconv.h>]], [[iconv_t cd = iconv_open("","");
          iconv(cd,NULL,NULL,NULL,NULL);
-         iconv_close(cd);],
-        am_cv_lib_iconv=yes
-        am_cv_func_iconv=yes)
+         iconv_close(cd);]])],[am_cv_lib_iconv=yes
+        am_cv_func_iconv=yes],[])
       LIBS="$am_save_LIBS"
     fi
   ])
@@ -1136,7 +1088,7 @@ AC_DEFUN([AM_ICONV],
     AC_DEFINE(HAVE_ICONV, 1, [Define if you have the iconv() function.])
     AC_MSG_CHECKING([for iconv declaration])
     AC_CACHE_VAL(am_cv_proto_iconv, [
-      AC_TRY_COMPILE([
+      AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #include <stdlib.h>
 #include <iconv.h>
 extern
@@ -1148,7 +1100,7 @@ size_t iconv (iconv_t cd, char * *inbuf, size_t *inbytesleft, char * *outbuf, si
 #else
 size_t iconv();
 #endif
-], [], am_cv_proto_iconv_arg1="", am_cv_proto_iconv_arg1="const")
+]], [[]])],[am_cv_proto_iconv_arg1=""],[am_cv_proto_iconv_arg1="const"])
       am_cv_proto_iconv="extern size_t iconv (iconv_t cd, $am_cv_proto_iconv_arg1 char * *inbuf, size_t *inbytesleft, char * *outbuf, size_t *outbytesleft);"])
     am_cv_proto_iconv=`echo "[$]am_cv_proto_iconv" | tr -s ' ' | sed -e 's/( /(/'`
     AC_MSG_RESULT([$]{ac_t:-
@@ -1174,35 +1126,13 @@ dnl From Bruno Haible.
 AC_DEFUN([AM_LANGINFO_CODESET],
 [
   AC_CACHE_CHECK([for nl_langinfo and CODESET], am_cv_langinfo_codeset,
-    [AC_TRY_LINK([#include <langinfo.h>],
-      [char* cs = nl_langinfo(CODESET);],
-      am_cv_langinfo_codeset=yes,
-      am_cv_langinfo_codeset=no)
+    [AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <langinfo.h>]], [[char* cs = nl_langinfo(CODESET);]])],[am_cv_langinfo_codeset=yes],[am_cv_langinfo_codeset=no])
     ])
   if test $am_cv_langinfo_codeset = yes; then
     AC_DEFINE(HAVE_LANGINFO_CODESET, 1,
       [Define if you have <langinfo.h> and nl_langinfo(CODESET).])
   fi
 ])
-
-#serial 1
-# This test replaces the one in autoconf.
-# Currently this macro should have the same name as the autoconf macro
-# because gettext's gettext.m4 (distributed in the automake package)
-# still uses it.  Otherwise, the use in gettext.m4 makes autoheader
-# give these diagnostics:
-#   configure.in:556: AC_TRY_COMPILE was called before AC_ISC_POSIX
-#   configure.in:556: AC_TRY_RUN was called before AC_ISC_POSIX
-
-undefine([AC_ISC_POSIX])
-
-AC_DEFUN([AC_ISC_POSIX],
-  [
-    dnl This test replaces the obsolescent AC_ISC_POSIX kludge.
-    dnl GCC LOCAL: Use AC_SEARCH_LIBS.
-    AC_SEARCH_LIBS(strerror, cposix)
-  ]
-)
 
 #serial 2
 
@@ -1248,8 +1178,7 @@ AC_DEFUN([jm_GLIBC21],
 AC_DEFUN([AM_LC_MESSAGES],
   [if test $ac_cv_header_locale_h = yes; then
     AC_CACHE_CHECK([for LC_MESSAGES], am_cv_val_LC_MESSAGES,
-      [AC_TRY_LINK([#include <locale.h>], [return LC_MESSAGES],
-       am_cv_val_LC_MESSAGES=yes, am_cv_val_LC_MESSAGES=no)])
+      [AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <locale.h>]], [[return LC_MESSAGES]])],[am_cv_val_LC_MESSAGES=yes],[am_cv_val_LC_MESSAGES=no])])
     if test $am_cv_val_LC_MESSAGES = yes; then
       AC_DEFINE(HAVE_LC_MESSAGES, 1,
         [Define if your <locale.h> file defines LC_MESSAGES.])
@@ -1393,24 +1322,18 @@ dnl GCC LOCAL: Expose presence of libintl.h to C code.
 	  [AC_DEFINE([HAVE_LIBINTL_H], 1,
 		[Define if you have the <libintl.h> header file.])
            AC_CACHE_CHECK([for GNU gettext in libc], gt_cv_func_gnugettext_libc,
-	    [AC_TRY_LINK([#include <libintl.h>
-extern int _nl_msg_cat_cntr;],
-	       [bindtextdomain ("", "");
-return (int) gettext ("")]ifelse([$2], need-ngettext, [ + (int) ngettext ("", "", 0)], [])[ + _nl_msg_cat_cntr],
-	       gt_cv_func_gnugettext_libc=yes,
-	       gt_cv_func_gnugettext_libc=no)])
+	    [AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <libintl.h>
+extern int _nl_msg_cat_cntr;]], [[bindtextdomain ("", "");
+return (int) gettext ("")ifelse($2, need-ngettext,  + (int) ngettext ("", "", 0), ) + _nl_msg_cat_cntr]])],[gt_cv_func_gnugettext_libc=yes],[gt_cv_func_gnugettext_libc=no])])
 
 	   if test "$gt_cv_func_gnugettext_libc" != "yes"; then
 	     AC_CACHE_CHECK([for GNU gettext in libintl],
 	       gt_cv_func_gnugettext_libintl,
 	       [gt_save_LIBS="$LIBS"
 		LIBS="$LIBS -lintl $LIBICONV"
-		AC_TRY_LINK([#include <libintl.h>
-extern int _nl_msg_cat_cntr;],
-		  [bindtextdomain ("", "");
-return (int) gettext ("")]ifelse([$2], need-ngettext, [ + (int) ngettext ("", "", 0)], [])[ + _nl_msg_cat_cntr],
-		  gt_cv_func_gnugettext_libintl=yes,
-		  gt_cv_func_gnugettext_libintl=no)
+		AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <libintl.h>
+extern int _nl_msg_cat_cntr;]], [[bindtextdomain ("", "");
+return (int) gettext ("")ifelse($2, need-ngettext,  + (int) ngettext ("", "", 0), ) + _nl_msg_cat_cntr]])],[gt_cv_func_gnugettext_libintl=yes],[gt_cv_func_gnugettext_libintl=no])
 		LIBS="$gt_save_LIBS"])
 	   fi
 
@@ -1504,8 +1427,7 @@ return (int) gettext ("")]ifelse([$2], need-ngettext, [ + (int) ngettext ("", ""
       dnl We need to process the po/ directory.
       POSUB=po
     fi
-    AC_OUTPUT_COMMANDS(
-     [for ac_file in $CONFIG_FILES; do
+    AC_CONFIG_COMMANDS([default-1],[[for ac_file in $CONFIG_FILES; do
         # Support "outfile[:infile[:infile...]]"
         case "$ac_file" in
           *:*) ac_file=`echo "$ac_file"|sed 's%:.*%%'` ;;
@@ -1533,7 +1455,7 @@ return (int) gettext ("")]ifelse([$2], need-ngettext, [ + (int) ngettext ("", ""
           fi
           ;;
         esac
-      done])
+      done]],[[]])
 
 
     dnl If this is used in GNU gettext we have to set BUILD_INCLUDED_LIBINTL
@@ -1614,8 +1536,7 @@ AC_DEFUN([AM_GNU_GETTEXT],
    AC_REQUIRE([AC_PROG_CC])dnl
    AC_REQUIRE([AC_CANONICAL_HOST])dnl
    AC_REQUIRE([AC_PROG_RANLIB])dnl
-   AC_REQUIRE([AC_ISC_POSIX])dnl
-   AC_REQUIRE([AC_HEADER_STDC])dnl
+   AC_SEARCH_LIBS([strerror], [cposix])dnl
    AC_REQUIRE([AC_C_CONST])dnl
    AC_REQUIRE([AC_C_INLINE])dnl
    AC_REQUIRE([AC_TYPE_OFF_T])dnl
