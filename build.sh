@@ -41,16 +41,15 @@ if [ -d /system ] || [ "$(uname -o 2>/dev/null || true)" = Android ]; then
 	fi
 fi
 
-if [ -d /system ] || [ "$(uname -o 2>/dev/null || true)" = Android ]; then
-	mkdir -p "$PREFIX/bin"
-	ln -sf "$(command -v ar)" "$PREFIX/bin/$TARGET-ar"
-	ln -sf "$(command -v ranlib)" "$PREFIX/bin/$TARGET-ranlib"
-	ln -sf "$(command -v nm)" "$PREFIX/bin/$TARGET-nm"
-	PATH="$PREFIX/bin:$PATH"
-	export PATH
-fi
-
 mkdir -p "$BUILD" "$PREFIX"
+TOOLBIN="$BUILD/target-tools"
+mkdir -p "$TOOLBIN"
+ln -sf "$(command -v ar)" "$TOOLBIN/$TARGET-ar"
+ln -sf "$(command -v ranlib)" "$TOOLBIN/$TARGET-ranlib"
+ln -sf "$(command -v nm)" "$TOOLBIN/$TARGET-nm"
+PATH="$TOOLBIN:$PATH"
+export PATH
+
 cd "$BUILD"
 CC=gcc CFLAGS="$HOSTCFLAGS" "$SRC/configure" $CONFIGURE_HOST \
 	--target="$TARGET" \
