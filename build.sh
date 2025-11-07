@@ -17,11 +17,10 @@ HOSTCFLAGS="-std=gnu89 -g3 -O0 -w \
 -Wno-format"
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
-BUILD="${PDP10_GCC_BUILD:-$SRC/build}"
+BUILD="$(pwd)"
 TARGET="${PDP10_GCC_TARGET:-pdp10-dec-none}"
 PREFIX="${PDP10_GCC_PREFIX:-/usr/local}"
 AS="${PDP10_GCC_AS:-$PREFIX/bin/$TARGET-as}"
-INSTALL="doas make install"
 CONFIGURE_HOST=""
 if [ -n "${PDP10_GCC_BUILD_ALIAS:-}" ] || [ -n "${PDP10_GCC_HOST_ALIAS:-}" ]; then
 	CONFIGURE_HOST="--build=${PDP10_GCC_BUILD_ALIAS:-x86_64-unknown-linux-gnu} --host=${PDP10_GCC_HOST_ALIAS:-${PDP10_GCC_BUILD_ALIAS:-x86_64-unknown-linux-gnu}}"
@@ -31,26 +30,27 @@ if [ -d /system ] || [ "$(uname -o 2>/dev/null || true)" = Android ]; then
 	if [ -z "${PDP10_GCC_PREFIX+x}" ]; then
 		PREFIX="$HOME/cross"
 	fi
-	if [ -z "${PDP10_GCC_BUILD+x}" ]; then
-		BUILD="$SRC/build-android"
-	fi
 	AS="${PDP10_GCC_AS:-$PREFIX/bin/$TARGET-as}"
-	INSTALL="make install"
 	if [ -z "$CONFIGURE_HOST" ]; then
 		CONFIGURE_HOST="--build=${PDP10_GCC_BUILD_ALIAS:-x86_64-unknown-linux-gnu} --host=${PDP10_GCC_HOST_ALIAS:-x86_64-unknown-linux-gnu}"
 	fi
 fi
 
-mkdir -p "$BUILD" "$PREFIX"
-TOOLBIN="$BUILD/target-tools"
-mkdir -p "$TOOLBIN"
-ln -sf "$(command -v ar)" "$TOOLBIN/$TARGET-ar"
-ln -sf "$(command -v ranlib)" "$TOOLBIN/$TARGET-ranlib"
-ln -sf "$(command -v nm)" "$TOOLBIN/$TARGET-nm"
-PATH="$TOOLBIN:$PATH"
-export PATH
+INSTALL="${PDP10_GCC_INSTALL:-}"
+if [ -z "$INSTALL" ]; then
+	if [ -w "$PREFIX" ]; then
+		INSTALL="make install"
+	elif command -v sudo >/dev/null 2>&1; then
+		INSTALL="sudo -n make install"
+	elif command -v doas >/dev/null 2>&1; then
+		INSTALL="doas make install"
+	else
+		INSTALL="make install"
+	fi
+fi
 
-cd "$BUILD"
+mkdir -p "$PREFIX"
+
 CC=gcc CFLAGS="$HOSTCFLAGS" "$SRC/configure" $CONFIGURE_HOST \
 	--target="$TARGET" \
 	--prefix="$PREFIX" \
