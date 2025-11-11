@@ -47,23 +47,17 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 
 
 /* DAIMOS/PDP-10 bare target: libgcc2 is built with inhibit_libc before
-   there is a target libc.  Several checked arithmetic helpers call abort().
-   Without a local definition, the current PDP-10 assembler has to resolve the
-   external abort reference as a zero placeholder while assembling individual
-   libgcc2 objects, which is exactly the wrong kind of exciting.
+   there is a target libc or relocatable object format.  Several checked
+   arithmetic helpers call abort().  The current pdp10-dec-none assembler
+   writes unresolved externals as zero placeholders when compiling individual
+   objects, so those internal libgcc calls must not become out-of-line calls.
 
-   Keep this deliberately tiny and local for now.  It removes the unsafe
-   unresolved external and gives early freestanding libgcc a deterministic
-   stop.  Later DAIMOS can replace this policy with a monitor UUO, HALT
-   convention, or runtime-provided diagnostic abort once the ABI exists.  */
+   The public freestanding abort symbol is provided separately by
+   config/pdp10/abort.asm.  Keep libgcc2's private checked-helper failures as an
+   inline trap until the DAIMOS object format and linker can carry real
+   relocations between objects.  */
 #if defined (inhibit_libc) && defined (__PDP10__)
-static void
-pdp10_libgcc_abort ()
-{
-  for (;;)
-    ;
-}
-#define abort pdp10_libgcc_abort
+#define abort() __builtin_trap ()
 #endif
 
 #if defined (L_negdi2) || defined (L_divdi3) || defined (L_moddi3)
@@ -1931,7 +1925,7 @@ __do_global_ctors (void)
    to run __do_global_ctors, so we need not do anything here.  */
 
 void
-SYMBOL__MAIN ()
+SYMBOL__MAIN (void)
 {
   /* Support recursive calls to `main': run initializers just once.  */
   static int initialized;

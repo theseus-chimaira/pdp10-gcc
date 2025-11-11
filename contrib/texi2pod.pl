@@ -280,15 +280,20 @@ while(<$inf>) {
 	$_ = "";	# need a paragraph break
     };
 
-    /^\@itemx?\s*(.+)?$/ and do {
-	if (defined $1) {
-	    # Entity escapes prevent munging by the <> processing below.
-	    $_ = "\n=item $ic\&LT;$1\&GT;\n";
-	} else {
-	    $_ = "\n=item $ic\n";
-	    $ic =~ y/A-Ya-y/B-Zb-z/;
-	    $ic =~ s/(\d+)/$1 + 1/eg;
-	}
+	    /^\@itemx?\s*(.+)?$/ and do {
+		if (defined $1) {
+		    # Entity escapes prevent munging by the <> processing below.
+		    $_ = "\n=item $ic\&LT;$1\&GT;\n";
+		} else {
+		    my $item = $ic;
+		    # Modern Pod::Man treats a zero-based numeric sequence, as
+		    # produced by @enumerate 0, as malformed numbered-list syntax.
+		    # Z<> keeps the visible label unchanged but makes it plain text.
+		    $item = "Z<>$item" if $item =~ /^\d+\.$/;
+		    $_ = "\n=item $item\n";
+		    $ic =~ y/A-Ya-y/B-Zb-z/;
+		    $ic =~ s/(\d+)/$1 + 1/eg;
+		}
     };
 
     $section .= $shift.$_."\n";

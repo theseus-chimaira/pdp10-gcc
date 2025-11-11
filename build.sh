@@ -21,7 +21,13 @@ BUILD="$(pwd)"
 TARGET="${PDP10_GCC_TARGET:-pdp10-dec-none}"
 PREFIX="${PDP10_GCC_PREFIX:-/usr/local}"
 AS="${PDP10_GCC_AS:-$PREFIX/bin/$TARGET-as}"
+SUDO="${SUDO:-sudo -n}"
+DOAS="${DOAS:-doas}"
 CONFIGURE_HOST=""
+have_command () {
+	set -- $1
+	[ $# -gt 0 ] && command -v "$1" >/dev/null 2>&1
+}
 if [ -n "${PDP10_GCC_BUILD_ALIAS:-}" ] || [ -n "${PDP10_GCC_HOST_ALIAS:-}" ]; then
 	CONFIGURE_HOST="--build=${PDP10_GCC_BUILD_ALIAS:-x86_64-unknown-linux-gnu} --host=${PDP10_GCC_HOST_ALIAS:-${PDP10_GCC_BUILD_ALIAS:-x86_64-unknown-linux-gnu}}"
 fi
@@ -36,20 +42,17 @@ if [ -d /system ] || [ "$(uname -o 2>/dev/null || true)" = Android ]; then
 	fi
 fi
 
-INSTALL="${PDP10_GCC_INSTALL:-}"
-if [ -z "$INSTALL" ]; then
-	if [ -w "$PREFIX" ]; then
-		INSTALL="make install"
-	elif command -v sudo >/dev/null 2>&1; then
-		INSTALL="sudo -n make install"
-	elif command -v doas >/dev/null 2>&1; then
-		INSTALL="doas make install"
+if [ ! -d "$PREFIX" ]; then
+	if mkdir -p "$PREFIX" 2>/dev/null; then
+		:
+	elif have_command "$SUDO"; then
+		$SUDO mkdir -p "$PREFIX"
+	elif have_command "$DOAS"; then
+		$DOAS mkdir -p "$PREFIX"
 	else
-		INSTALL="make install"
+		mkdir -p "$PREFIX"
 	fi
 fi
-
-mkdir -p "$PREFIX"
 
 CC=gcc CFLAGS="$HOSTCFLAGS" "$SRC/configure" $CONFIGURE_HOST \
 	--target="$TARGET" \
@@ -66,5 +69,13 @@ make all-gcc \
 	HOST_CFLAGS="$HOSTCFLAGS" \
 	BOOT_CFLAGS="$HOSTCFLAGS" \
 	WARN_CFLAGS=
-$INSTALL
+if [ -w "$PREFIX" ]; then
+	make install
+elif have_command "$SUDO"; then
+	$SUDO make install
+elif have_command "$DOAS"; then
+	$DOAS make install
+else
+	make install
+fi
 ls -l "$PREFIX/lib/gcc-lib/$TARGET/3.2/cc1"
