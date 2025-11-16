@@ -1818,7 +1818,9 @@ These nodes represent integer constants.  Note that the type of these
 constants is obtained with @code{TREE_TYPE}; they are not always of type
 @code{int}.  In particular, @code{char} constants are represented with
 @code{INTEGER_CST} nodes.  The value of the integer constant @code{e} is
-given by @example
+given by
+
+@example
 ((TREE_INT_CST_HIGH (e) << HOST_BITS_PER_WIDE_INT)
 + TREE_INST_CST_LOW (e))
 @end example
@@ -2046,7 +2048,7 @@ corresponding operators in C or C++, but the front end will sometimes
 generate these expressions anyhow, if it can tell that strictness does
 not matter.
 
-@itemx PLUS_EXPR
+@item PLUS_EXPR
 @itemx MINUS_EXPR
 @itemx MULT_EXPR
 @itemx TRUNC_DIV_EXPR

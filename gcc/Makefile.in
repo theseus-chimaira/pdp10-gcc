@@ -312,6 +312,7 @@ infodir = @infodir@
 # Where cpp should go besides $prefix/bin if necessary
 cpp_install_dir = @cpp_install_dir@
 # where the locale files go
+datarootdir = @datarootdir@
 datadir = @datadir@
 localedir = $(datadir)/locale
 # Extension (if any) to put in installed man-page filename.
@@ -2202,7 +2203,7 @@ deduced.h: $(GCC_PASSES) $(srcdir)/scan-types.sh stmp-int-hdrs
 	  $(SHELL) $(srcdir)/scan-types.sh "$(srcdir)" >tmp-deduced.h; \
 	  mv tmp-deduced.h deduced.h; \
 	else \
-	  $(STAMP) deduced.h; \
+	  : > deduced.h; \
 	fi
 
 GEN_PROTOS_OBJS = gen-protos.o scan.o

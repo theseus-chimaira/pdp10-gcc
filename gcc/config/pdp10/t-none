@@ -8,11 +8,6 @@
 TARGET_LIBGCC2_CFLAGS = -fomit-frame-pointer -DUNDERSCORE=. -Dinhibit_libc -march=166 -mtune=166 -munextended -mno-string -mlong-long-71bit
 LIBGCC2_DEBUG_CFLAGS = -g0
 
-# Provide the freestanding bare-target abort symbol in libgcc.  Internal
-# libgcc2 checked-helper abort calls still trap inline until pdp10-dec-none
-# has a real relocatable object format and linker.
-LIB2FUNCS_EXTRA = $(srcdir)/config/pdp10/abort.asm
-
 # Early DAIMOS baseline has no floating-point runtime yet.  Do not build
 # libgcc2 floating conversion helpers; they would require target FP codegen
 # and assembler FP opcode support which are deliberately deferred.
@@ -20,7 +15,9 @@ LIB2FUNCS_EXCLUDE = _floatdidf _floatdisf _fixunsdfsi _fixunssfsi \
   _fixunsdfdi _fixdfdi _fixunssfdi _fixsfdi _fixxfdi _fixunsxfdi \
   _floatdixf _fixunsxfsi _fixtfdi _fixunstfdi _floatditf
 
-# DAIMOS v1 has no target exception runtime, malloc/free/strlen, or unwinder.
-# Do not build the generic EH libgcc objects for the bare C-only target.
+# Provide a real public abort symbol for freestanding pdp10-dec-none users.
+LIB2FUNCS_EXTRA = $(srcdir)/config/pdp10/abort.asm
+
+# No EH unwinder objects for the C-only bare target yet.
 LIB2ADDEH =
 LIB2ADDEHDEP =

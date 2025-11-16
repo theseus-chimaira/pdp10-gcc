@@ -7327,6 +7327,7 @@ This describes how to specify debugging information.
 * File Names and DBX:: Macros controlling output of file names in DBX format.
 * SDB and DWARF::      Macros for SDB (COFF) and DWARF formats.
 * VMS Debug::          Macros for VMS debug format.
+* TOPS-20 Debug::      Macros for TOPS-20 debug format.
 @end menu
 
 @node All Debuggers

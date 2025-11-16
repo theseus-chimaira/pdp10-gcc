@@ -47,17 +47,13 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 
 
 /* DAIMOS/PDP-10 bare target: libgcc2 is built with inhibit_libc before
-   there is a target libc or relocatable object format.  Several checked
-   arithmetic helpers call abort().  The current pdp10-dec-none assembler
-   writes unresolved externals as zero placeholders when compiling individual
-   objects, so those internal libgcc calls must not become out-of-line calls.
-
-   The public freestanding abort symbol is provided separately by
-   config/pdp10/abort.asm.  Keep libgcc2's private checked-helper failures as an
-   inline trap until the DAIMOS object format and linker can carry real
-   relocations between objects.  */
+   there is a target libc or linker-level external resolution.  Keep checked
+   helper failure paths self-contained for now so individual libgcc2 objects do
+   not need an unresolved external abort reference while being assembled.  The
+   public bare-target abort symbol is provided separately by
+   config/pdp10/abort.asm.  */
 #if defined (inhibit_libc) && defined (__PDP10__)
-#define abort() __builtin_trap ()
+#define abort() do { for (;;) ; } while (0)
 #endif
 
 #if defined (L_negdi2) || defined (L_divdi3) || defined (L_moddi3)
@@ -1923,6 +1919,8 @@ __do_global_ctors (void)
    For many systems, this routine calls __do_global_ctors.
    For systems which support a .init section we use the .init section
    to run __do_global_ctors, so we need not do anything here.  */
+
+extern void SYMBOL__MAIN (void);
 
 void
 SYMBOL__MAIN (void)

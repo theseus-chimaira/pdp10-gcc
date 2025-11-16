@@ -838,6 +838,9 @@ language_fragments
 language_hooks'
 ac_user_opts='
 enable_option_checking
+with_gcc_version_trigger
+with_headers
+enable_languages
 with_gnu_ld
 with_ld
 with_gnu_as

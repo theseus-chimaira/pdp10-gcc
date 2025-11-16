@@ -86,6 +86,16 @@ fi
 
 # Check for additional parameters
 
+# Toplevel configure passes these options down to gcc/configure.  The
+# gcc subconfigure handles them manually or intentionally ignores them for
+# old bare cross targets, so register them here to keep modern autoconf
+# option checking quiet.
+AC_ARG_WITH(gcc-version-trigger,
+[  --with-gcc-version-trigger=FILE  internal toplevel GCC version marker],
+[gcc_version_trigger="$with_gcc_version_trigger"])
+AC_ARG_WITH(headers,
+[  --without-headers       build a bare target without target system headers])
+
 # With GNU ld
 AC_ARG_WITH(gnu-ld,
 [  --with-gnu-ld           arrange to work with GNU ld.],
@@ -2007,6 +2017,8 @@ if test "$prefix" != "/usr" && test "$prefix" != "/usr/local" ; then
 fi
 
 # Figure out what language subdirectories are present.
+AC_ARG_ENABLE(languages,
+[  --enable-languages=LIST specify which front ends to build])
 # Look if the user specified --enable-languages="..."; if not, use
 # the environment variable $LANGUAGES if defined. $LANGUAGES might
 # go away some day.
