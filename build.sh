@@ -1,6 +1,109 @@
 #!/bin/sh
 set -eu
 
+# Build helper for the PDP-10 GCC 3.2 tree.
+#
+# Preferred out-of-tree build:
+#
+#   cd /path/to/gcc-3.2-pdp10
+#   ./build.sh --regen-only
+#   rm -rf ../build-gcc32-pdp10
+#   mkdir -p ../build-gcc32-pdp10
+#   cd ../build-gcc32-pdp10
+#   ../gcc-3.2-pdp10/build.sh --no-regen
+#
+# You may also run this script directly from the source tree, but the build
+# products will then be mixed into the checkout.  The out-of-tree form above
+# keeps generated configure/build output separate from source edits.
+#
+# Regeneration uses the currently installed Autoconf/Automake.  This tree is
+# intended to regenerate with current tools such as Autoconf 2.72 and Automake
+# 1.17.  The default regeneration scope is the C-only PDP-10 compiler path:
+# gcc and libiberty.  The top-level configure script is old Cygnus
+# configure, not an Autoconf input, so it is intentionally kept as source.  Use --regen-all to also regenerate secondary
+# target-library configure scripts and Automake directories.
+#
+# Generated files are intentionally not source files.  After applying the
+# cleanup patch, remove tracked generated files with:
+#
+#   git rm --cached -- $(cat generated-files-core.lst)
+#   cat .gitignore.generated >> .gitignore
+#   git clean -fdX
+
+regen_autoconf_dir () {
+	if [ -f "$SRC/$1/configure.in" ]; then
+		echo "==> autoconf: $1"
+		(cd "$SRC/$1" && autoconf)
+	fi
+}
+
+regen_automake_dir () {
+	if [ -f "$SRC/$1/Makefile.am" ]; then
+		echo "==> aclocal: $1"
+		(cd "$SRC/$1" && aclocal)
+		if grep 'AC_CONFIG_HEADER\|AC_CONFIG_HEADERS\|AM_CONFIG_HEADER' "$SRC/$1/configure.in" >/dev/null 2>&1; then
+			echo "==> autoheader: $1"
+			(cd "$SRC/$1" && autoheader)
+		fi
+		echo "==> automake: $1"
+		(cd "$SRC/$1" && automake --add-missing --copy --foreign)
+	fi
+}
+
+regen_core_autotools () {
+	find "$SRC" -type d -name autom4te.cache -prune -exec rm -rf {} +
+	regen_autoconf_dir gcc
+	regen_autoconf_dir libiberty
+}
+
+regen_all_autotools () {
+	find "$SRC" -type d -name autom4te.cache -prune -exec rm -rf {} +
+
+	for d in \
+		boehm-gc \
+		fastjar \
+		libffi \
+		libjava/libltdl \
+		libstdc++-v3 \
+		zlib
+	do
+		regen_automake_dir "$d"
+	done
+
+	for d in \
+		boehm-gc \
+		fastjar \
+		gcc \
+		libf2c \
+		libf2c/libF77 \
+		libf2c/libI77 \
+		libf2c/libU77 \
+		libffi \
+		libiberty \
+		libjava/libltdl \
+		libjava \
+		libobjc \
+		libstdc++-v3 \
+		zlib
+	do
+		regen_autoconf_dir "$d"
+	done
+}
+
+REGEN=yes
+REGEN_SCOPE=core
+if [ "${1:-}" = "--regen-only" ]; then
+	REGEN=only
+	shift
+elif [ "${1:-}" = "--regen-all" ]; then
+	REGEN=only
+	REGEN_SCOPE=all
+	shift
+elif [ "${1:-}" = "--no-regen" ]; then
+	REGEN=no
+	shift
+fi
+
 HOSTCFLAGS="-std=gnu89 -g3 -O0 -w \
 -fno-strict-aliasing \
 -Wno-implicit-int \
@@ -39,6 +142,17 @@ if [ -d /system ] || [ "$(uname -o 2>/dev/null || true)" = Android ]; then
 	AS="${PDP10_GCC_AS:-$PREFIX/bin/$TARGET-as}"
 	if [ -z "$CONFIGURE_HOST" ]; then
 		CONFIGURE_HOST="--build=${PDP10_GCC_BUILD_ALIAS:-x86_64-unknown-linux-gnu} --host=${PDP10_GCC_HOST_ALIAS:-x86_64-unknown-linux-gnu}"
+	fi
+fi
+
+if [ "$REGEN" != no ]; then
+	if [ "$REGEN_SCOPE" = all ]; then
+		regen_all_autotools
+	else
+		regen_core_autotools
+	fi
+	if [ "$REGEN" = only ]; then
+		exit 0
 	fi
 fi
 

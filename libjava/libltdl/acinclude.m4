@@ -1227,7 +1227,8 @@ AC_LTDL_DLSYM_USCORE
 ])
 
 AC_DEFUN(AC_LTDL_DLSYM_USCORE,
-[AC_REQUIRE([AC_LTDL_SYMBOL_USCORE])dnl
+[dnl AC_LTDL_SYMBOL_USCORE calls this macro after computing ac_cv_sys_symbol_underscore.
+dnl Requiring AC_LTDL_SYMBOL_USCORE here creates a circular AC_REQUIRE with modern Autoconf.
 if test x"$ac_cv_sys_symbol_underscore" = xyes; then
   if test x"$ac_cv_func_dlopen" = xyes ||
      test x"$ac_cv_lib_dl_dlopen" = xyes ; then

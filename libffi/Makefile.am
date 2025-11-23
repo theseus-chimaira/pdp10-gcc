@@ -1,6 +1,6 @@
 ## Process this with automake to create Makefile.in
 
-AUTOMAKE_OPTIONS = cygnus
+AUTOMAKE_OPTIONS = foreign no-dependencies subdir-objects
 
 SUBDIRS = include
 
@@ -87,12 +87,12 @@ noinst_LTLIBRARIES = libffi_convenience.la
 
 noinst_PROGRAMS = ffitest
 
-ffitest_OBJECTS = ffitest.lo
+ffitest_SOURCES = src/ffitest.c
 ffitest_LDADD = libffi.la
 ffitest_LDFLAGS = -shared-libgcc
 
 TARGET_SRC_MIPS_GCC = src/mips/ffi.c src/mips/o32.S src/mips/n32.S
-TARGET_SRC_MIPS_SGI = src/mips/ffi.c src/mips/o32.s src/mips/n32.s
+TARGET_SRC_MIPS_SGI = src/mips/ffi.c src/mips/o32.S src/mips/n32.S
 TARGET_SRC_X86 = src/x86/ffi.c src/x86/sysv.S
 TARGET_SRC_X86_WIN32 = src/x86/ffi.c src/x86/win32.S
 TARGET_SRC_SPARC = src/sparc/ffi.c src/sparc/v8.S src/sparc/v9.S

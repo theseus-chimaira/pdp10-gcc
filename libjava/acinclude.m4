@@ -60,7 +60,7 @@ fi
 libgcj_basedir=$srcdir/$toprel/$1/libjava
 AC_SUBST(libgcj_basedir)
 
-AC_CONFIG_AUX_DIR(${srcdir}/$toprel)
+AC_CONFIG_AUX_DIR([..])
 if :; then :; else
   # This overrides the previous occurrence for automake, but not for
   # autoconf, which is exactly what we want.

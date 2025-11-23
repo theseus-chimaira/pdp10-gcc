@@ -27,6 +27,7 @@ AC_SUBST(libffi_basedir)
 
 AC_CANONICAL_HOST
 
+AM_PROG_AS
 AM_PROG_LIBTOOL
 
 AM_INIT_AUTOMAKE(libffi,2.00-beta,no-define)

@@ -1,3 +1,4 @@
+m4_include([../config/gcc32-modern-autoconf.m4])
 # Process this file with autoconf to produce a configure script, like so:
 # aclocal && autoconf && autoheader && automake
 

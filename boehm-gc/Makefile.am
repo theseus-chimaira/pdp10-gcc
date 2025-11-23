@@ -4,7 +4,7 @@
 ## files that should be in the distribution are not mentioned in this
 ## Makefile.am.
 
-AUTOMAKE_OPTIONS = cygnus
+AUTOMAKE_OPTIONS = foreign no-dependencies subdir-objects
 
 SUBDIRS = include
 
@@ -58,13 +58,7 @@ AM_CXXFLAGS = @GC_CFLAGS@
 AM_CFLAGS = @GC_CFLAGS@
 
 check_PROGRAMS = gctest
-# The following hack produces a warning from automake, but we need it in order 
-# to build a file from a subdirectory. FIXME.
-test.o:	tests/test.c
-	$(COMPILE) -c $(srcdir)/tests/test.c
-# 	Using $< in the above seems to fail with the HP/UX on Itanium make.
-
-gctest_OBJECTS = test.o
+gctest_SOURCES = tests/test.c
 gctest_LDADD = ./libgcjgc.la $(THREADLIBS) $(EXTRA_TEST_LIBS)
 gctest_LDFLAGS = -shared-libgcc
 TESTS_ENVIRONMENT = LD_LIBRARY_PATH=../../$(MULTIBUILDTOP)gcc
@@ -87,8 +81,6 @@ LTCOMPILE = $(LIBTOOL) --mode=compile $(CC) $(DEFS) $(INCLUDES) \
 	$(AM_CPPFLAGS) $(CPPFLAGS) \
 	$(AM_CFLAGS) $(MY_CFLAGS) $(GC_CFLAGS) 
 LINK = $(LIBTOOL) --mode=link $(CC) $(AM_CFLAGS) $(MY_CFLAGS) $(LDFLAGS) -o $@
-
-AM_CFLAGS = @GC_CFLAGS@
 
 # Work around what appears to be a GNU make bug handling MAKEFLAGS
 # values defined in terms of make variables, as is the case for CC and

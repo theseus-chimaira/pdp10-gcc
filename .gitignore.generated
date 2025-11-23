@@ -1,0 +1,67 @@
+# Autoconf output
+boehm-gc/configure
+fastjar/configure
+gcc/configure
+libf2c/configure
+libf2c/libF77/configure
+libf2c/libI77/configure
+libf2c/libU77/configure
+libffi/configure
+libiberty/configure
+libjava/configure
+libjava/libltdl/configure
+libobjc/configure
+libstdc++-v3/configure
+zlib/configure
+
+# Aclocal output
+boehm-gc/aclocal.m4
+fastjar/aclocal.m4
+gcc/aclocal.m4
+libf2c/aclocal.m4
+libf2c/libU77/aclocal.m4
+libffi/aclocal.m4
+libiberty/aclocal.m4
+libjava/aclocal.m4
+libjava/libltdl/aclocal.m4
+libobjc/aclocal.m4
+libstdc++-v3/aclocal.m4
+zlib/aclocal.m4
+
+# Automake Makefile.in output
+boehm-gc/Makefile.in
+boehm-gc/include/Makefile.in
+fastjar/Makefile.in
+libffi/Makefile.in
+libffi/include/Makefile.in
+libjava/Makefile.in
+libjava/gcj/Makefile.in
+libjava/include/Makefile.in
+libjava/libltdl/Makefile.in
+libjava/testsuite/Makefile.in
+libstdc++-v3/Makefile.in
+libstdc++-v3/include/Makefile.in
+libstdc++-v3/libio/Makefile.in
+libstdc++-v3/libmath/Makefile.in
+libstdc++-v3/libsupc++/Makefile.in
+libstdc++-v3/po/Makefile.in
+libstdc++-v3/src/Makefile.in
+libstdc++-v3/testsuite/Makefile.in
+zlib/Makefile.in
+
+# Autoheader output
+fastjar/config.h.in
+libf2c/libI77/config.h.in
+libffi/fficonfig.h.in
+libjava/include/config.h.in
+libjava/libltdl/config.h.in
+libobjc/config.h.in
+libstdc++-v3/config.h.in
+
+# Autotools scratch/output
+autom4te.cache/
+*/autom4te.cache/
+
+# Generated Texinfo output
+*.info
+*.info-[0-9]*

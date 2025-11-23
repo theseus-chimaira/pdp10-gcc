@@ -4,7 +4,7 @@ AC_INIT(ltdl.c)
 
 AC_ARG_WITH(auxdir,
 [  --with-auxdir=DIR   path to autoconf auxiliary files],
-[AC_CONFIG_AUX_DIR($with_auxdir)
+[AC_CONFIG_AUX_DIR([../..])
 dnl This is here just to satisfy automake.
 ifelse(not,equal,[AC_CONFIG_AUX_DIR(../..)])],
 [AC_CONFIG_AUX_DIR_DEFAULT])

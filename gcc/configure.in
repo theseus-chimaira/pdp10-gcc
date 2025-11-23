@@ -1,3 +1,5 @@
+m4_include([../config/gcc32-modern-autoconf.m4])
+m4_include([acinclude.m4])
 # configure.in for GCC
 # Process this file with autoconf to generate a configuration script.
 

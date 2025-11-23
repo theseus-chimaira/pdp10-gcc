@@ -42,7 +42,7 @@ else
   gc_basedir="[$]{srcdir}/$1"
 fi
 AC_SUBST(gc_basedir)
-AC_CONFIG_AUX_DIR($gc_basedir/..)
+AC_CONFIG_AUX_DIR([..])
 if :; then :; else
   # This overrides the previous occurrence for automake, but not for
   # autoconf, which is exactly what we want.

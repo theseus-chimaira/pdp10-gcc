@@ -1,3 +1,4 @@
+m4_include([../config/gcc32-modern-autoconf.m4])
 # Copyright (c) 1999-2001 by Red Hat, Inc. All rights reserved.
 # 
 # THIS MATERIAL IS PROVIDED AS IS, WITH ABSOLUTELY NO WARRANTY EXPRESSED
@@ -20,6 +21,7 @@ AC_CONFIG_AUX_DIR(.)
 
 GC_CONFIGURE(.)
 
+AM_PROG_AS
 AM_PROG_LIBTOOL
 
 dnl We use these options to decide which functions to include.
