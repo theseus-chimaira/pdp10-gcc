@@ -311,16 +311,6 @@ case x${enable_threads_flag} in
 		;;
 esac
 
-AC_ARG_ENABLE(objc-gc,
-[  --enable-objc-gc	  enable the use of Boehm's garbage collector with
-			  the GNU Objective-C runtime],
-if test x$enable_objc_gc = xno; then
-	objc_boehm_gc=''
-else
-	objc_boehm_gc=1
-fi,
-objc_boehm_gc='')
-
 AC_ARG_WITH(dwarf2,
 [  --with-dwarf2           force the default debug format to be DWARF 2],
 dwarf2="$with_dwarf2",
@@ -363,8 +353,6 @@ fi
 AC_SUBST(NO_MINUS_C_MINUS_O)
 AC_SUBST(OUTPUT_OPTION)
 
-# See if GNAT has been installed
-gcc_AC_PROG_GNAT
 
 AC_CACHE_CHECK(whether ${CC-cc} accepts -Wno-long-long,
 ac_cv_prog_cc_no_long_long,
@@ -373,27 +361,11 @@ CFLAGS="-Wno-long-long"
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[]])],[ac_cv_prog_cc_no_long_long=yes],[ac_cv_prog_cc_no_long_long=no])
 CFLAGS="$save_CFLAGS"])
 
-if test x$have_gnat != xno ; then 
-AC_CACHE_CHECK(whether ${ADAC} accepts -Wno-long-long,
-ac_cv_prog_adac_no_long_long,
-[cat >conftest.adb <<EOF
-procedure conftest is begin null; end conftest;
-EOF
-if $ADAC -Wno-long-long -c conftest.adb 1>&5 2>&5 ; then
-  ac_cv_prog_adac_no_long_long=yes
-else
-  ac_cv_prog_adac_no_long_long=no
-fi
-rm -f conftest*])
-else
-  ac_cv_prog_adac_no_long_long=yes
-fi
-
 strict1_warn=
-if test $ac_cv_prog_cc_no_long_long = yes && \
-    test $ac_cv_prog_adac_no_long_long = yes ; then
+if test $ac_cv_prog_cc_no_long_long = yes ; then
   strict1_warn="-pedantic -Wno-long-long"
 fi
+
 AC_SUBST(strict1_warn)
 
 AC_PROG_CPP
@@ -586,15 +558,6 @@ case $gcc_cv_collect2_libs in
 	*)	COLLECT2_LIBS=$gcc_cv_collect2_libs ;;
 esac
 AC_SUBST(COLLECT2_LIBS)
-
-# When building Ada code on Alpha, we need exc_resume which is usually in
-# -lexc.  So test for it.
-save_LIBS="$LIBS"
-LIBS=
-AC_SEARCH_LIBS(exc_resume, exc)
-GNAT_LIBEXC="$LIBS"
-LIBS="$save_LIBS"
-AC_SUBST(GNAT_LIBEXC)
 
 # See if the stage1 system preprocessor understands the ANSI C
 # preprocessor stringification operator.  (Used by symcat.h.)
@@ -2100,16 +2063,7 @@ changequote(,)dnl
 	  *) add_this_lang=no ;;
 	  esac
 	  if test x"${add_this_lang}" = xyes; then
-		case $lang in
-		    ${srcdir}/ada/config-lang.in)
-			if test x$have_gnat = xyes ; then
-				subdirs="$subdirs `echo $lang | sed -e 's,^.*/\([^/]*\)/config-lang.in$,\1,'`"
-			fi
-			;;
-		    *)
-			subdirs="$subdirs `echo $lang | sed -e 's,^.*/\([^/]*\)/config-lang.in$,\1,'`"
-			;;
-		esac
+		subdirs="$subdirs `echo $lang | sed -e 's,^.*/\([^/]*\)/config-lang.in$,\1,'`"
 	  fi
 	  ;;
 changequote([,])dnl
@@ -2140,17 +2094,6 @@ esac],
 [GGC=ggc-page])
 AC_SUBST(GGC)
 echo "Using $GGC for garbage collection."
-
-# Use the system's zlib library.
-zlibdir=-L../zlib
-zlibinc="-I\$(srcdir)/../zlib"
-AC_ARG_WITH(system-zlib,
-[  --with-system-zlib      use installed libz],
-zlibdir=
-zlibinc=
-)
-AC_SUBST(zlibdir)
-AC_SUBST(zlibinc)
 
 dnl Very limited version of automake's enable-maintainer-mode
 
@@ -2415,7 +2358,6 @@ AC_SUBST(lang_specs_files)
 AC_SUBST(lang_tree_files)
 AC_SUBST(local_prefix)
 AC_SUBST(md_file)
-AC_SUBST(objc_boehm_gc)
 AC_SUBST(out_file)
 AC_SUBST(out_object_file)
 AC_SUBST(stage_prefix_set_by_configure)

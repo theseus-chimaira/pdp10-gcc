@@ -22,7 +22,9 @@ AC_CANONICAL_SYSTEM
 target_alias=${target_alias-$target}
 AC_SUBST(target_alias)
 
+AC_CONFIG_AUX_DIR([..])
 AM_INIT_AUTOMAKE($PACKAGE, $release_VERSION)
+AC_PROG_CXX
 AM_CONFIG_HEADER(config.h)
 
 # Runs configure.host and configure.target, as well as finds CC, CXX

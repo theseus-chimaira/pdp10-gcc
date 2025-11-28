@@ -30,7 +30,6 @@ AC_DEFUN(GLIBCPP_CONFIGURE, [
   else
     toprel=".."
   fi
-  AC_CONFIG_AUX_DIR(${srcdir}/$toprel)
   toplevel_srcdir=\${top_srcdir}/$toprel
   AC_SUBST(toplevel_srcdir)
 

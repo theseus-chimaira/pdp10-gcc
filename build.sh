@@ -20,8 +20,12 @@ set -eu
 # intended to regenerate with current tools such as Autoconf 2.72 and Automake
 # 1.17.  The default regeneration scope is the C-only PDP-10 compiler path:
 # gcc and libiberty.  The top-level configure script is old Cygnus
-# configure, not an Autoconf input, so it is intentionally kept as source.  Use --regen-all to also regenerate secondary
-# target-library configure scripts and Automake directories.
+# configure, not an Autoconf input, so it is intentionally kept as source.
+#
+# Pruned components are intentionally not regenerated here: Ada, Java/GCJ,
+# Boehm GC, libffi, fastjar, and bundled zlib.  C, Objective-C, C++,
+# Fortran/libf2c, libobjc, libstdc++-v3, and libiberty remain.  Use
+# --regen-all to also regenerate the remaining secondary target libraries.
 #
 # Generated files are intentionally not source files.  After applying the
 # cleanup patch, remove tracked generated files with:
@@ -60,31 +64,20 @@ regen_all_autotools () {
 	find "$SRC" -type d -name autom4te.cache -prune -exec rm -rf {} +
 
 	for d in \
-		boehm-gc \
-		fastjar \
-		libffi \
-		libjava/libltdl \
-		libstdc++-v3 \
-		zlib
+		libstdc++-v3
 	do
 		regen_automake_dir "$d"
 	done
 
 	for d in \
-		boehm-gc \
-		fastjar \
 		gcc \
 		libf2c \
 		libf2c/libF77 \
 		libf2c/libI77 \
 		libf2c/libU77 \
-		libffi \
 		libiberty \
-		libjava/libltdl \
-		libjava \
 		libobjc \
-		libstdc++-v3 \
-		zlib
+		libstdc++-v3
 	do
 		regen_autoconf_dir "$d"
 	done

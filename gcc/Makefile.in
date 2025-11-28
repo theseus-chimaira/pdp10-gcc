@@ -139,12 +139,6 @@ OUTPUT_OPTION = @OUTPUT_OPTION@
 # in the kernel.  So, we use `echo' instead.
 STAMP = echo timestamp >
 
-# This is where we get zlib from.  zlibdir is -L../zlib and zlibinc is
-# -I../zlib, unless we were configured with --with-system-zlib, in which
-# case both are empty.
-ZLIB = @zlibdir@ -lz
-ZLIBINC = @zlibinc@
-
 # Substitution type for target's getgroups 2nd arg.
 TARGET_GETGROUPS_T = @TARGET_GETGROUPS_T@
 
@@ -268,7 +262,6 @@ lang_options_files=@lang_options_files@
 lang_tree_files=@lang_tree_files@
 target_cpu_default=@target_cpu_default@
 GCC_THREAD_FILE=@thread_file@
-OBJC_BOEHM_GC=@objc_boehm_gc@
 GTHREAD_FLAGS=@gthread_flags@
 # Be prepared for gcc2 merges.
 gcc_version=@gcc_version@
@@ -2494,7 +2487,7 @@ distclean: clean $(INTL_DISTCLEAN) lang.distclean
 	-rm -f mklibgcc gccbug .gdbinit configargs.h
 	-rm -f gcov.pod
 	-rm -f fixinc/Makefile
-	-rmdir ada cp f java objc fixinc intl po 2>/dev/null
+	-rmdir cp f objc fixinc intl po 2>/dev/null
 
 # Delete anything likely to be found in the source directory
 # that shouldn't be in the distribution.
@@ -2897,7 +2890,6 @@ CHECK_TARGETS = check-gcc @check_languages@
 
 check-c++ : check-g++
 check-f77 : check-g77
-check-java :
 
 check: $(CHECK_TARGETS)
 

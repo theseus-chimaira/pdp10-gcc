@@ -10,12 +10,12 @@
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
@@ -27,7 +27,7 @@
 # preparation for compilation.
 #
 # If configure succeeds, it leaves its status in config.status.
-# If configure fails after disturbing the status quo, 
+# If configure fails after disturbing the status quo,
 #       config.status is removed.
 #
 
@@ -188,7 +188,7 @@ do
 	--*) ;;
 	-*) option=-$option ;;
 	esac
-		
+
 # Split out the argument for options that take them
 	case $option in
 	--*=*)
@@ -792,7 +792,7 @@ tooldir='$(exec_prefix)'/${target_alias}
 
 if [ "${host_alias}" != "${target_alias}" ] ; then
     if [ "${program_prefixoption}" = "" ] ; then
-        if [ "${program_suffixoption}" = "" ] ; then 
+        if [ "${program_suffixoption}" = "" ] ; then
             if [ "${program_transform_nameoption}" = "" ] ; then
                 program_prefix=${target_alias}- ;
             fi
@@ -916,7 +916,7 @@ if [ "${build}" != "${host}" ]; then
   # are not the same, we set reasonable default values for the tools.
 
   tools="AR AR_FOR_TARGET AS AS_FOR_TARGET BISON CC_FOR_BUILD"
-  tools="${tools} CC_FOR_TARGET CXX_FOR_TARGET GCJ_FOR_TARGET"
+  tools="${tools} CC_FOR_TARGET CXX_FOR_TARGET"
   tools="${tools} DLLTOOL DLLTOOL_FOR_TARGET GCC_FOR_TARGET HOST_PREFIX"
   tools="${tools} HOST_PREFIX_1 LD LD_FOR_TARGET LEX MAKEINFO NM"
   tools="${tools} NM_FOR_TARGET RANLIB RANLIB_FOR_TARGET"
@@ -951,7 +951,6 @@ t loop
   CC_FOR_BUILD=${CC_FOR_BUILD-gcc}
   CC_FOR_TARGET=${CC_FOR_TARGET-${target_alias}-gcc}
   CXX_FOR_TARGET=${CXX_FOR_TARGET-${target_alias}-c++}
-  GCJ_FOR_TARGET=${GCJ_FOR_TARGET-${target_alias}-gcj}
   DLLTOOL=${DLLTOOL-${host_alias}-dlltool}
   DLLTOOL_FOR_TARGET=${DLLTOOL_FOR_TARGET-${target_alias}-dlltool}
   GCC_FOR_TARGET=${GCC_FOR_TARGET-${CC_FOR_TARGET-${target_alias}-gcc}}
@@ -1152,7 +1151,7 @@ for subdir in . ${subdirs} ; do
 
                 if [ ! -r ${srcdir}/${file} ] ; then
                   if [ ! -r ${file} ] ; then
-		    
+
                         echo '***' "${progname}: cannot create a link \"${link}\"," 1>&2
                         echo '***' "since the file \"${srcdir}/${file}\" does not exist." 1>&2
                         exit 1
@@ -1168,7 +1167,7 @@ for subdir in . ${subdirs} ; do
 		if ${symbolic_link} ${srcfile} ${link} >/dev/null 2>&1 ; then
 			true
 		else
-			# We need to re-remove the file because Lynx leaves a 
+			# We need to re-remove the file because Lynx leaves a
 			# very strange directory there when it fails an NFS symlink.
 			${remove} -r -f ${link}
 			${hard_link} ${srcfile} ${link}
@@ -1206,7 +1205,7 @@ EOF
         # code is order so as to try to sed the smallest input files we know.
         # so do these separately because I don't trust the order of sed -e expressions.
 
-        # the five makefile fragments MUST end up in the resulting Makefile in this order: 
+        # the five makefile fragments MUST end up in the resulting Makefile in this order:
         # package macros, target, host, site, and package rules.
 
         if [ -f ${srcdir}/${subdir}/${Makefile_in} ] ; then
@@ -1349,7 +1348,7 @@ EOF
 
             if [ "${site_makefile_frag}" != "" ] ; then
                 echo site_makefile_frag = ${invsubdir}${site_makefile_frag} >>${Makefile}
-            fi 
+            fi
 
 	    echo enable_shared = ${enable_shared} >> ${Makefile}
 	    echo enable_threads = ${enable_threads} >> ${Makefile}
@@ -1436,7 +1435,7 @@ EOF
 		    -e "s:^DEFAULT_LEX[	 ]*=.*$:DEFAULT_LEX = ${DEFAULT_LEX}:" \
 		    -e "s:^DEFAULT_M4[  ]*=.*$:DEFAULT_M4 = ${DEFAULT_M4}:" \
                     ${subdir}/Makefile.tem >> ${Makefile}
-  
+
 	    sed -e "s:^GDB_TK[	 ]*=.*$:GDB_TK = ${GDB_TK}:" ${Makefile} >${Makefile}.tem
 	    mv -f ${Makefile}.tem ${Makefile}
 
@@ -1521,7 +1520,7 @@ ${progname}" ${arguments}  "
 done
 
 # If there are subdirectories, then recur.
-if [ -z "${norecursion}" ] && [ -n "${configdirs}" ] ; then 
+if [ -z "${norecursion}" ] && [ -n "${configdirs}" ] ; then
         for configdir in ${configdirs} ${extraconfigdirs} ; do
 
 		# If configdir contains ',' it is
@@ -1555,7 +1554,7 @@ if [ -z "${norecursion}" ] && [ -n "${configdirs}" ] ; then
                         esac
 
                         POPDIR=${PWD=`pwd`}
-                        cd ${bld_dir} 
+                        cd ${bld_dir}
 
 ### figure out what to do with srcdir
                         case "${srcdir}" in

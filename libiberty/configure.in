@@ -31,7 +31,7 @@ if test "${srcdir}" = "."; then
 else
   libiberty_topdir="${srcdir}/.."
 fi
-AC_CONFIG_AUX_DIR($libiberty_topdir)
+AC_CONFIG_AUX_DIR([..])
 
 dnl Very limited version of automake's enable-maintainer-mode
 

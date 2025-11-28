@@ -7,18 +7,18 @@
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 #
 
-# Tell GNU make 3.79 not to run the top level in parallel.  This 
+# Tell GNU make 3.79 not to run the top level in parallel.  This
 # prevents contention for $builddir/$target/config.cache, as well
 # as minimizing scatter in file system caches.
 NOTPARALLEL = .NOTPARALLEL
@@ -61,7 +61,7 @@ infodir = $(prefix)/info
 includedir = $(prefix)/include
 # Directory in which the compiler finds executables, libraries, etc.
 libsubdir = $(libdir)/gcc-lib/$(target_alias)/$(gcc_version)
-GDB_NLM_DEPS = 
+GDB_NLM_DEPS =
 
 SHELL = /bin/sh
 
@@ -84,21 +84,21 @@ CC = cc
 # Special variables passed down in EXTRA_GCC_FLAGS.  They are defined
 # here so that they can be overridden by Makefile fragments.
 HOST_CC = $(CC_FOR_BUILD)
-HOST_PREFIX = 
+HOST_PREFIX =
 HOST_PREFIX_1 = loser-
 
 # These flag values are normally overridden by the configure script.
 CFLAGS = -g
 CXXFLAGS = -g -O2
 
-LDFLAGS = 
+LDFLAGS =
 LIBCFLAGS = $(CFLAGS)
 CFLAGS_FOR_BUILD = $(CFLAGS)
 CFLAGS_FOR_TARGET = $(CFLAGS)
-LDFLAGS_FOR_TARGET = 
+LDFLAGS_FOR_TARGET =
 LIBCFLAGS_FOR_TARGET = $(CFLAGS_FOR_TARGET)
-PICFLAG = 
-PICFLAG_FOR_TARGET = 
+PICFLAG =
+PICFLAG_FOR_TARGET =
 
 CXX = c++
 
@@ -172,7 +172,7 @@ CC_FOR_BUILD = $(CC)
 CXX_FOR_BUILD = $(CXX)
 
 SUBDIRS = "this is set via configure, don't edit this"
-OTHERS = 
+OTHERS =
 
 # This is set by the configure script to the list of directories which
 # should be built using the target tools.
@@ -187,7 +187,7 @@ BUILD_SUBDIR = .
 
 # This is set by the configure script to the arguments to use when configuring
 # directories built for the target.
-TARGET_CONFIGARGS = 
+TARGET_CONFIGARGS =
 
 # This is set by the configure script to the arguments to use when configuring
 # directories built for the build system.
@@ -235,7 +235,6 @@ FLAGS_FOR_TARGET =
 CC_FOR_TARGET =
 CXX_FOR_TARGET =
 CXX_FOR_TARGET_FOR_RECURSIVE_MAKE =
-GCJ_FOR_TARGET =
 
 # If GCC_FOR_TARGET is not overriden on the command line, then this
 # variable is passed down to the gcc Makefile, where it is used to
@@ -356,7 +355,6 @@ BASE_FLAGS_TO_PASS = \
 	"CC_FOR_TARGET=$(CC_FOR_TARGET)" \
 	"CFLAGS=$(CFLAGS)" \
 	"CFLAGS_FOR_TARGET=$(CFLAGS_FOR_TARGET)" \
-	"GCJ_FOR_TARGET=$(GCJ_FOR_TARGET)" \
 	"CXX_FOR_BUILD=$(CXX_FOR_BUILD)" \
 	"CXXFLAGS=$(CXXFLAGS)" \
 	"CXXFLAGS_FOR_TARGET=$(CXXFLAGS_FOR_TARGET)" \
@@ -408,7 +406,7 @@ BASE_FLAGS_TO_PASS = \
 	"gxx_include_dir=$(gxx_include_dir)" \
 	"gcc_version=$(gcc_version)" \
 	"gcc_version_trigger=$(gcc_version_trigger)" \
-	"target_alias=$(target_alias)" 
+	"target_alias=$(target_alias)"
 
 # For any flags above that may contain shell code that varies from one
 # target library to another.  When doing recursive invocations of the
@@ -505,7 +503,7 @@ GCC_FLAGS_TO_PASS = $(BASE_FLAGS_TO_PASS) $(EXTRA_GCC_FLAGS)
 # macro for build!=host builds.
 ALL_BUILD_MODULES_LIST = \
 	all-build-libiberty
-ALL_BUILD_MODULES = 
+ALL_BUILD_MODULES =
 
 # This is a list of the configure targets for all of the modules which
 # are compiled using the native tools.
@@ -532,7 +530,6 @@ ALL_MODULES = \
 	all-diff \
 	all-dosutils \
 	all-etc \
-	all-fastjar \
 	all-fileutils \
 	all-findutils \
 	all-find \
@@ -582,7 +579,6 @@ ALL_MODULES = \
 	all-uudecode \
 	all-wdiff \
 	all-zip \
-	all-zlib \
 	$(EXTRA_TARGET_HOST_ALL_MODULES)
 
 # This is a list of the check targets for all of the modules which are
@@ -594,7 +590,6 @@ ALL_MODULES = \
 NATIVE_CHECK_MODULES = \
 	check-bison \
 	check-byacc \
-	check-fastjar \
 	check-flex \
 	check-zip
 
@@ -687,7 +682,6 @@ INSTALL_MODULES = \
 	install-diff \
 	install-dosutils \
 	install-etc \
-	install-fastjar \
 	install-fileutils \
 	install-findutils \
 	install-find \
@@ -791,10 +785,6 @@ ALL_TARGET_MODULES = \
 	all-target-gperf \
 	all-target-examples \
 	all-target-libstub \
-	all-target-libffi \
-	all-target-libjava \
-	all-target-zlib \
-	all-target-boehm-gc \
 	all-target-qthreads \
 	all-target-bsp \
 	all-target-cygmon
@@ -814,10 +804,6 @@ CONFIGURE_TARGET_MODULES = \
 	configure-target-gperf \
 	configure-target-examples \
 	configure-target-libstub \
-	configure-target-libffi \
-	configure-target-libjava \
-	configure-target-zlib \
-	configure-target-boehm-gc \
 	configure-target-qthreads \
 	configure-target-bsp \
 	configure-target-cygmon
@@ -831,10 +817,6 @@ CHECK_TARGET_MODULES = \
 	check-target-libobjc \
 	check-target-winsup \
 	check-target-libiberty \
-	check-target-libffi \
-	check-target-libjava \
-	check-target-zlib \
-	check-target-boehm-gc \
 	check-target-qthreads \
 	check-target-gperf
 
@@ -850,9 +832,6 @@ INSTALL_TARGET_MODULES = \
 	install-target-libgloss \
 	install-target-libiberty \
 	install-target-bsp \
-	install-target-libjava \
-	install-target-zlib \
-	install-target-boehm-gc \
 	install-target-qthreads \
 	install-target-gperf
 
@@ -875,7 +854,6 @@ CLEAN_MODULES = \
 	clean-diff \
 	clean-dosutils \
 	clean-etc \
-	clean-fastjar \
 	clean-fileutils \
 	clean-findutils \
 	clean-find \
@@ -924,7 +902,6 @@ CLEAN_MODULES = \
 	clean-uudecode \
 	clean-wdiff \
 	clean-zip \
-	clean-zlib
 
 # All of the target modules that can be cleaned
 CLEAN_TARGET_MODULES = \
@@ -939,10 +916,6 @@ CLEAN_TARGET_MODULES = \
 	clean-target-gperf \
 	clean-target-examples \
 	clean-target-libstub \
-	clean-target-libffi \
-	clean-target-libjava \
-	clean-target-zlib \
-	clean-target-boehm-gc \
 	clean-target-qthreads \
 	clean-target-bsp \
 	clean-target-cygmon
@@ -1063,7 +1036,7 @@ local-distclean:
 	-rm -f texinfo/doc/Makefile texinfo/po/POTFILES
 	-rmdir texinfo/doc texinfo/info texinfo/intl texinfo/lib 2>/dev/null
 	-rmdir texinfo/makeinfo texinfo/po texinfo/util 2>/dev/null
-	-rmdir fastjar gcc libiberty texinfo zlib 2>/dev/null
+	-rmdir gcc libiberty texinfo 2>/dev/null
 
 local-maintainer-clean:
 	@echo "This command is intended for maintainers to use;"
@@ -1072,7 +1045,7 @@ local-maintainer-clean:
 clean: do-clean local-clean
 mostlyclean: do-mostlyclean local-clean
 distclean: do-distclean local-clean local-distclean
-maintainer-clean: local-maintainer-clean do-maintainer-clean local-clean 
+maintainer-clean: local-maintainer-clean do-maintainer-clean local-clean
 maintainer-clean: local-distclean
 realclean: maintainer-clean
 
@@ -1144,8 +1117,8 @@ mail-report-with-warnings.log: warning.log
 # Installation targets.
 
 .PHONY: install install-cross uninstall source-vault binary-vault vault-install
-install: $(INSTALL_TARGET) 
-install-cross: $(INSTALL_TARGET_CROSS) 
+install: $(INSTALL_TARGET)
+install-cross: $(INSTALL_TARGET_CROSS)
 
 uninstall:
 	@echo "the uninstall target is not supported in this tree"
@@ -1189,7 +1162,7 @@ install-no-fixedincludes: \
 	$(INSTALL_MODULES) \
 	$(INSTALL_TARGET_MODULES) \
 	$(INSTALL_X11_MODULES) \
-	gcc-no-fixedincludes 
+	gcc-no-fixedincludes
 
 # Install the gcc headers files, but not the fixed include files,
 # which Cygnus is not allowed to distribute.  This rule is very
@@ -1245,7 +1218,6 @@ $(CONFIGURE_BUILD_MODULES):
 	    CFLAGS="$(CFLAGS_FOR_BUILD)"; export CFLAGS; \
 	    CXX="$(CXX_FOR_BUILD)"; export CXX; \
 	    CXXFLAGS="$(CXXFLAGS_FOR_BUILD)"; export CXXFLAGS; \
-	    GCJ="$(GCJ_FOR_BUILD)"; export GCJ; \
 	    DLLTOOL="$(DLLTOOL_FOR_BUILD)"; export DLLTOOL; \
 	    LD="$(LD_FOR_BUILD)"; export LD; \
             LDFLAGS="$(LDFLAGS_FOR_BUILD)"; export LDFLAGS; \
@@ -1412,7 +1384,6 @@ $(CONFIGURE_TARGET_MODULES):
 	    CFLAGS="$(CFLAGS_FOR_TARGET)"; export CFLAGS; \
 	    CXX="$(CXX_FOR_TARGET)"; export CXX; \
 	    CXXFLAGS="$(CXXFLAGS_FOR_TARGET)"; export CXXFLAGS; \
-	    GCJ="$(GCJ_FOR_TARGET)"; export GCJ; \
 	    DLLTOOL="$(DLLTOOL_FOR_TARGET)"; export DLLTOOL; \
 	    LD="$(LD_FOR_TARGET)"; export LD; \
             LDFLAGS="$(LDFLAGS_FOR_TARGET)"; export LDFLAGS; \
@@ -1656,7 +1627,7 @@ check-c++:
 	  $(MAKE) check-target-libstdc++-v3; \
 	else \
 	  true; \
-	fi 
+	fi
 
 .PHONY: install-gcc
 install-gcc:
@@ -1709,8 +1680,6 @@ all-bash:
 all-bfd: all-libiberty all-intl
 all-binutils: all-libiberty all-opcodes all-bfd all-flex all-bison all-byacc all-intl
 all-bison: all-texinfo
-configure-target-boehm-gc: $(ALL_GCC_C) configure-target-qthreads
-all-target-boehm-gc: configure-target-boehm-gc
 configure-target-bsp: $(ALL_GCC_C)
 all-target-bsp: configure-target-bsp
 all-byacc:
@@ -1735,8 +1704,8 @@ all-flex: all-libiberty all-bison all-byacc
 all-gas: all-libiberty all-opcodes all-bfd all-intl
 all-gash: all-tcl
 all-gawk:
-all-gcc: all-bison all-byacc all-binutils all-gas all-ld all-zlib
-all-bootstrap: all-libiberty all-texinfo all-bison all-byacc all-binutils all-gas all-ld all-zlib
+all-gcc: all-bison all-byacc all-binutils all-gas all-ld
+all-bootstrap: all-libiberty all-texinfo all-bison all-byacc all-binutils all-gas all-ld
 GDB_TK = all-tk all-tcl all-itcl all-tix all-libgui
 all-gdb: all-libiberty all-opcodes all-bfd all-mmalloc all-readline all-bison all-byacc all-sim $(gdbnlmrequirements) $(GDB_TK)
 all-gettext:
@@ -1763,10 +1732,6 @@ all-libiberty:
 
 all-build-libiberty: configure-build-libiberty
 
-configure-target-libffi: $(ALL_GCC_C) 
-all-target-libffi: configure-target-libffi
-configure-target-libjava: $(ALL_GCC_C) configure-target-zlib configure-target-boehm-gc configure-target-qthreads configure-target-libffi
-all-target-libjava: configure-target-libjava all-fastjar all-target-zlib all-target-boehm-gc all-target-qthreads all-target-libffi
 configure-target-librx: $(ALL_GCC_C)
 all-target-librx: configure-target-librx
 configure-target-libstdc++-v3: $(ALL_GCC_C)
@@ -1816,12 +1781,6 @@ configure-target-winsup: $(ALL_GCC_C)
 all-target-winsup: all-target-libiberty all-target-libtermcap configure-target-winsup
 all-uudecode: all-libiberty
 all-zip:
-all-zlib:
-configure-target-zlib: $(ALL_GCC_C)
-all-target-zlib: configure-target-zlib
-all-fastjar: all-zlib all-libiberty
-configure-target-fastjar: configure-target-zlib
-all-target-fastjar: configure-target-fastjar all-target-zlib all-target-libiberty
 configure-target-libiberty: $(ALL_GCC_C)
 all-target-libiberty: configure-target-libiberty
 all-target: $(ALL_TARGET_MODULES)
@@ -1846,7 +1805,7 @@ dir.info: do-install-info
 
 dist:
 	@echo "Building a full distribution of this tree isn't done"
-	@echo "via 'make dist'.  Check out the etc/ subdirectory" 
+	@echo "via 'make dist'.  Check out the etc/ subdirectory"
 
 etags tags: TAGS
 
@@ -1874,7 +1833,7 @@ DEVO_SUPPORT= README Makefile.in configure configure.in \
 	mpw-README mpw-build.in mpw-config.in mpw-configure mpw-install \
 	COPYING COPYING.LIB install-sh config-ml.in symlink-tree \
 	mkinstalldirs ltconfig ltmain.sh missing ylwrap \
-	libtool.m4 gettext.m4 ltcf-c.sh ltcf-cxx.sh ltcf-gcj.sh
+	libtool.m4 gettext.m4 ltcf-c.sh ltcf-cxx.sh
 
 # Files in devo/etc used in any net release.
 # ChangeLog omitted because it may refer to files which are not in this
