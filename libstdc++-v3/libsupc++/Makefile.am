@@ -21,7 +21,7 @@
 ## the Free Software Foundation, 59 Temple Place - Suite 330,
 ## Boston, MA 02111-1307, USA. 
 
-AUTOMAKE_OPTIONS = foreign
+AUTOMAKE_OPTIONS = foreign no-dependencies
 MAINT_CHARSET = latin1
 
 mkinstalldirs = $(SHELL) $(toplevel_srcdir)/mkinstalldirs
@@ -56,10 +56,10 @@ WARN_CXXFLAGS = \
 	@WARN_FLAGS@ $(WERROR) -fdiagnostics-show-location=once
 
 # Use common includes from acinclude.m4/GLIBCPP_EXPORT_INCLUDES
-GLIBCPP_INCLUDES = @GLIBCPP_INCLUDES@
-LIBSUPCXX_INCLUDES = @LIBSUPCXX_INCLUDES@
+GLIBCPP_AM_CPPFLAGS = @GLIBCPP_INCLUDES@
+LIBSUPCXX_AM_CPPFLAGS = @LIBSUPCXX_INCLUDES@
 
-INCLUDES = \
+AM_CPPFLAGS = \
 	-I$(toplevel_srcdir)/gcc -I$(toplevel_srcdir)/include \
 	$(GLIBCPP_INCLUDES) $(LIBSUPCXX_INCLUDES)
 

@@ -2,7 +2,7 @@ dnl See whether strncmp reads past the end of its string parameters.
 dnl On some versions of SunOS4 at least, strncmp reads a word at a time
 dnl but erroneously reads past the end of strings.  This can cause
 dnl a SEGV in some cases.
-AC_DEFUN(libiberty_AC_FUNC_STRNCMP,
+AC_DEFUN([libiberty_AC_FUNC_STRNCMP],
 [AC_REQUIRE([AC_FUNC_MMAP])
 AC_CACHE_CHECK([for working strncmp], ac_cv_func_strncmp_works,
 [AC_TRY_RUN([
@@ -74,7 +74,7 @@ fi
 ])
 
 dnl See if errno must be declared even when <errno.h> is included.
-AC_DEFUN(libiberty_AC_DECLARE_ERRNO,
+AC_DEFUN([libiberty_AC_DECLARE_ERRNO],
 [AC_CACHE_CHECK(whether errno must be declared, libiberty_cv_declare_errno,
 [AC_TRY_COMPILE(
 [#include <errno.h>],
@@ -93,7 +93,7 @@ fi
 # link an executable.  This should really be fixed in autoconf
 # itself.
 
-AC_DEFUN(LIB_AC_PROG_CC,
+AC_DEFUN([LIB_AC_PROG_CC],
 [AC_BEFORE([$0], [AC_PROG_CPP])dnl
 AC_PROVIDE([AC_PROG_CC])
 AC_CHECK_PROG(CC, gcc, gcc)
@@ -143,7 +143,7 @@ EOF
 # unreliable that GCC has decided to use it only when being compiled
 # by GCC.  This is the part of AC_FUNC_ALLOCA that calculates the
 # information alloca.c needs.
-AC_DEFUN(libiberty_AC_FUNC_C_ALLOCA,
+AC_DEFUN([libiberty_AC_FUNC_C_ALLOCA],
 [AC_CACHE_CHECK(whether alloca needs Cray hooks, ac_cv_os_cray,
 [AC_EGREP_CPP(webecray,
 [#if defined(CRAY) && ! defined(CRAY2)

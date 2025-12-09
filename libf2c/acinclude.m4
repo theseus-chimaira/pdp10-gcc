@@ -12,7 +12,7 @@ dnl
 dnl Initialize configure bits.
 dnl
 dnl GLIBCPP_CONFIGURE
-AC_DEFUN(GLIBCPP_CONFIGURE, [
+AC_DEFUN([GLIBCPP_CONFIGURE], [
   dnl Default to --enable-multilib
   AC_ARG_ENABLE(multilib,
   [  --enable-multilib       build hella library versions (default)],
@@ -86,7 +86,7 @@ AC_ARG_WITH(cross-host,
 # link an executable.  This should really be fixed in autoconf
 # itself.
 
-AC_DEFUN(LIB_AC_PROG_CC,
+AC_DEFUN([LIB_AC_PROG_CC],
 [AC_BEFORE([$0], [AC_PROG_CPP])dnl
 dnl Fool anybody using AC_PROG_CC.
 AC_PROVIDE([AC_PROG_CC])
@@ -155,7 +155,7 @@ dnl Assumes cross_compiling bits already done, and with_cross_host in
 dnl particular
 dnl
 dnl GLIBCPP_EXPORT_INSTALL_INFO
-AC_DEFUN(GLIBCPP_EXPORT_INSTALL_INFO, [
+AC_DEFUN([GLIBCPP_EXPORT_INSTALL_INFO], [
 # Assumes glibcpp_builddir, glibcpp_srcdir are alreay set up and
 # exported correctly in GLIBCPP_CONFIGURE.
 glibcpp_toolexecdir=no

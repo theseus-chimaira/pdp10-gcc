@@ -55,7 +55,7 @@ including headers and, preferably, the library, before you can configure
 the G77 runtime system.  If necessary, install gcc now with \`LANGUAGES=c',
 then the target library, then build with \`LANGUAGES=f77'.])])
 
-AC_HEADER_STDC
+AC_CHECK_INCLUDES_DEFAULT
 dnl We could do this if we didn't know we were using gcc
 dnl AC_MSG_CHECKING(for prototype-savvy compiler)
 dnl AC_CACHE_VAL(g77_cv_sys_proto,                

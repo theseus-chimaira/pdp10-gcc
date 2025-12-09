@@ -4,8 +4,8 @@ dnl private Autoconf 2.13 macros that no longer exist in Autoconf 2.70+.
 
 m4_ifndef([AC_PROG_CC_GNU],
 [AC_DEFUN([AC_PROG_CC_GNU],
-[AC_CACHE_CHECK([whether we are using GNU C], [ac_cv_prog_gcc],
-[cat > conftest.c <<\_ACEOF
+[AC_MSG_CHECKING([whether we are using GNU C])
+cat > conftest.c <<\_ACEOF
 #ifdef __GNUC__
   yes;
 #endif
@@ -15,7 +15,8 @@ if ${CC-cc} -E conftest.c 2>/dev/null | grep yes >/dev/null 2>&1; then
 else
   ac_cv_prog_gcc=no
 fi
-rm -f conftest.c])])])
+rm -f conftest.c
+AC_MSG_RESULT([$ac_cv_prog_gcc])])])
 
 m4_ifndef([AC_PROG_CC_G],
 [AC_DEFUN([AC_PROG_CC_G],
@@ -30,8 +31,8 @@ rm -f conftest*])])])
 
 m4_ifndef([AC_PROG_CXX_GNU],
 [AC_DEFUN([AC_PROG_CXX_GNU],
-[AC_CACHE_CHECK([whether we are using GNU C++], [ac_cv_prog_gxx],
-[cat > conftest.cc <<\_ACEOF
+[AC_MSG_CHECKING([whether we are using GNU C++])
+cat > conftest.cc <<\_ACEOF
 #ifdef __GNUC__
   yes;
 #endif
@@ -41,7 +42,8 @@ if ${CXX-g++} -E conftest.cc 2>/dev/null | grep yes >/dev/null 2>&1; then
 else
   ac_cv_prog_gxx=no
 fi
-rm -f conftest.cc])])])
+rm -f conftest.cc
+AC_MSG_RESULT([$ac_cv_prog_gxx])])])
 
 m4_ifndef([AC_PROG_CXX_G],
 [AC_DEFUN([AC_PROG_CXX_G],

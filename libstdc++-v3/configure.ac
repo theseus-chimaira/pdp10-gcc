@@ -3,7 +3,9 @@ m4_include([../config/gcc32-modern-autoconf.m4])
 # aclocal && autoconf && autoheader && automake
 
 AC_PREREQ(2.13)
-AC_INIT(src/ios.cc)
+AC_INIT([libstdc++], [3.1.0], [gcc-bugs@gcc.gnu.org])
+AC_CONFIG_SRCDIR([src/ios.cc])
+AC_CONFIG_AUX_DIR([..])
 
 PACKAGE=libstdc++
 AC_SUBST(PACKAGE)
@@ -17,15 +19,15 @@ AC_SUBST(libtool_VERSION)
 # Gets build, host, target, *_vendor, *_cpu, *_os, etc.
 # AC 2.5x sets target_alias iff the user specified --target, but we use it
 # everywhere, so we set it here just to be sure.  In AC 2.13
-# AC_CANONICAL_TARGET was known as AC_CANONICAL_SYSTEM.
-AC_CANONICAL_SYSTEM
+# AC_CANONICAL_TARGET was known as AC_CANONICAL_TARGET.
+AC_CANONICAL_TARGET
 target_alias=${target_alias-$target}
 AC_SUBST(target_alias)
 
 AC_CONFIG_AUX_DIR([..])
-AM_INIT_AUTOMAKE($PACKAGE, $release_VERSION)
+AM_INIT_AUTOMAKE([foreign])
 AC_PROG_CXX
-AM_CONFIG_HEADER(config.h)
+AC_CONFIG_HEADERS([config.h])
 
 # Runs configure.host and configure.target, as well as finds CC, CXX
 # and assorted other critical bits.  Have to run this before the

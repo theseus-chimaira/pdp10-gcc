@@ -23,7 +23,7 @@ m4_include([acinclude.m4])
 
 AC_PREREQ(2.13)
 AC_INIT(objc/objc.h)
-AC_CONFIG_HEADER(config.h)
+AC_CONFIG_HEADERS([config.h])
 
 AC_CANONICAL_SYSTEM
 target_alias=${target_alias-$target}
@@ -90,7 +90,7 @@ including headers and, preferably, the library, before you can configure
 the Objective C runtime system.  If necessary, install gcc now with 
 \`LANGUAGES=c', then the target library, then build with \`LANGUAGES=objc'.])])
 
-AC_HEADER_STDC
+AC_CHECK_INCLUDES_DEFAULT
 
 AC_CHECK_HEADERS(sched.h)
 

@@ -2,7 +2,7 @@ dnl
 dnl Initialize configure bits.
 dnl
 dnl GLIBCPP_CONFIGURE
-AC_DEFUN(GLIBCPP_CONFIGURE, [
+AC_DEFUN([GLIBCPP_CONFIGURE], [
   dnl Default to --enable-multilib
   AC_ARG_ENABLE(multilib,
   [  --enable-multilib       build hella library versions (default)],
@@ -45,9 +45,6 @@ AC_DEFUN(GLIBCPP_CONFIGURE, [
   AC_SUBST(glibcpp_builddir)
   AC_SUBST(glibcpp_srcdir)
 
-  dnl This is here just to satisfy automake.
-  ifelse(not,equal,[AC_CONFIG_AUX_DIR(..)])
-
   AC_PROG_AWK
   # Will set LN_S to either 'ln -s' or 'ln'.  With autoconf 2.5x, can also
   # be 'cp -p' if linking isn't available.
@@ -77,7 +74,7 @@ AC_DEFUN(GLIBCPP_CONFIGURE, [
   # are probably using a cross compiler, which will not be able to fully
   # link an executable.  This is addressed in later versions of autoconf.
 
-  AC_DEFUN(LIB_AC_PROG_CC,
+  AC_DEFUN([LIB_AC_PROG_CC],
   [AC_BEFORE([$0], [AC_PROG_CPP])dnl
   dnl Fool anybody using AC_PROG_CC.
   AC_PROVIDE([AC_PROG_CC])
@@ -115,7 +112,7 @@ AC_DEFUN(GLIBCPP_CONFIGURE, [
 
   # Likewise for AC_PROG_CXX.  We can't just call it directly because g++
   # will try to link in libstdc++.
-  AC_DEFUN(LIB_AC_PROG_CXX,
+  AC_DEFUN([LIB_AC_PROG_CXX],
   [AC_BEFORE([$0], [AC_PROG_CXXCPP])dnl
   dnl Fool anybody using AC_PROG_CXX.
   AC_PROVIDE([AC_PROG_CXX])
@@ -155,8 +152,8 @@ AC_DEFUN(GLIBCPP_CONFIGURE, [
 
   LIB_AC_PROG_CXX
 
-  # For some reason, gettext needs this.
-  AC_ISC_POSIX
+  # Old GCC used AC_ISC_POSIX here for gettext-era hosts; modern Autoconf
+  # treats that macro as obsolete and POSIX hosts no longer need the probe.
 
   AC_CHECK_TOOL(AS, as)
   AC_CHECK_TOOL(AR, ar)
@@ -199,7 +196,7 @@ dnl Check to see if g++ can compile this library, and if so, if any version-
 dnl specific precautions need to be taken. 
 dnl 
 dnl GLIBCPP_CHECK_COMPILER_VERSION
-AC_DEFUN(GLIBCPP_CHECK_COMPILER_VERSION, [
+AC_DEFUN([GLIBCPP_CHECK_COMPILER_VERSION], [
 if test ! -f stamp-sanity-compiler; then
   AC_MSG_CHECKING([for g++ that will successfully compile libstdc++-v3])
   AC_LANG_SAVE
@@ -229,7 +226,7 @@ dnl Define SECTION_FLAGS='-ffunction-sections -fdata-sections' if
 dnl compiler supports it and the user has not requested debug mode.
 dnl
 dnl GLIBCPP_CHECK_COMPILER_FEATURES
-AC_DEFUN(GLIBCPP_CHECK_COMPILER_FEATURES, [
+AC_DEFUN([GLIBCPP_CHECK_COMPILER_FEATURES], [
   # All these tests are for C++; save the language and the compiler flags.
   # The CXXFLAGS thing is suspicious, but based on similar bits previously
   # found in GLIBCPP_CONFIGURE.
@@ -279,7 +276,7 @@ dnl Define LD, with_gnu_ld, and (possibly) glibcpp_gnu_ld_version as
 dnl side-effects of testing.
 dnl
 dnl GLIBCPP_CHECK_LINKER_FEATURES
-AC_DEFUN(GLIBCPP_CHECK_LINKER_FEATURES, [
+AC_DEFUN([GLIBCPP_CHECK_LINKER_FEATURES], [
   # If we're not using GNU ld, then there's no point in even trying these
   # tests.  Check for that first.  We should have already tested for gld
   # by now (in libtool), but require it now just to be safe...
@@ -365,7 +362,7 @@ dnl declared when using the c++ compiler
 dnl ASSUMES argument is a math function with ONE parameter
 dnl
 dnl GLIBCPP_CHECK_MATH_DECL_1
-AC_DEFUN(GLIBCPP_CHECK_MATH_DECL_1, [
+AC_DEFUN([GLIBCPP_CHECK_MATH_DECL_1], [
   AC_MSG_CHECKING([for $1 declaration])
   if test x${glibcpp_cv_func_$1_use+set} != xset; then
     AC_CACHE_VAL(glibcpp_cv_func_$1_use, [
@@ -397,7 +394,7 @@ dnl
 dnl ASSUMES argument is a math function with ONE parameter
 dnl
 dnl GLIBCPP_CHECK_MATH_DECL_AND_LINKAGE_1
-AC_DEFUN(GLIBCPP_CHECK_MATH_DECL_AND_LINKAGE_1, [
+AC_DEFUN([GLIBCPP_CHECK_MATH_DECL_AND_LINKAGE_1], [
   GLIBCPP_CHECK_MATH_DECL_1($1)
   if test x$glibcpp_cv_func_$1_use = x"yes"; then
     AC_CHECK_FUNCS($1)    
@@ -415,7 +412,7 @@ dnl Like GLIBCPP_CHECK_MATH_DECL_AND_LINKAGE_1, but does a bunch of
 dnl of functions at once.  It's an all-or-nothing check -- either 
 dnl HAVE_XYZ is defined for each of the functions, or for none of them.
 dnl Doing it this way saves significant configure time.
-AC_DEFUN(GLIBCPP_CHECK_MATH_DECLS_AND_LINKAGES_1, [
+AC_DEFUN([GLIBCPP_CHECK_MATH_DECLS_AND_LINKAGES_1], [
   AC_MSG_CHECKING([for $1 functions])
   AC_CACHE_VAL(glibcpp_cv_func_$2_use, [
     AC_LANG_SAVE
@@ -437,7 +434,7 @@ dnl declared when using the c++ compiler
 dnl ASSUMES argument is a math function with TWO parameters
 dnl
 dnl GLIBCPP_CHECK_MATH_DECL_2
-AC_DEFUN(GLIBCPP_CHECK_MATH_DECL_2, [
+AC_DEFUN([GLIBCPP_CHECK_MATH_DECL_2], [
   AC_MSG_CHECKING([for $1 declaration])
   if test x${glibcpp_cv_func_$1_use+set} != xset; then
     AC_CACHE_VAL(glibcpp_cv_func_$1_use, [
@@ -464,7 +461,7 @@ dnl
 dnl ASSUMES argument is a math function with TWO parameters
 dnl
 dnl GLIBCPP_CHECK_MATH_DECL_AND_LINKAGE_2
-AC_DEFUN(GLIBCPP_CHECK_MATH_DECL_AND_LINKAGE_2, [
+AC_DEFUN([GLIBCPP_CHECK_MATH_DECL_AND_LINKAGE_2], [
   GLIBCPP_CHECK_MATH_DECL_2($1)
   if test x$glibcpp_cv_func_$1_use = x"yes"; then
     AC_CHECK_FUNCS($1)    
@@ -483,7 +480,7 @@ dnl declared when using the c++ compiler
 dnl ASSUMES argument is a math function with THREE parameters
 dnl
 dnl GLIBCPP_CHECK_MATH_DECL_3
-AC_DEFUN(GLIBCPP_CHECK_MATH_DECL_3, [
+AC_DEFUN([GLIBCPP_CHECK_MATH_DECL_3], [
   AC_MSG_CHECKING([for $1 declaration])
   if test x${glibcpp_cv_func_$1_use+set} != xset; then
     AC_CACHE_VAL(glibcpp_cv_func_$1_use, [
@@ -510,7 +507,7 @@ dnl
 dnl ASSUMES argument is a math function with THREE parameters
 dnl
 dnl GLIBCPP_CHECK_MATH_DECL_AND_LINKAGE_3
-AC_DEFUN(GLIBCPP_CHECK_MATH_DECL_AND_LINKAGE_3, [
+AC_DEFUN([GLIBCPP_CHECK_MATH_DECL_AND_LINKAGE_3], [
   GLIBCPP_CHECK_MATH_DECL_3($1)
   if test x$glibcpp_cv_func_$1_use = x"yes"; then
     AC_CHECK_FUNCS($1)    
@@ -533,7 +530,7 @@ dnl
 dnl ASSUMES argument is a math function with TWO parameters
 dnl
 dnl GLIBCPP_CHECK_STDLIB_DECL_AND_LINKAGE_2
-AC_DEFUN(GLIBCPP_CHECK_STDLIB_DECL_AND_LINKAGE_2, [
+AC_DEFUN([GLIBCPP_CHECK_STDLIB_DECL_AND_LINKAGE_2], [
   AC_MSG_CHECKING([for $1 declaration])
   if test x${glibcpp_cv_func_$1_use+set} != xset; then
     AC_CACHE_VAL(glibcpp_cv_func_$1_use, [
@@ -562,7 +559,7 @@ dnl
 dnl ASSUMES argument is a function with THREE parameters
 dnl
 dnl GLIBCPP_CHECK_STDLIB_DECL_AND_LINKAGE_3
-AC_DEFUN(GLIBCPP_CHECK_STDLIB_DECL_AND_LINKAGE_3, [
+AC_DEFUN([GLIBCPP_CHECK_STDLIB_DECL_AND_LINKAGE_3], [
   AC_MSG_CHECKING([for $1 declaration])
   if test x${glibcpp_cv_func_$1_use+set} != xset; then
     AC_CACHE_VAL(glibcpp_cv_func_$1_use, [
@@ -595,7 +592,7 @@ dnl
 dnl ASSUMES argument is a math function with ONE parameter
 dnl
 dnl GLIBCPP_CHECK_BUILTIN_MATH_DECL_LINKAGE_1
-AC_DEFUN(GLIBCPP_CHECK_BUILTIN_MATH_DECL_AND_LINKAGE_1, [
+AC_DEFUN([GLIBCPP_CHECK_BUILTIN_MATH_DECL_AND_LINKAGE_1], [
   AC_MSG_CHECKING([for $1 declaration])
   if test x${glibcpp_cv_func_$1_use+set} != xset; then
     AC_CACHE_VAL(glibcpp_cv_func_$1_use, [
@@ -645,7 +642,7 @@ dnl check for __builtin_cos
 dnl check for __builtin_cosl
 dnl
 dnl GLIBCPP_CHECK_BUILTIN_MATH_SUPPORT
-AC_DEFUN(GLIBCPP_CHECK_BUILTIN_MATH_SUPPORT, [
+AC_DEFUN([GLIBCPP_CHECK_BUILTIN_MATH_SUPPORT], [
   dnl Test for builtin math functions.
   dnl These are made in gcc/c-common.c 
   GLIBCPP_CHECK_BUILTIN_MATH_DECL_AND_LINKAGE_1(__builtin_abs)
@@ -704,7 +701,7 @@ dnl Define HAVE_STRTOF if "strtof" is declared and links
 dnl Define HAVE_DRAND48 if "drand48" is declared and links
 dnl
 dnl GLIBCPP_CHECK_STDLIB_SUPPORT
-AC_DEFUN(GLIBCPP_CHECK_STDLIB_SUPPORT, [
+AC_DEFUN([GLIBCPP_CHECK_STDLIB_SUPPORT], [
   ac_test_CXXFLAGS="${CXXFLAGS+set}"
   ac_save_CXXFLAGS="$CXXFLAGS"
   CXXFLAGS='-fno-builtins -D_GNU_SOURCE'
@@ -727,7 +724,7 @@ dnl
 dnl Define HAVE_CARGF etc if "cargf" is found.
 dnl
 dnl GLIBCPP_CHECK_MATH_SUPPORT
-AC_DEFUN(GLIBCPP_CHECK_MATH_SUPPORT, [
+AC_DEFUN([GLIBCPP_CHECK_MATH_SUPPORT], [
   ac_test_CXXFLAGS="${CXXFLAGS+set}"
   ac_save_CXXFLAGS="$CXXFLAGS"
   CXXFLAGS='-fno-builtins -D_GNU_SOURCE'
@@ -838,7 +835,7 @@ dnl
 dnl Define USE_COMPLEX_LONG_DOUBLE etc if "copysignl" is found.
 dnl
 dnl GLIBCPP_CHECK_COMPLEX_MATH_SUPPORT
-AC_DEFUN(GLIBCPP_CHECK_COMPLEX_MATH_SUPPORT, [
+AC_DEFUN([GLIBCPP_CHECK_COMPLEX_MATH_SUPPORT], [
   dnl Check for complex versions of math functions of platform.
   AC_CHECK_LIB(m, main)
   AC_REPLACE_MATHFUNCS(nan copysignf)
@@ -864,7 +861,7 @@ dnl for.  Also, if architecture- or OS-specific flags are required for
 dnl compilation, pick them up here.
 dnl 
 dnl GLIBCPP_CHECK_TARGET
-AC_DEFUN(GLIBCPP_CHECK_TARGET, [
+AC_DEFUN([GLIBCPP_CHECK_TARGET], [
     . [$]{glibcpp_basedir}/configure.target
     AC_MSG_RESULT(CPU config directory is $cpu_include_dir)
     AC_MSG_RESULT(OS config directory is $os_include_dir)
@@ -880,7 +877,7 @@ dnl Define _GLIBCPP_USE_WCHAR_T if all the bits are found
 dnl Define HAVE_MBSTATE_T if mbstate_t is not in wchar.h
 dnl
 dnl GLIBCPP_CHECK_WCHAR_T_SUPPORT
-AC_DEFUN(GLIBCPP_CHECK_WCHAR_T_SUPPORT, [
+AC_DEFUN([GLIBCPP_CHECK_WCHAR_T_SUPPORT], [
 
   dnl Test wchar.h for mbstate_t, which is needed for char_traits and
   dnl others even if wchar_t support is not on.
@@ -998,7 +995,7 @@ dnl  +  Perhaps -D/-U of NDEBUG, DEBUG, DEBUG_ASSERT, ...?
 dnl  +  Usage:  GLIBCPP_ENABLE_DEBUG[(DEFAULT)]
 dnl       Where DEFAULT is either `yes' or `no'.  If ommitted, it
 dnl       defaults to `no'.
-AC_DEFUN(GLIBCPP_ENABLE_DEBUG, [dnl
+AC_DEFUN([GLIBCPP_ENABLE_DEBUG], [dnl
 define([GLIBCPP_ENABLE_DEBUG_DEFAULT], ifelse($1, yes, yes, no))dnl
 AC_ARG_ENABLE(debug,
 changequote(<<, >>)dnl
@@ -1039,7 +1036,7 @@ dnl         http://gcc.gnu.org/ml/libstdc++/2000-q1/msg00035.html
 dnl  +  Usage:  GLIBCPP_ENABLE_CXX_FLAGS(default flags)
 dnl       If "default flags" is an empty string (or "none"), the effect is
 dnl       the same as --disable or --enable=no.
-AC_DEFUN(GLIBCPP_ENABLE_CXX_FLAGS, [dnl
+AC_DEFUN([GLIBCPP_ENABLE_CXX_FLAGS], [dnl
 define([GLIBCPP_ENABLE_CXX_FLAGS_DEFAULT], ifelse($1,,, $1))dnl
 AC_ARG_ENABLE(cxx-flags,
 changequote(<<, >>)dnl
@@ -1087,7 +1084,7 @@ dnl --enable-clocale=generic sets config/locale/c_locale_generic.cc and friends
 dnl 
 dnl default is generic
 dnl
-AC_DEFUN(GLIBCPP_ENABLE_CLOCALE, [
+AC_DEFUN([GLIBCPP_ENABLE_CLOCALE], [
   AC_MSG_CHECKING([for clocale to use])
   AC_ARG_ENABLE(clocale,
   [  --enable-clocale        enable model for target locale package. 
@@ -1246,7 +1243,7 @@ dnl --enable-cstdio=libio sets config/io/c_io_libio.h and friends
 dnl 
 dnl default is stdio
 dnl
-AC_DEFUN(GLIBCPP_ENABLE_CSTDIO, [
+AC_DEFUN([GLIBCPP_ENABLE_CSTDIO], [
   AC_MSG_CHECKING([for cstdio to use])
   AC_ARG_ENABLE(cstdio,
   [  --enable-cstdio         enable stdio for target io package. 
@@ -1367,7 +1364,7 @@ dnl having to write complex code (the sed commands to clean the macro
 dnl namespace are complex and fragile enough as it is).  We must also
 dnl add a relative path so that -I- is supported properly.
 dnl
-AC_DEFUN(GLIBCPP_ENABLE_THREADS, [
+AC_DEFUN([GLIBCPP_ENABLE_THREADS], [
   AC_MSG_CHECKING([for thread model used by GCC])
   target_thread_file=`$CC -v 2>&1 | sed -n 's/^Thread model: //p'`
   AC_MSG_RESULT([$target_thread_file])
@@ -1393,7 +1390,7 @@ dnl --disable-sjlj-exceptions forces the use of call frame unwinding.
 dnl
 dnl Define _GLIBCPP_SJLJ_EXCEPTIONS if the compiler is configured for it.
 dnl
-AC_DEFUN(GLIBCPP_ENABLE_SJLJ_EXCEPTIONS, [
+AC_DEFUN([GLIBCPP_ENABLE_SJLJ_EXCEPTIONS], [
   AC_MSG_CHECKING([for exception model to use])
   AC_LANG_SAVE
   AC_LANG_CPLUSPLUS
@@ -1455,7 +1452,7 @@ dnl --disable-libunwind-exceptions assumes there is no libunwind.
 dnl
 dnl Define _GLIBCPP_LIBUNWIND_EXCEPTIONS if requested.
 dnl
-AC_DEFUN(GLIBCPP_ENABLE_LIBUNWIND_EXCEPTIONS, [
+AC_DEFUN([GLIBCPP_ENABLE_LIBUNWIND_EXCEPTIONS], [
   AC_MSG_CHECKING([for use of libunwind])
   AC_ARG_ENABLE(libunwind-exceptions,
   [  --enable-libunwind-exceptions  force use of libunwind for exceptions],
@@ -1483,7 +1480,7 @@ dnl       defaults to `no'.
 dnl  +  If 'C99' stuff is not available, ignores DEFAULT and sets `no'.
 dnl
 dnl GLIBCPP_ENABLE_C99
-AC_DEFUN(GLIBCPP_ENABLE_C99, [dnl
+AC_DEFUN([GLIBCPP_ENABLE_C99], [dnl
   define([GLIBCPP_ENABLE_C99_DEFAULT], ifelse($1, yes, yes, no))dnl
 
   AC_ARG_ENABLE(c99,
@@ -1619,7 +1616,7 @@ dnl       defaults to `no'.
 dnl  +  If 'long long' stuff is not available, ignores DEFAULT and sets `no'.
 dnl
 dnl GLIBCPP_ENABLE_LONG_LONG
-AC_DEFUN(GLIBCPP_ENABLE_LONG_LONG, [dnl
+AC_DEFUN([GLIBCPP_ENABLE_LONG_LONG], [dnl
   define([GLIBCPP_ENABLE_LONG_LONG_DEFAULT], ifelse($1, yes, yes, no))dnl
 
   AC_ARG_ENABLE(long-long,
@@ -1663,7 +1660,7 @@ dnl  +  This will eventually need to be 'c_shadow' by default.
 dnl  +  Usage:  GLIBCPP_ENABLE_CHEADERS[(DEFAULT)]
 dnl       Where DEFAULT is either `c' or `c_std' or 'c_shadow'.  
 dnl       If ommitted, it defaults to `c_std'.
-AC_DEFUN(GLIBCPP_ENABLE_CHEADERS, [dnl
+AC_DEFUN([GLIBCPP_ENABLE_CHEADERS], [dnl
 define([GLIBCPP_ENABLE_CHEADERS_DEFAULT], ifelse($1, c_std, c_std, c_std))dnl
 AC_MSG_CHECKING([for c header strategy to use])
 AC_ARG_ENABLE(cheaders,
@@ -1719,7 +1716,7 @@ dnl --disable-c-mbchar doesn't.
 dnl  +  Usage:  GLIBCPP_ENABLE_C_MBCHAR[(DEFAULT)]
 dnl       Where DEFAULT is either `yes' or `no'.  If ommitted, it
 dnl       defaults to `no'.
-AC_DEFUN(GLIBCPP_ENABLE_C_MBCHAR, [dnl
+AC_DEFUN([GLIBCPP_ENABLE_C_MBCHAR], [dnl
 define([GLIBCPP_ENABLE_C_MBCHAR_DEFAULT], ifelse($1, yes, yes, no))dnl
 AC_ARG_ENABLE(c-mbchar,
 changequote(<<, >>)dnl
@@ -1745,7 +1742,7 @@ dnl LIBIO_INCLUDES
 dnl CSHADOW_INCLUDES
 dnl
 dnl GLIBCPP_EXPORT_INCLUDES
-AC_DEFUN(GLIBCPP_EXPORT_INCLUDES, [
+AC_DEFUN([GLIBCPP_EXPORT_INCLUDES], [
   # Root level of the build directory include sources.
   GLIBCPP_INCLUDES="-I${glibcpp_builddir}/include/${target_alias} -I${glibcpp_builddir}/include"
 
@@ -1774,7 +1771,7 @@ AC_DEFUN(GLIBCPP_EXPORT_INCLUDES, [
 dnl
 dnl Set up *_FLAGS and *FLAGS variables for all sundry Makefile.am's.
 dnl
-AC_DEFUN(GLIBCPP_EXPORT_FLAGS, [
+AC_DEFUN([GLIBCPP_EXPORT_FLAGS], [
   # Optimization flags that are probably a good idea for thrill-seekers. Just
   # uncomment the lines below and make, everything else is ready to go... 
   # OPTIMIZE_CXXFLAGS = -O3 -fstrict-aliasing -fvtable-gc 
@@ -1796,7 +1793,7 @@ dnl Assumes cross_compiling bits already done, and with_cross_host in
 dnl particular
 dnl
 dnl GLIBCPP_EXPORT_INSTALL_INFO
-AC_DEFUN(GLIBCPP_EXPORT_INSTALL_INFO, [
+AC_DEFUN([GLIBCPP_EXPORT_INSTALL_INFO], [
 # Assumes glibcpp_builddir, glibcpp_srcdir are alreay set up and
 # exported correctly in GLIBCPP_CONFIGURE.
 glibcpp_toolexecdir=no
@@ -1891,10 +1888,9 @@ AC_SUBST(glibcpp_toolexeclibdir)
 # but which still want to provide support for the GNU gettext functionality.
 # Please note that the actual code is *not* freely available.
 
-# serial 1
 
 dnl AC_REPLACE_MATHFUNCS(FUNCTION...)
-AC_DEFUN(AC_REPLACE_MATHFUNCS,
+AC_DEFUN([AC_REPLACE_MATHFUNCS],
 [AC_CHECK_FUNCS([$1], , [LIBMATHOBJS="$LIBMATHOBJS ${ac_func}.lo"])])
 
 
@@ -1970,7 +1966,7 @@ dnl string, '#' otherwise
 
 dnl Check for headers for, and arguments to, the setrlimit() function.
 dnl Used only in testsuite_hooks.h.
-AC_DEFUN(GLIBCPP_CHECK_SETRLIMIT_ancilliary, [
+AC_DEFUN([GLIBCPP_CHECK_SETRLIMIT_ancilliary], [
   AC_TRY_COMPILE([#include <sys/resource.h>
                   #include <unistd.h>
                  ], [ int f = RLIMIT_$1 ; ],
@@ -1978,7 +1974,7 @@ AC_DEFUN(GLIBCPP_CHECK_SETRLIMIT_ancilliary, [
   AC_DEFINE_UNQUOTED(HAVE_MEMLIMIT_$1, $glibcpp_mresult,
                      [Only used in build directory testsuite_hooks.h.])
 ])
-AC_DEFUN(GLIBCPP_CHECK_SETRLIMIT, [
+AC_DEFUN([GLIBCPP_CHECK_SETRLIMIT], [
   setrlimit_have_headers=yes
   AC_CHECK_HEADERS(sys/resource.h unistd.h,
                    [],
@@ -2018,7 +2014,7 @@ dnl Does any necessary configuration of the testsuite directory.  Generates
 dnl the testsuite_hooks.h header.
 dnl
 dnl GLIBCPP_CONFIGURE_TESTSUITE  [no args]
-AC_DEFUN(GLIBCPP_CONFIGURE_TESTSUITE, [
+AC_DEFUN([GLIBCPP_CONFIGURE_TESTSUITE], [
   GLIBCPP_CHECK_SETRLIMIT
 
   # Look for setenv, so that extended locale tests can be performed.
@@ -2045,9 +2041,8 @@ AC_DEFUN([AC_PROG_LD])
 # but which still want to provide support for the GNU gettext functionality.
 # Please note that the actual code is *not* freely available.
 
-# serial 1
 
-AC_DEFUN(AC_LC_MESSAGES, [
+AC_DEFUN([AC_LC_MESSAGES], [
   AC_CHECK_HEADER(locale.h, [
     AC_CACHE_CHECK([for LC_MESSAGES], ac_cv_val_LC_MESSAGES,
       [AC_TRY_LINK([#include <locale.h>], [return LC_MESSAGES],
@@ -2068,7 +2063,7 @@ dnl --disable-concept-checks leaves them off.
 dnl  +  Usage:  GLIBCPP_ENABLE_CONCEPT_CHECKS[(DEFAULT)]
 dnl       Where DEFAULT is either `yes' or `no'.  If ommitted, it
 dnl       defaults to `no'.
-AC_DEFUN(GLIBCPP_ENABLE_CONCEPT_CHECKS, [dnl
+AC_DEFUN([GLIBCPP_ENABLE_CONCEPT_CHECKS], [dnl
 define([GLIBCPP_ENABLE_CONCEPT_CHECKS_DEFAULT], ifelse($1, yes, yes, no))dnl
 AC_ARG_ENABLE(concept-checks,
 changequote(<<, >>)dnl
@@ -2100,7 +2095,7 @@ dnl  +  Usage:  GLIBCPP_ENABLE_SYMVERS[(DEFAULT)]
 dnl       Where DEFAULT is either `yes' or `no'.  If ommitted, it
 dnl       defaults to `no'.  Passing `yes' tries to choose a default style
 dnl       based on linker characteristics.  Passing 'no' disables versioning.
-AC_DEFUN(GLIBCPP_ENABLE_SYMVERS, [dnl
+AC_DEFUN([GLIBCPP_ENABLE_SYMVERS], [dnl
 define([GLIBCPP_ENABLE_SYMVERS_DEFAULT], ifelse($1, yes, yes, no))dnl
 AC_ARG_ENABLE(symvers,
 changequote(<<, >>)dnl

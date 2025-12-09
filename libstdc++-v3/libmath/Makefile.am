@@ -22,7 +22,7 @@
 ## Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
 ## USA.
 
-AUTOMAKE_OPTIONS = foreign
+AUTOMAKE_OPTIONS = foreign no-dependencies
 
 mkinstalldirs = $(SHELL) $(toplevel_srcdir)/mkinstalldirs
 
@@ -39,7 +39,7 @@ LINK = \
 	$(AM_CFLAGS) $(CFLAGS) $(LDFLAGS) -o $@
 
 # Use common includes from acinclude.m4/GLIBCPP_EXPORT_INCLUDES
-TOPLEVEL_INCLUDES = @TOPLEVEL_INCLUDES@
+TOPLEVEL_AM_CPPFLAGS = @TOPLEVEL_INCLUDES@
 
-INCLUDES = \
+AM_CPPFLAGS = \
 	$(TOPLEVEL_INCLUDES) 

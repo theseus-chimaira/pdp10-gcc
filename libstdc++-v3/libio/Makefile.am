@@ -21,7 +21,7 @@
 ## Software Foundation, 59 Temple Place - Suite 330, Boston, MA 02111-1307,
 ## USA.
 
-AUTOMAKE_OPTIONS = foreign
+AUTOMAKE_OPTIONS = foreign no-dependencies
 
 mkinstalldirs = $(SHELL) $(toplevel_srcdir)/mkinstalldirs
 
@@ -32,11 +32,11 @@ noinst_LTLIBRARIES =
 endif
 
 # Use common includes from acinclude.m4/GLIBCPP_EXPORT_INCLUDES
-GLIBCPP_INCLUDES = @GLIBCPP_INCLUDES@
-TOPLEVEL_INCLUDES = @TOPLEVEL_INCLUDES@
-LIBIO_INCLUDES = @LIBIO_INCLUDES@
+GLIBCPP_AM_CPPFLAGS = @GLIBCPP_INCLUDES@
+TOPLEVEL_AM_CPPFLAGS = @TOPLEVEL_INCLUDES@
+LIBIO_AM_CPPFLAGS = @LIBIO_INCLUDES@
 
-INCLUDES = \
+AM_CPPFLAGS = \
 	-nostdinc++ \
 	$(GLIBCPP_INCLUDES) $(LIBIO_INCLUDES) $(TOPLEVEL_INCLUDES)	
 

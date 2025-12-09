@@ -34,23 +34,43 @@ set -eu
 #   cat .gitignore.generated >> .gitignore
 #   git clean -fdX
 
-regen_autoconf_dir () {
-	if [ -f "$SRC/$1/configure.in" ]; then
-		echo "==> autoconf: $1"
-		(cd "$SRC/$1" && autoconf)
+regen_input_file () {
+	if [ -f "$SRC/$1/configure.ac" ]; then
+		printf '%s\n' "configure.ac"
+	elif [ -f "$SRC/$1/configure.in" ]; then
+		printf '%s\n' "configure.in"
+	else
+		return 1
 	fi
+}
+
+regen_input_file () {
+	if [ -f "$SRC/$1/configure.ac" ]; then
+		printf '%s\n' "configure.ac"
+	elif [ -f "$SRC/$1/configure.in" ]; then
+		printf '%s\n' "configure.in"
+	else
+		return 1
+	fi
+}
+
+regen_autoconf_dir () {
+	input=`regen_input_file "$1"` || return 0
+	echo "==> autoconf: $1"
+	(cd "$SRC/$1" && autoconf -Wno-obsolete -Wno-syntax "$input" > configure)
 }
 
 regen_automake_dir () {
 	if [ -f "$SRC/$1/Makefile.am" ]; then
+		input=`regen_input_file "$1"` || return 0
 		echo "==> aclocal: $1"
-		(cd "$SRC/$1" && aclocal)
-		if grep 'AC_CONFIG_HEADER\|AC_CONFIG_HEADERS\|AM_CONFIG_HEADER' "$SRC/$1/configure.in" >/dev/null 2>&1; then
+		(cd "$SRC/$1" && aclocal -Wno-obsolete -Wno-syntax)
+		if grep 'AC_CONFIG_HEADER\|AC_CONFIG_HEADERS\|AM_CONFIG_HEADER' "$SRC/$1/$input" >/dev/null 2>&1; then
 			echo "==> autoheader: $1"
-			(cd "$SRC/$1" && autoheader)
+			(cd "$SRC/$1" && autoheader -Wno-obsolete -Wno-syntax "$input")
 		fi
 		echo "==> automake: $1"
-		(cd "$SRC/$1" && automake --add-missing --copy --foreign)
+		(cd "$SRC/$1" && automake -Wno-obsolete -Wno-portability --add-missing --copy --foreign)
 	fi
 }
 
