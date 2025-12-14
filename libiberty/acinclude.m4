@@ -104,7 +104,7 @@ fi
 
 AC_PROG_CC_GNU
 
-if test $ac_cv_prog_gcc = yes; then
+if test $gcc32_cv_prog_cc_gnu = yes; then
   GCC=yes
   ac_libiberty_warn_cflags='-W -Wall -Wtraditional -pedantic'
 dnl Check whether -g works, even if CFLAGS is set, in case the package
@@ -116,7 +116,7 @@ dnl normal versions of a library), tasteless as that idea is.
   AC_PROG_CC_G
   if test "$ac_test_CFLAGS" = set; then
     CFLAGS="$ac_save_CFLAGS"
-  elif test $ac_cv_prog_cc_g = yes; then
+  elif test $gcc32_cv_prog_cc_g = yes; then
     CFLAGS="-g -O2"
   else
     CFLAGS="-O2"

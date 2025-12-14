@@ -1,3 +1,4 @@
+m4_include([../../config/gcc32-modern-autoconf.m4])
 # Process this file with autoconf to produce a configure script.
 #   Copyright (C) 1995, 1997, 1998, 2001 Free Software Foundation, Inc.
 #   Contributed by Dave Love (d.love@dl.ac.uk).
@@ -52,8 +53,8 @@ AC_CHECK_HEADER(stdio.h,:,
   [AC_MSG_ERROR([Can't find stdio.h.
 You must have a usable C system for the target already installed, at least
 including headers and, preferably, the library, before you can configure
-the G77 runtime system.  If necessary, install gcc now with \`LANGUAGES=c',
-then the target library, then build with \`LANGUAGES=f77'.])])
+the G77 runtime system.  If necessary, install gcc now with `LANGUAGES=c',
+then the target library, then build with `LANGUAGES=f77'.])])
 
 AC_CHECK_INCLUDES_DEFAULT
 dnl We could do this if we didn't know we were using gcc
@@ -113,7 +114,8 @@ AC_CHECK_LIB(m,drem,AC_DEFINE(IEEE_drem))
 AC_DEFINE(Skip_f2c_Undefs)
 AC_DEFINE(IEEE_COMPLEX_DIVIDE)
 
-AC_OUTPUT(Makefile)
+AC_CONFIG_FILES([Makefile])
+AC_OUTPUT
 
 dnl Local Variables:
 dnl comment-start: "dnl "

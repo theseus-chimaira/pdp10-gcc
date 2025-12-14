@@ -24,7 +24,9 @@ m4_include([acinclude.m4])
 AC_PREREQ(2.13)
 AC_INIT(libF77/Version.c)
 
-AC_CANONICAL_SYSTEM
+AC_CANONICAL_BUILD
+AC_CANONICAL_HOST
+AC_CANONICAL_TARGET
 target_alias=${target_alias-$target}
 AC_SUBST(target_alias)
 
@@ -81,8 +83,8 @@ AC_CHECK_HEADER(stdio.h,:,
   [AC_MSG_ERROR([Can't find stdio.h.
 You must have a usable C system for the target already installed, at least
 including headers and, preferably, the library, before you can configure
-the G77 runtime system.  If necessary, install gcc now with \`LANGUAGES=c',
-then the target library, then build with \`LANGUAGES=f77'.])])
+the G77 runtime system.  If necessary, install gcc now with `LANGUAGES=c',
+then the target library, then build with `LANGUAGES=f77'.])])
 
 dnl Checks for g77 integer types built into gcc's C front end.
 AC_MSG_CHECKING(for built-in g77 integer types)
@@ -112,8 +114,9 @@ AC_CONFIG_SUBDIRS(libU77 libI77 libF77)
 # Do Makefile first since g2c.h depends on it and shouldn't get an
 # earlier timestamp.  Of course, it does when the multilib gunk below
 # edits Makefile, sigh; see additional touch below.
-AC_OUTPUT(Makefile g2c.h:g2c.hin,
- [test -z "$CONFIG_HEADERS" || echo timestamp > stamp-h
+AC_CONFIG_FILES([Makefile g2c.h:g2c.hin])
+AC_CONFIG_COMMANDS([default],
+[test -z "$CONFIG_HEADERS" || echo timestamp > stamp-h
 if test -n "$CONFIG_FILES"; then
   if test -n "${with_target_subdir}"; then
     # FIXME: We shouldn't need to set ac_file
@@ -122,15 +125,15 @@ if test -n "$CONFIG_FILES"; then
     touch g2c.h   # to keep it more recent than Makefile
   fi
 fi],
-srcdir=${srcdir}
+[srcdir=${srcdir}
 host=${host}
 target=${target}
 with_target_subdir=${with_target_subdir}
 with_multisubdir=${with_multisubdir}
 ac_configure_args="--enable-multilib ${ac_configure_args}"
 toplevel_srcdir=${toplevel_srcdir}
-CONFIG_SHELL=${CONFIG_SHELL-/bin/sh}
-)
+CONFIG_SHELL=${CONFIG_SHELL-/bin/sh}])
+AC_OUTPUT
 
 
 dnl Local Variables:

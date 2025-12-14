@@ -1,3 +1,4 @@
+m4_include([../../config/gcc32-modern-autoconf.m4])
 # Process this file with autoconf to produce a configure script.
 #   Copyright (C) 1995, 1997, 1998, 2001, 2002 Free Software Foundation, Inc.
 #   Contributed by Dave Love (d.love@dl.ac.uk).
@@ -58,8 +59,8 @@ AC_CHECK_HEADER(stdio.h,:,
   [AC_MSG_ERROR([Can't find stdio.h.
 You must have a usable C system for the target already installed, at least
 including headers and, preferably, the library, before you can configure
-the G77 runtime system.  If necessary, install gcc now with \`LANGUAGES=c',
-then the target library, then build with \`LANGUAGES=f77'.])])
+the G77 runtime system.  If necessary, install gcc now with `LANGUAGES=c',
+then the target library, then build with `LANGUAGES=f77'.])])
 
 AC_CHECK_INCLUDES_DEFAULT
 dnl We could do this if we didn't know we were using gcc
@@ -100,7 +101,7 @@ AC_CACHE_VAL(g77_cv_lib_gnu,
 AC_MSG_RESULT($g77_cv_lib_gnu)
 
 # Apparently cygwin needs to be special-cased.
-AC_MSG_CHECKING([for cyg\`win'32])
+AC_MSG_CHECKING([for cygwin32])
 AC_CACHE_VAL(g77_cv_sys_cygwin32,
   AC_EGREP_CPP(yes,
   [#ifdef __CYGWIN32__
@@ -210,7 +211,8 @@ AC_TYPE_OFF_T
 
 AC_DEFINE(Skip_f2c_Undefs, 1, [Define to skip f2c undefs.])
 
-AC_OUTPUT(Makefile)
+AC_CONFIG_FILES([Makefile])
+AC_OUTPUT
 
 dnl We might have configuration options to:
 dnl * change unit preconnexion in err.c (f_init.c)

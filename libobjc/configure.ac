@@ -25,7 +25,9 @@ AC_PREREQ(2.13)
 AC_INIT(objc/objc.h)
 AC_CONFIG_HEADERS([config.h])
 
-AC_CANONICAL_SYSTEM
+AC_CANONICAL_BUILD
+AC_CANONICAL_HOST
+AC_CANONICAL_TARGET
 target_alias=${target_alias-$target}
 AC_SUBST(target_alias)
 
@@ -88,7 +90,7 @@ AC_CHECK_HEADER(stdio.h,:,
 You must have a usable C system for the target already installed, at least
 including headers and, preferably, the library, before you can configure
 the Objective C runtime system.  If necessary, install gcc now with 
-\`LANGUAGES=c', then the target library, then build with \`LANGUAGES=objc'.])])
+`LANGUAGES=c', then the target library, then build with `LANGUAGES=objc'.])])
 
 AC_CHECK_INCLUDES_DEFAULT
 
@@ -119,8 +121,9 @@ AC_SUBST(OBJC_BOEHM_GC)
 
 
 # We need multilib support, but only if configuring for the target.
-AC_OUTPUT(Makefile,
- [test -z "$CONFIG_HEADERS" || echo timestamp > stamp-h
+AC_CONFIG_FILES([Makefile])
+AC_CONFIG_COMMANDS([default],
+[test -z "$CONFIG_HEADERS" || echo timestamp > stamp-h
 if test -n "$CONFIG_FILES"; then
   if test -n "${with_target_subdir}"; then
     # FIXME: We shouldn't need to set ac_file
@@ -128,15 +131,15 @@ if test -n "$CONFIG_FILES"; then
     . ${toplevel_srcdir}/config-ml.in
   fi
 fi],
-srcdir=${srcdir}
+[srcdir=${srcdir}
 host=${host}
 target=${target}
 with_target_subdir=${with_target_subdir}
 with_multisubdir=${with_multisubdir}
 ac_configure_args="--enable-multilib ${ac_configure_args}"
 toplevel_srcdir=${toplevel_srcdir}
-CONFIG_SHELL=${CONFIG_SHELL-/bin/sh}
-)
+CONFIG_SHELL=${CONFIG_SHELL-/bin/sh}])
+AC_OUTPUT
 
 
 dnl Local Variables:

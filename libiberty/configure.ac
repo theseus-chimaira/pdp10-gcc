@@ -96,7 +96,6 @@ AC_CHECK_TOOL(RANLIB, ranlib, :)
 
 LIB_AC_PROG_CC
 
-AC_ISC_POSIX
 AC_C_CONST
 AC_C_INLINE
 
@@ -110,7 +109,7 @@ dnl AM_PROG_LIBTOOL
 
 dnl When we start using automake:
 dnl AM_CONFIG_HEADER(config.h:config.in)
-AC_CONFIG_HEADER(config.h:config.in)
+AC_CONFIG_HEADERS([config.h:config.in])
 
 dnl When we start using automake:
 dnl AM_MAINTAINER_MODE
@@ -377,7 +376,11 @@ if test -z "${setobjs}"; then
   # We haven't set the list of objects yet.  Use the standard autoconf
   # tests.  This will only work if the compiler works.
   AC_PROG_CC_WORKS
-  AC_REPLACE_FUNCS($funcs)
+  AC_REPLACE_FUNCS([asprintf atexit basename bcmp bcopy bsearch bzero calloc clock ffs
+getcwd getpagesize index insque memchr memcmp memcpy memmove memset mkstemps
+putenv random rename rindex setenv sigsetmask strcasecmp strchr strdup
+strncasecmp strrchr strstr strtod strtol strtoul tmpnam vasprintf vfprintf
+vprintf vsprintf waitpid])
   libiberty_AC_FUNC_C_ALLOCA
   AC_FUNC_VFORK
   if test $ac_cv_func_vfork_works = no; then
@@ -406,7 +409,7 @@ if test -z "${setobjs}"; then
       AC_MSG_RESULT(no)
     fi
   done
-  AC_CHECK_FUNCS($checkfuncs)
+  AC_CHECK_FUNCS([getrusage on_exit psignal strerror strsignal sysconf times sbrk gettimeofday])
 fi
 
 libiberty_AC_FUNC_STRNCMP
@@ -421,7 +424,8 @@ fi
 AC_SUBST(INSTALL_DEST)
 
 # We need multilib support, but only if configuring for the target.
-AC_OUTPUT(Makefile testsuite/Makefile,
+AC_CONFIG_FILES([Makefile testsuite/Makefile])
+AC_CONFIG_COMMANDS([default],
 [test -z "$CONFIG_HEADERS" || echo timestamp > stamp-h
 if test -n "$CONFIG_FILES"; then
   if test -n "${with_build_subdir}" || test -n "${with_target_subdir}"; then
@@ -430,7 +434,7 @@ if test -n "$CONFIG_FILES"; then
     . ${libiberty_topdir}/config-ml.in
   fi
 fi],
-srcdir=${srcdir}
+[srcdir=${srcdir}
 host=${host}
 target=${target}
 with_target_subdir=${with_target_subdir}
@@ -438,5 +442,5 @@ with_build_subdir=${with_build_subdir}
 with_multisubdir=${with_multisubdir}
 ac_configure_args="--enable-multilib ${ac_configure_args}"
 CONFIG_SHELL=${CONFIG_SHELL-/bin/sh}
-libiberty_topdir=${libiberty_topdir}
-)
+libiberty_topdir=${libiberty_topdir}])
+AC_OUTPUT
