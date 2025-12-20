@@ -23,6 +23,7 @@ m4_include([acinclude.m4])
 
 AC_PREREQ(2.13)
 AC_INIT(objc/objc.h)
+AC_DISABLE_OPTION_CHECKING
 AC_CONFIG_HEADERS([config.h])
 
 AC_CANONICAL_BUILD

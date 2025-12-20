@@ -4,6 +4,7 @@ m4_include([../config/gcc32-modern-autoconf.m4])
 
 AC_PREREQ(2.13)
 AC_INIT([libstdc++], [3.1.0], [gcc-bugs@gcc.gnu.org])
+AC_DISABLE_OPTION_CHECKING
 AC_CONFIG_SRCDIR([src/ios.cc])
 AC_CONFIG_AUX_DIR([..])
 

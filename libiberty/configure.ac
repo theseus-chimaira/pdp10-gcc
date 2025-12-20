@@ -4,6 +4,7 @@ dnl Process this file with autoconf to produce a configure script
 
 AC_PREREQ(2.13)
 AC_INIT(pexecute.c)
+AC_DISABLE_OPTION_CHECKING
 
 dnl We use these options to decide which functions to include.
 AC_ARG_WITH(target-subdir,

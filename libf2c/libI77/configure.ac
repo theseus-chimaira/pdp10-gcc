@@ -22,6 +22,7 @@ m4_include([../../config/gcc32-modern-autoconf.m4])
 
 AC_PREREQ(2.12.1)
 AC_INIT(ftell_.c)
+AC_DISABLE_OPTION_CHECKING
 AC_CONFIG_HEADERS([config.h])
 
 # These defines are necessary to get 64-bit file size support.

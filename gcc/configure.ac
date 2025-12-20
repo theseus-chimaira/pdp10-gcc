@@ -25,6 +25,7 @@ m4_include([acinclude.m4])
 # Initialization and defaults
 AC_PREREQ([2.72])
 AC_INIT
+AC_DISABLE_OPTION_CHECKING
 AC_CONFIG_SRCDIR([tree.c])
 AC_CONFIG_HEADERS([auto-host.h:config.in])
 

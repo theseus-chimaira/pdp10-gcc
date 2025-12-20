@@ -6,6 +6,12 @@ dnl Autoconf 2.70+.
 dnl Override Autoconf's obsolete compatibility macros.  The GCC 3.2 target
 dnl libraries need compile/preprocess-only compiler checks because a bare
 dnl cross target may not be able to link target programs yet.
+
+dnl Modern Autoconf compile-test helpers expect ac_objext to be known.
+dnl GCC 3.2 used private compiler probes that intentionally avoid the full
+dnl AC_PROG_CC/AC_PROG_CXX link test, so set the object suffix explicitly.
+AC_DEFUN([GCC32_SET_OBJECT_SUFFIX],
+[ac_objext=o])
 AC_DEFUN([AC_PROG_CC_GNU],
 [AC_CACHE_CHECK([whether we are using GNU C], [gcc32_cv_prog_cc_gnu],
 [cat > conftest.c <<\_ACEOF
@@ -18,7 +24,8 @@ if ${CC-cc} -E conftest.c 2>/dev/null | grep yes >/dev/null 2>&1; then
 else
   gcc32_cv_prog_cc_gnu=no
 fi
-rm -f conftest.c])])
+rm -f conftest.c])
+GCC32_SET_OBJECT_SUFFIX])
 
 AC_DEFUN([AC_PROG_CC_G],
 [AC_CACHE_CHECK([whether ${CC-cc} accepts -g], [gcc32_cv_prog_cc_g],
@@ -42,7 +49,8 @@ if ${CXX-g++} -E conftest.cc 2>/dev/null | grep yes >/dev/null 2>&1; then
 else
   gcc32_cv_prog_cxx_gnu=no
 fi
-rm -f conftest.cc])])
+rm -f conftest.cc])
+GCC32_SET_OBJECT_SUFFIX])
 
 AC_DEFUN([AC_PROG_CXX_G],
 [AC_CACHE_CHECK([whether ${CXX-g++} accepts -g], [gcc32_cv_prog_cxx_g],

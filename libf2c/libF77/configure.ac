@@ -22,6 +22,7 @@ m4_include([../../config/gcc32-modern-autoconf.m4])
 
 AC_PREREQ(2.12.1)
 AC_INIT(getarg_.c)
+AC_DISABLE_OPTION_CHECKING
 
 dnl Checks for programs.
 

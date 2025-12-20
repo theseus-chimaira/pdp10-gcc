@@ -22,8 +22,16 @@ else
 fi
 
 libstdcxx_srcdir=${if_topsrcdir}/libstdc++-v3
-# We check libstdc++-v3/configure.in for libstdcxx_interface.
-libstdcxx_interface=`grep "^INTERFACE" ${libstdcxx_srcdir}/configure.in | sed 's/INTERFACE[ 	]*=[ 	]*\(.*\)/\1/'`
+# We check libstdc++-v3/configure.ac for libstdcxx_interface.
+# Keep a configure.in fallback for older source trees.
+if test -r ${libstdcxx_srcdir}/configure.ac; then
+  libstdcxx_configure_input=${libstdcxx_srcdir}/configure.ac
+elif test -r ${libstdcxx_srcdir}/configure.in; then
+  libstdcxx_configure_input=${libstdcxx_srcdir}/configure.in
+else
+  libstdcxx_configure_input=/dev/null
+fi
+libstdcxx_interface=`grep "^INTERFACE" ${libstdcxx_configure_input} | sed 's/INTERFACE[ 	]*=[ 	]*\(.*\)/\1/'`
 libstdcxx_incdir=g++-${libstdcxx_interface}
 # Used to version libstdc++ shared libraries
 cxx_interface=2

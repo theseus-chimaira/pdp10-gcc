@@ -1104,7 +1104,8 @@ do
 	  if test x"${add_this_lang}" = xyes; then
 	      eval target_libs='"$target_libs "'\"$this_lang_libs\"
 	  else
-	      eval noconfigdirs='"$noconfigdirs "'\"$this_lang_libs $this_lang_dirs\"
+	      # Disabled languages are intentionally skipped, not unsupported.
+	      eval skipdirs='"$skipdirs "'\"$this_lang_libs $this_lang_dirs\"
 	  fi
 	  ;;
 	esac
