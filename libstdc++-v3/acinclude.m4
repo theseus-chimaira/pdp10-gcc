@@ -1,3 +1,340 @@
+dnl Header templates historically carried by acconfig.h.
+AH_TEMPLATE([HAVE_GTHR_DEFAULT], [Define if gthr-default.h exists.])
+AH_TEMPLATE([HAVE_LC_MESSAGES], [Define if LC_MESSAGES is available in locale.h.])
+AH_TEMPLATE([HAVE_MBSTATE_T], [Define if mbstate_t exists in wchar.h.])
+AH_TEMPLATE([HAVE___BUILTIN_ABS], [Define if the compiler/host combination has __builtin_abs.])
+AH_TEMPLATE([HAVE___BUILTIN_COS], [Define if the compiler/host combination has __builtin_cos.])
+AH_TEMPLATE([HAVE___BUILTIN_COSF], [Define if the compiler/host combination has __builtin_cosf.])
+AH_TEMPLATE([HAVE___BUILTIN_COSL], [Define if the compiler/host combination has __builtin_cosl.])
+AH_TEMPLATE([HAVE___BUILTIN_FABS], [Define if the compiler/host combination has __builtin_fabs.])
+AH_TEMPLATE([HAVE___BUILTIN_FABSF], [Define if the compiler/host combination has __builtin_fabsf.])
+AH_TEMPLATE([HAVE___BUILTIN_FABSL], [Define if the compiler/host combination has __builtin_fabsl.])
+AH_TEMPLATE([HAVE___BUILTIN_LABS], [Define if the compiler/host combination has __builtin_labs.])
+AH_TEMPLATE([HAVE___BUILTIN_SIN], [Define if the compiler/host combination has __builtin_sin.])
+AH_TEMPLATE([HAVE___BUILTIN_SINF], [Define if the compiler/host combination has __builtin_sinf.])
+AH_TEMPLATE([HAVE___BUILTIN_SINL], [Define if the compiler/host combination has __builtin_sinl.])
+AH_TEMPLATE([HAVE___BUILTIN_SQRT], [Define if the compiler/host combination has __builtin_sqrt.])
+AH_TEMPLATE([HAVE___BUILTIN_SQRTF], [Define if the compiler/host combination has __builtin_sqrtf.])
+AH_TEMPLATE([HAVE___BUILTIN_SQRTL], [Define if the compiler/host combination has __builtin_sqrtl.])
+AH_TEMPLATE([_GLIBCPP_CONCEPT_CHECKS], [Define to use concept checking code from the boost libraries.])
+AH_TEMPLATE([_GLIBCPP_MEM_LIMITS], [Define if using setrlimit to limit memory usage during make check.])
+AH_TEMPLATE([_GLIBCPP_SUPPORTS_WEAK], [Define if GCC supports weak symbols.])
+AH_TEMPLATE([_GLIBCPP_USE_C99], [Define if C99 features such as lldiv_t, llabs, lldiv should be exposed.])
+AH_TEMPLATE([_GLIBCPP_USE_LONG_LONG], [Include I/O support for long long and unsigned long long.])
+AH_TEMPLATE([_GLIBCPP_USE_WCHAR_T], [Define if code specialized for wchar_t should be used.])
+
+AH_BOTTOM([[
+/*
+   Systems that have certain non-standard functions prefixed with an
+   underscore are handled here.  This must come after the normal config
+   definitions.
+*/
+#if defined (HAVE__ISNAN) && ! defined (HAVE_ISNAN)
+# define HAVE_ISNAN 1
+# define isnan _isnan
+#endif
+
+#if defined (HAVE__ISNANF) && ! defined (HAVE_ISNANF)
+# define HAVE_ISNANF 1
+# define isnanf _isnanf
+#endif
+
+#if defined (HAVE__ISNANL) && ! defined (HAVE_ISNANL)
+# define HAVE_ISNANL 1
+# define isnanl _isnanl
+#endif
+
+#if defined (HAVE__ISINF) && ! defined (HAVE_ISINF)
+# define HAVE_ISINF 1
+# define isinf _isinf
+#endif
+
+#if defined (HAVE__ISINFF) && ! defined (HAVE_ISINFF)
+# define HAVE_ISINFF 1
+# define isinff _isinff
+#endif
+
+#if defined (HAVE__ISINFL) && ! defined (HAVE_ISINFL)
+# define HAVE_ISINFL 1
+# define isinfl _isinfl
+#endif
+
+#if defined (HAVE__COPYSIGN) && ! defined (HAVE_COPYSIGN)
+# define HAVE_COPYSIGN 1
+# define copysign _copysign
+#endif
+
+#if defined (HAVE__COPYSIGNL) && ! defined (HAVE_COPYSIGNL)
+# define HAVE_COPYSIGNL 1
+# define copysignl _copysignl
+#endif
+
+#if defined (HAVE__COSF) && ! defined (HAVE_COSF)
+# define HAVE_COSF 1
+# define cosf _cosf
+#endif
+
+#if defined (HAVE__ACOSF) && ! defined (HAVE_ACOSF)
+# define HAVE_ACOSF 1
+# define acosf _acosf
+#endif
+
+#if defined (HAVE__ACOSL) && ! defined (HAVE_ACOSL)
+# define HAVE_ACOSL 1
+# define acosl _acosl
+#endif
+
+#if defined (HAVE__ASINF) && ! defined (HAVE_ASINF)
+# define HAVE_ASINF 1
+# define asinf _asinf
+#endif
+
+#if defined (HAVE__ASINL) && ! defined (HAVE_ASINL)
+# define HAVE_ASINL 1
+# define asinl _asinl
+#endif
+
+#if defined (HAVE__ATANF) && ! defined (HAVE_ATANF)
+# define HAVE_ATANF 1
+# define atanf _atanf
+#endif
+
+#if defined (HAVE__ATANL) && ! defined (HAVE_ATANL)
+# define HAVE_ATANL 1
+# define atanl _atanl
+#endif
+
+#if defined (HAVE__CEILF) && ! defined (HAVE_CEILF)
+# define HAVE_CEILF 1
+# define aceil _ceilf
+#endif
+
+#if defined (HAVE__CEILL) && ! defined (HAVE_CEILL)
+# define HAVE_CEILL 1
+# define aceil _ceill
+#endif
+
+#if defined (HAVE__COSHF) && ! defined (HAVE_COSHF)
+# define HAVE_COSHF 1
+# define coshf _coshf
+#endif
+
+#if defined (HAVE__COSL) && ! defined (HAVE_COSL)
+# define HAVE_COSL 1
+# define cosl _cosl
+#endif
+
+#if defined (HAVE__LOGF) && ! defined (HAVE_LOGF)
+# define HAVE_LOGF 1
+# define logf _logf
+#endif
+
+#if defined (HAVE__COSHL) && ! defined (HAVE_COSHL)
+# define HAVE_COSHL 1
+# define coshl _coshl
+#endif
+
+#if defined (HAVE__EXPF) && ! defined (HAVE_EXPF)
+# define HAVE_EXPF 1
+# define expf _expf
+#endif
+
+#if defined (HAVE__EXPL) && ! defined (HAVE_EXPL)
+# define HAVE_EXPL 1
+# define expl _expl
+#endif
+
+#if defined (HAVE__FABSF) && ! defined (HAVE_FABSF)
+# define HAVE_FABSF 1
+# define fabsf _fabsf
+#endif
+
+#if defined (HAVE__FABSL) && ! defined (HAVE_FABSL)
+# define HAVE_FABSL 1
+# define fabsl _fabsl
+#endif
+
+#if defined (HAVE__FLOORF) && ! defined (HAVE_FLOORF)
+# define HAVE_FLOORF 1
+# define floorf _floorf
+#endif
+
+#if defined (HAVE__FLOORL) && ! defined (HAVE_FLOORL)
+# define HAVE_FLOORL 1
+# define floorl _floorl
+#endif
+
+#if defined (HAVE__FMODF) && ! defined (HAVE_FMODF)
+# define HAVE_FMODF 1
+# define fmodf _fmodf
+#endif
+
+#if defined (HAVE__FMODL) && ! defined (HAVE_FMODL)
+# define HAVE_FMODL 1
+# define fmodl _fmodl
+#endif
+
+#if defined (HAVE__FREXPF) && ! defined (HAVE_FREXPF)
+# define HAVE_FREXPF 1
+# define frexpf _frexpf
+#endif
+
+#if defined (HAVE__FREXPL) && ! defined (HAVE_FREXPL)
+# define HAVE_FREXPL 1
+# define frexpl _frexpl
+#endif
+
+#if defined (HAVE__LDEXPF) && ! defined (HAVE_LDEXPF)
+# define HAVE_LDEXPF 1
+# define ldexpf _ldexpf
+#endif
+
+#if defined (HAVE__LDEXPL) && ! defined (HAVE_LDEXPL)
+# define HAVE_LDEXPL 1
+# define ldexpl _ldexpl
+#endif
+
+#if defined (HAVE__LOG10F) && ! defined (HAVE_LOG10F)
+# define HAVE_LOG10F 1
+# define log10f _log10f
+#endif
+
+#if defined (HAVE__LOGL) && ! defined (HAVE_LOGL)
+# define HAVE_LOGL 1
+# define logl _logl
+#endif
+
+#if defined (HAVE__POWF) && ! defined (HAVE_POWF)
+# define HAVE_POWF 1
+# define powf _powf
+#endif
+
+#if defined (HAVE__LOG10L) && ! defined (HAVE_LOG10L)
+# define HAVE_LOG10L 1
+# define log10l _log10l
+#endif
+
+#if defined (HAVE__MODF) && ! defined (HAVE_MODF)
+# define HAVE_MODF 1
+# define modf _modf
+#endif
+
+#if defined (HAVE__MODL) && ! defined (HAVE_MODL)
+# define HAVE_MODL 1
+# define modl _modl
+#endif
+
+#if defined (HAVE__SINF) && ! defined (HAVE_SINF)
+# define HAVE_SINF 1
+# define sinf _sinf
+#endif
+
+#if defined (HAVE__POWL) && ! defined (HAVE_POWL)
+# define HAVE_POWL 1
+# define powl _powl
+#endif
+
+#if defined (HAVE__SINHF) && ! defined (HAVE_SINHF)
+# define HAVE_SINHF 1
+# define sinhf _sinhf
+#endif
+
+#if defined (HAVE__SINL) && ! defined (HAVE_SINL)
+# define HAVE_SINL 1
+# define sinl _sinl
+#endif
+
+#if defined (HAVE__SQRTF) && ! defined (HAVE_SQRTF)
+# define HAVE_SQRTF 1
+# define sqrtf _sqrtf
+#endif
+
+#if defined (HAVE__SINHL) && ! defined (HAVE_SINHL)
+# define HAVE_SINHL 1
+# define sinhl _sinhl
+#endif
+
+#if defined (HAVE__TANF) && ! defined (HAVE_TANF)
+# define HAVE_TANF 1
+# define tanf _tanf
+#endif
+
+#if defined (HAVE__SQRTL) && ! defined (HAVE_SQRTL)
+# define HAVE_SQRTL 1
+# define sqrtl _sqrtl
+#endif
+
+#if defined (HAVE__TANHF) && ! defined (HAVE_TANHF)
+# define HAVE_TANHF 1
+# define tanhf _tanhf
+#endif
+
+#if defined (HAVE__TANL) && ! defined (HAVE_TANL)
+# define HAVE_TANF 1
+# define tanf _tanf
+#endif
+
+#if defined (HAVE__STRTOF) && ! defined (HAVE_STRTOF)
+# define HAVE_STRTOF 1
+# define strtof _strtof
+#endif
+
+#if defined (HAVE__TANHL) && ! defined (HAVE_TANHL)
+# define HAVE_TANHL 1
+# define tanhl _tanhl
+#endif
+
+#if defined (HAVE__STRTOLD) && ! defined (HAVE_STRTOLD)
+# define HAVE_STRTOLD 1
+# define strtold _strtold
+#endif
+
+#if defined (HAVE__SINCOS) && ! defined (HAVE_SINCOS)
+# define HAVE_SINCOS 1
+# define sincos _sincos
+#endif
+
+#if defined (HAVE__SINCOSF) && ! defined (HAVE_SINCOSF)
+# define HAVE_SINCOSF 1
+# define sincosf _sincosf
+#endif
+
+#if defined (HAVE__SINCOSL) && ! defined (HAVE_SINCOSL)
+# define HAVE_SINCOSL 1
+# define sincosl _sincosl
+#endif
+
+#if defined (HAVE__FINITE) && ! defined (HAVE_FINITE)
+# define HAVE_FINITE 1
+# define finite _finite
+#endif
+
+#if defined (HAVE__FINITEF) && ! defined (HAVE_FINITEF)
+# define HAVE_FINITEF 1
+# define finitef _finitef
+#endif
+
+#if defined (HAVE__FINITEL) && ! defined (HAVE_FINITEL)
+# define HAVE_FINITEL 1
+# define finitel _finitel
+#endif
+
+#if defined (HAVE__QFINITE) && ! defined (HAVE_QFINITE)
+# define HAVE_QFINITE 1
+# define qfinite _qfinite
+#endif
+
+#if defined (HAVE__FPCLASS) && ! defined (HAVE_FPCLASS)
+# define HAVE_FPCLASS 1
+# define fpclass _fpclass
+#endif
+
+#if defined (HAVE__QFPCLASS) && ! defined (HAVE_QFPCLASS)
+# define HAVE_QFPCLASS 1
+# define qfpclass _qfpclass
+#endif
+]])
+
 dnl
 dnl Initialize configure bits.
 dnl
@@ -86,7 +423,7 @@ AC_DEFUN([GLIBCPP_CONFIGURE], [
 
   AC_PROG_CC_GNU
 
-  if test $ac_cv_prog_gcc = yes; then
+  if test $gcc32_cv_prog_cc_gnu = yes; then
     GCC=yes
   dnl Check whether -g works, even if CFLAGS is set, in case the package
   dnl plays around with CFLAGS (such as to build both debugging and
@@ -97,7 +434,7 @@ AC_DEFUN([GLIBCPP_CONFIGURE], [
     AC_PROG_CC_G
     if test "$ac_test_CFLAGS" = set; then
       CFLAGS="$ac_save_CFLAGS"
-    elif test $ac_cv_prog_cc_g = yes; then
+    elif test $gcc32_cv_prog_cc_g = yes; then
       CFLAGS="-g -O2"
     else
       CFLAGS="-O2"
@@ -128,7 +465,7 @@ AC_DEFUN([GLIBCPP_CONFIGURE], [
 
   AC_PROG_CXX_GNU
 
-  if test $ac_cv_prog_gxx = yes; then
+  if test $gcc32_cv_prog_cxx_gnu = yes; then
     GXX=yes
     dnl Check whether -g works, even if CXXFLAGS is set, in case the package
     dnl plays around with CXXFLAGS (such as to build both debugging and
@@ -139,7 +476,7 @@ AC_DEFUN([GLIBCPP_CONFIGURE], [
     AC_PROG_CXX_G
     if test "$ac_test_CXXFLAGS" = set; then
       CXXFLAGS="$ac_save_CXXFLAGS"
-    elif test $ac_cv_prog_cxx_g = yes; then
+    elif test $gcc32_cv_prog_cxx_g = yes; then
       CXXFLAGS="-g -O2"
     else
       CXXFLAGS="-O2"
@@ -1551,12 +1888,12 @@ AC_DEFUN([GLIBCPP_ENABLE_C99], [dnl
   # Check for the existence in <stdlib.h> of lldiv_t, et. al.
   ac_c99_stdlib=yes;
   AC_MSG_CHECKING([for lldiv_t declaration])
-  AC_CACHE_VAL(ac_c99_lldiv_t, [
+  AC_CACHE_VAL(glibcpp_cv_c99_lldiv_t, [
   AC_TRY_COMPILE([#include <stdlib.h>], 
                    [ lldiv_t mydivt;], 
-                   [ac_c99_lldiv_t=yes], [ac_c99_lldiv_t=no])
+                   [glibcpp_cv_c99_lldiv_t=yes], [glibcpp_cv_c99_lldiv_t=no])
   ])
-  AC_MSG_RESULT($ac_c99_lldiv_t)
+  AC_MSG_RESULT($glibcpp_cv_c99_lldiv_t)
 
   AC_MSG_CHECKING([for ISO C99 support in <stdlib.h>])
   AC_TRY_COMPILE([#include <stdlib.h>],
@@ -1567,7 +1904,7 @@ AC_DEFUN([GLIBCPP_ENABLE_C99], [dnl
   AC_TRY_COMPILE([#include <stdlib.h>], [lldiv(10,1);],, [ac_c99_stdlib=no])
   AC_TRY_COMPILE([#include <stdlib.h>], [atoll("10");],, [ac_c99_stdlib=no])
   AC_TRY_COMPILE([#include <stdlib.h>], [_Exit(0);],, [ac_c99_stdlib=no])
-  if test x"$ac_c99_lldiv_t" = x"no"; then
+  if test x"$glibcpp_cv_c99_lldiv_t" = x"no"; then
     ac_c99_stdlib=no; 
   fi; 
   AC_MSG_RESULT($ac_c99_stdlib)
@@ -1989,17 +2326,17 @@ AC_DEFUN([GLIBCPP_CHECK_SETRLIMIT], [
     GLIBCPP_CHECK_SETRLIMIT_ancilliary(AS)
 
     # Check for rlimit, setrlimit.
-    AC_CACHE_VAL(ac_setrlimit, [
+    AC_CACHE_VAL(glibcpp_cv_setrlimit, [
       AC_TRY_COMPILE([#include <sys/resource.h>
 		      #include <unistd.h>
 		     ], 
                      [ struct rlimit r; setrlimit(0, &r);], 
-                     [ac_setrlimit=yes], [ac_setrlimit=no])
+                     [glibcpp_cv_setrlimit=yes], [glibcpp_cv_setrlimit=no])
     ])
   fi
 
   AC_MSG_CHECKING([for testsuite memory limit support])
-  if test $setrlimit_have_headers = yes && test $ac_setrlimit = yes; then
+  if test $setrlimit_have_headers = yes && test $glibcpp_cv_setrlimit = yes; then
     ac_mem_limits=yes
     AC_DEFINE(_GLIBCPP_MEM_LIMITS)
   else

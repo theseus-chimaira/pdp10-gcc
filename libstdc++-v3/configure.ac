@@ -25,7 +25,6 @@ AC_CANONICAL_TARGET
 target_alias=${target_alias-$target}
 AC_SUBST(target_alias)
 
-AC_CONFIG_AUX_DIR([..])
 AM_INIT_AUTOMAKE([foreign])
 AC_PROG_CXX
 AC_CONFIG_HEADERS([config.h])
@@ -317,10 +316,11 @@ AC_SUBST(LIBSUPCXX_PICFLAGS)
 # installed in the correct place. To work around this not being passed
 # down from config-ml.in -> top_srcdir/Makefile.am ->
 # top_srcdir/{src,libsupc++}/Makefile.am, manually append it here.
-AC_OUTPUT(Makefile \
+AC_CONFIG_FILES([Makefile \
     include/Makefile src/Makefile \
     libmath/Makefile libio/Makefile libsupc++/Makefile \
-    po/Makefile testsuite/Makefile mkcheck testsuite_flags,
+    po/Makefile testsuite/Makefile mkcheck testsuite_flags])
+AC_CONFIG_COMMANDS([default],
 [if test -n "$CONFIG_FILES"; then
   ac_file=Makefile . ${glibcpp_basedir}/../config-ml.in
   grep '^MULTISUBDIR =' Makefile >> src/Makefile
@@ -329,7 +329,7 @@ fi
 chmod +x mkcheck
 chmod +x testsuite_flags
 ],
-srcdir=${srcdir}
+[srcdir=${srcdir}
 host=${host}
 target=${target}
 with_multisubdir=${with_multisubdir}
@@ -337,8 +337,8 @@ ac_configure_args="${multilib_arg} ${ac_configure_args}"
 CONFIG_SHELL=${CONFIG_SHELL-/bin/sh}
 glibcpp_basedir=${glibcpp_basedir}
 CC="${CC}"
-CXX="${CXX}"
-)
+CXX="${CXX}"])
+AC_OUTPUT
 dnl  In autoconf 2.5x, AC_OUTPUT is replaced by three AC_ macros:
 dnl  AC_CONFIG_FILES(Makefile \
 dnl      include/Makefile src/Makefile \

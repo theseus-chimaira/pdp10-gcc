@@ -119,3 +119,5 @@ AC_DEFUN([AC_STRUCT_ST_RDEV],
              [Define if struct stat has an st_rdev member.])], [],
   [[#include <sys/types.h>
 #include <sys/stat.h>]])])
+AC_DEFUN([AC_LINK_FILES],
+[AC_CONFIG_LINKS([$2:$1])])
