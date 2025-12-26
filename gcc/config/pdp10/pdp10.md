@@ -2568,29 +2568,7 @@
 ;     && !(register_operand (operands[2], SImode)
 ;	  || (const_int_operand (operands[2], SImode)
 ;	      && (INTVAL (operands[2]) == 1 || INTVAL (operands[2]) == -1))))"
-  {
-    switch (which_alternative)
-      {
-      case 0:
-        return "add %0,%2";
-      case 1:
-        return "addi %0,%2";
-      case 2:
-        return "subi %0,%N2";
-      case 3:
-        return TARGET_EXTENDED ? "xmovei %0,%2(%1)" : "movei %0,%2(%1)";
-      case 4:
-        return "add %0,[%X2]";
-      case 5:
-        return "addm %2,%0";
-      case 6:
-        return "aos %@%0";
-      case 7:
-        return "sos %@%0";
-      default:
-        abort ();
-      }
-  })
+  "*return pdp10_output_addsi (insn, operands, which_alternative);")
 
 (define_insn "*ADDI_reg"
   [(set (match_operand:SI 0 "register_operand" "=r")
@@ -5355,7 +5333,9 @@
        emit_insn (gen_lshrdi3 (temp, temp, GEN_INT (9)));
        emit_insn (gen_lshrsi3 (temp1, temp1, GEN_INT (1)));
        emit_insn (gen_xorsi3 (temp0, temp0, exp));
-       if (!flag_unsafe_math_optimizations)
+       if (!flag_unsafe_math_optimizations
+	   && ((TARGET_KI10up && !TARGET_GFLOAT)
+	       || (TARGET_KL10up && TARGET_GFLOAT)))
 	 emit_insn (gen_adddf3 (operands[0], operands[0],
 				CONST0_RTX (DFmode)));
        DONE;
@@ -5486,16 +5466,17 @@
 ;; Instead find the byte pointer whose next IBP is the original pointer.
 ;; This works for all valid local PDP-10 byte sizes.
 (define_insn "*ADJBP_noKL10up_minus_one"
-  [(set (match_operand:SI 0 "register_operand" "=r,&r")
+  [(set (match_operand:SI 0 "nonimmediate_operand" "=r,&r,m")
 	(unspec:SI
-	 [(match_operand:SI 1 "reg_or_mem_operand" "0,rm")
+	 [(match_operand:SI 1 "reg_or_mem_operand" "0,rm,0")
 	  (const_int -1)]
 	 UNSPEC_ADJBP))]
   "!TARGET_KL10up"
   "@
    push 17,0\;push 17,%0\;push 17,0\;subi %0,1\;movem %0,(17)\;ibp %0\;came %0,-1(17)\;jrst .-3\;move %0,(17)\;pop 17,0\;pop 17,0\;pop 17,0
-   move %0,%1\;push 17,0\;push 17,%0\;push 17,0\;subi %0,1\;movem %0,(17)\;ibp %0\;came %0,-1(17)\;jrst .-3\;move %0,(17)\;pop 17,0\;pop 17,0\;pop 17,0"
-  [(set_attr "length" "12,13")
+   move %0,%1\;push 17,0\;push 17,%0\;push 17,0\;subi %0,1\;movem %0,(17)\;ibp %0\;came %0,-1(17)\;jrst .-3\;move %0,(17)\;pop 17,0\;pop 17,0\;pop 17,0
+   push 17,0\;move 0,%0\;push 17,0\;push 17,0\;subi 0,1\;movem 0,(17)\;ibp 0\;came 0,-1(17)\;jrst .-3\;movem 0,%0\;pop 17,0\;pop 17,0\;pop 17,0"
+  [(set_attr "length" "12,13,13")
    ;; This is a multi-instruction ADJBP emulation, not a real IBP
    ;; candidate for machine-dependent LDB/DPB reorganization.
    (set_attr "reorg_type" "none")])

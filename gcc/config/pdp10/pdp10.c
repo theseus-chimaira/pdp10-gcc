@@ -7219,6 +7219,47 @@ pdp10_find_last_value (x, pinsn)
   return NULL_RTX;
 }
 
+/* Return nonzero if REG appears to hold a PDP-10 byte pointer at INSN.
+   This is an output-side guard for optimized RTL where byte-array element
+   loads have been folded to zero_extract/lshiftrt from (mem:SI (reg)).  */
+static int
+pdp10_reg_likely_byte_pointer_p (reg, insn)
+     rtx reg;
+     rtx insn;
+{
+  rtx x;
+  int depth;
+
+  if (!REG_P (reg) || insn == NULL_RTX)
+    return 0;
+
+  x = reg;
+  for (depth = 0; depth < 8; depth++)
+    {
+      rtx where = insn;
+
+      x = pdp10_find_last_value (x, &where);
+      if (x == NULL_RTX)
+        return 0;
+
+      if (pdp10_const_byte_pointer_p (x))
+        return 1;
+
+      if (GET_CODE (x) == UNSPEC && XINT (x, 1) == UNSPEC_ADJBP)
+        return 1;
+
+      if (REG_P (x))
+        {
+          insn = where;
+          continue;
+        }
+
+      return 0;
+    }
+
+  return 0;
+}
+
 #define INTVAL_OR_ELSE(X, Y)						\
   (GET_CODE (X) == CONST_INT ? INTVAL (X)				\
    : GET_CODE (X) == NEG						\
@@ -7796,12 +7837,22 @@ pdp10_output_lshiftrt_memory (insn, operands)
   ops[3] = GEN_INT (0);
 
   if (GET_CODE (mem) == MEM
-      && MEM_ALIGN (mem) <= BITS_PER_UNIT
       && INTVAL (operands[2]) == 27
-      && REG_P (XEXP (mem, 0)))
+      && REG_P (XEXP (mem, 0))
+      && (MEM_ALIGN (mem) <= BITS_PER_UNIT
+          || pdp10_reg_likely_byte_pointer_p (XEXP (mem, 0), insn)))
     {
       ops[1] = XEXP (mem, 0);
       output_asm_insn ("ldb %0,%1", ops);
+      return "";
+    }
+
+  if (GET_CODE (mem) == MEM
+      && INTVAL (operands[2]) == 27
+      && pdp10_const_byte_pointer_p (XEXP (mem, 0)))
+    {
+      ops[1] = XEXP (mem, 0);
+      output_asm_insn ("ldb %0,[%1]", ops);
       return "";
     }
 
@@ -7938,9 +7989,36 @@ pdp10_output_extzv (insn, operands)
      rtx insn;
      rtx *operands;
 {
+  if (INTVAL (operands[2]) == 9
+      && INTVAL (operands[3]) == 0
+      && GET_CODE (operands[1]) == MEM
+      && pdp10_const_byte_pointer_p (XEXP (operands[1], 0)))
+    {
+      rtx ops[2];
+
+      ops[0] = operands[0];
+      ops[1] = XEXP (operands[1], 0);
+      output_asm_insn ("ldb %0,[%1]", ops);
+      return "";
+    }
+
+  if (INTVAL (operands[2]) == 9
+      && INTVAL (operands[3]) == 0
+      && GET_CODE (operands[1]) == MEM
+      && REG_P (XEXP (operands[1], 0))
+      && pdp10_reg_likely_byte_pointer_p (XEXP (operands[1], 0), insn))
+    {
+      rtx ops[2];
+
+      ops[0] = operands[0];
+      ops[1] = XEXP (operands[1], 0);
+      output_asm_insn ("ldb %0,%1", ops);
+      return "";
+    }
+
   return output_bitfield_move (asm_out_file, insn, 0, 0, operands[0],
-			       operands[1], INTVAL (operands[2]),
-			       INTVAL (operands[3]));
+		       operands[1], INTVAL (operands[2]),
+		       INTVAL (operands[3]));
 }
 
 const char *
@@ -8183,6 +8261,136 @@ pdp10_qi_mem_byte_offset (mem, byteoffp, unsignedp)
   return 1;
 }
 
+
+
+const char *
+pdp10_output_addsi (insn, operands, which_alternative)
+     rtx insn;
+     rtx *operands;
+     int which_alternative;
+{
+  if (which_alternative == 0
+      && GET_CODE (PATTERN (insn)) == SET
+      && REG_P (operands[0])
+      && GET_CODE (operands[2]) == MEM)
+    {
+      rtx src = operands[2];
+      rtx addr = XEXP (src, 0);
+      HOST_WIDE_INT byteoff;
+      int unsignedp;
+
+      if ((REG_P (addr) || GET_CODE (addr) == PLUS)
+          && pdp10_qi_mem_logical_offset (src, &byteoff, &unsignedp))
+        {
+          HOST_WIDE_INT wordoff = byteoff / UNITS_PER_WORD;
+          HOST_WIDE_INT inword = byteoff % UNITS_PER_WORD;
+          rtx outaddr = addr;
+          rtx ops[3];
+          char buf[64];
+
+          if (inword < 0)
+            {
+              inword += UNITS_PER_WORD;
+              wordoff -= 1;
+            }
+
+          if (GET_CODE (addr) == PLUS)
+            {
+              HOST_WIDE_INT plusoff = 0;
+              HOST_WIDE_INT residual = wordoff;
+              tree expr = MEM_EXPR (src);
+
+              {
+                HOST_WIDE_INT idx = -1;
+
+                if (expr != 0
+                    && TREE_CODE (expr) == ARRAY_REF
+                    && host_integerp (TREE_OPERAND (expr, 1), 0))
+                  idx = tree_low_cst (TREE_OPERAND (expr, 1), 0);
+                else if (expr != 0
+                         && TREE_CODE (expr) == COMPONENT_REF
+                         && TREE_CODE (TREE_TYPE (expr)) == ARRAY_TYPE
+                         && MEM_OFFSET (src) != 0
+                         && GET_CODE (MEM_OFFSET (src)) == CONST_INT)
+                  idx = INTVAL (MEM_OFFSET (src));
+
+                if (idx > 0)
+                  {
+                    outaddr = plus_constant (XEXP (addr, 0), idx);
+                    inword = 2;
+                  }
+                else
+                  outaddr = NULL_RTX;
+              }
+
+              if (outaddr == NULL_RTX)
+                {
+                  if (GET_CODE (XEXP (addr, 1)) == CONST_INT)
+                    {
+                      plusoff = INTVAL (XEXP (addr, 1));
+                      residual = (wordoff > plusoff) ? (wordoff - plusoff) : 0;
+                    }
+
+                  if (MEM_OFFSET (src) == 0
+                      || GET_CODE (MEM_OFFSET (src)) != CONST_INT
+                      || INTVAL (MEM_OFFSET (src)) < 0
+                      || INTVAL (MEM_OFFSET (src)) >= UNITS_PER_WORD)
+                    residual = 0;
+
+                  outaddr = addr;
+                  if (residual != 0)
+                    outaddr = plus_constant (addr, residual);
+                }
+            }
+
+          if (REG_P (addr) && MEM_ALIGN (src) >= BITS_PER_WORD)
+            inword = (inword + 1) % UNITS_PER_WORD;
+
+          ops[0] = operands[0];
+          ops[1] = outaddr;
+          ops[2] = gen_rtx_REG (SImode, 0);
+
+          if (REG_P (outaddr))
+            sprintf (buf, "ldb %%2,[POINT 9,(%%1),%d]",
+                     (int) inword * BITS_PER_UNIT + 8);
+          else
+            sprintf (buf, "ldb %%2,[POINT 9,%%1,%d]",
+                     (int) inword * BITS_PER_UNIT + 8);
+          output_asm_insn (buf, ops);
+
+          if (!unsignedp)
+            {
+              output_asm_insn ("trne %2,400", ops);
+              output_asm_insn ("orcmi %2,777", ops);
+            }
+
+          output_asm_insn ("add %0,%2", ops);
+          return "";
+        }
+    }
+
+  switch (which_alternative)
+    {
+    case 0:
+      return "add %0,%2";
+    case 1:
+      return "addi %0,%2";
+    case 2:
+      return "subi %0,%N2";
+    case 3:
+      return TARGET_EXTENDED ? "xmovei %0,%2(%1)" : "movei %0,%2(%1)";
+    case 4:
+      return "add %0,[%X2]";
+    case 5:
+      return "addm %2,%0";
+    case 6:
+      return "aos %@%0";
+    case 7:
+      return "sos %@%0";
+    default:
+      abort ();
+    }
+}
 
 const char *
 pdp10_output_movsi (insn, which_alternative)
@@ -8985,6 +9193,7 @@ static void	emit_cmp_and_jump_insn_1 PARAMS ((rtx x, rtx y,
 static rtx	expand_adjust_byte_pointer PARAMS ((tree type, rtx target,
 						    rtx op1, rtx op2));
 static void	avoid_reg_equal PARAMS ((rtx op0, rtx op1));
+static void	pdp10_emit_ibp1 PARAMS ((rtx op0, rtx op1));
 static int	maybe_expand_ibp PARAMS ((int byte_size, rtx op0, rtx op1,
 					  int increment));
 static rtx	expand_add_or_sub_pointer PARAMS ((rtx target, rtx op0,
@@ -9154,7 +9363,7 @@ expand_adjust_byte_pointer (type, target, op0, op1)
       emit_cmp_and_jump_insn_1 (rem, CONST0_RTX (SImode), SImode, EQ, 0,
 				done_label);
       emit_label (loop_label);
-      emit_insn (gen_IBP (target, target));
+      pdp10_emit_ibp1 (target, target);
       emit_insn (gen_addsi3 (rem, rem, constm1_rtx));
       emit_cmp_and_jump_insn_1 (rem, CONST0_RTX (SImode), SImode, NE, 0,
 				loop_label);
@@ -9184,7 +9393,7 @@ expand_adjust_byte_pointer (type, target, op0, op1)
 			    nonpos_label);
 
   emit_label (loop_label);
-  emit_insn (gen_IBP (target, target));
+  pdp10_emit_ibp1 (target, target);
   emit_insn (gen_addsi3 (rem, rem, constm1_rtx));
   emit_cmp_and_jump_insn_1 (rem, CONST0_RTX (SImode), SImode, GT, 0,
 			    loop_label);
@@ -9196,7 +9405,7 @@ expand_adjust_byte_pointer (type, target, op0, op1)
   emit_label (neg_loop_label);
   emit_insn (gen_addsi3 (target, target, constm1_rtx));
   for (i = 1; i < bytes_per_word; i++)
-    emit_insn (gen_IBP (target, target));
+    pdp10_emit_ibp1 (target, target);
   emit_insn (gen_addsi3 (rem, rem, GEN_INT (1)));
   emit_cmp_and_jump_insn_1 (rem, CONST0_RTX (SImode), SImode, LT, 0,
 			    neg_loop_label);
@@ -9204,6 +9413,38 @@ expand_adjust_byte_pointer (type, target, op0, op1)
   emit_label (done_label);
 
   return target;
+}
+
+/* Emit a one-byte byte-pointer increment.  GCC's virtual-register
+   instantiation can fail on a matching memory operand like
+
+      (set (mem (plus (virtual-stack-vars) C))
+           (unspec [(mem (plus (virtual-stack-vars) C)) 1] UNSPEC_ADJBP))
+
+   because it validates the rewritten destination before the matching source
+   has been rewritten.  A register temporary is equivalent to IBP memory for
+   ordinary compiler-generated byte-pointer variables, and leaves reload with
+   simple RTL.  */
+static void
+pdp10_emit_ibp1 (op0, op1)
+     rtx op0;
+     rtx op1;
+{
+  if (GET_CODE (op0) == MEM)
+    {
+      rtx tmp;
+
+      if (!reg_or_mem_operand (op1, Pmode))
+	op1 = force_reg (Pmode, op1);
+
+      tmp = gen_reg_rtx (Pmode);
+      emit_move_insn (tmp, op1);
+      emit_insn (gen_IBP (tmp, tmp));
+      emit_move_insn (op0, tmp);
+      return;
+    }
+
+  emit_insn (gen_IBP (op0, op1));
 }
 
 /* Try to emit instructions to use IBP to add INCREMENT to OP1 and
@@ -9292,12 +9533,12 @@ maybe_expand_ibp (byte_size, op0, op1, increment)
       {
 	if (!reg_or_mem_operand (op1, Pmode))
 	  op1 = force_reg (Pmode, op1);
-	emit_insn (gen_IBP (op0, op1));
+	pdp10_emit_ibp1 (op0, op1);
 	ibp--;
       }
 
     for (i = 0; i < ibp; i++)
-      emit_insn (gen_IBP (op0, op0));
+      pdp10_emit_ibp1 (op0, op0);
   }
 
   return 1;
@@ -11597,6 +11838,17 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
   reg = gen_reg_rtx (Pmode);
   if (GET_CODE (base_addr) == REG && !REGNO_PTR_FRAME_P (REGNO (base_addr)))
     {
+      emit_move_insn (reg, base_addr);
+      if (word_offset != 0)
+        emit_insn (gen_addsi3 (reg, reg, GEN_INT ((HOST_WIDE_INT) word_offset)));
+    }
+  else if (GET_CODE (base_addr) == MEM)
+    {
+      /* BASE_ADDR is the run-time pointer value loaded from an object such as
+         a pointer parameter's stack slot.  Do not wrap MEM+offset in
+         UNSPEC_ADDRESS/MOVEI; that is an invalid address expression after
+         virtual register instantiation.  Load the pointer value first, then
+         add the word offset to its address half before installing P,S.  */
       emit_move_insn (reg, base_addr);
       if (word_offset != 0)
         emit_insn (gen_addsi3 (reg, reg, GEN_INT ((HOST_WIDE_INT) word_offset)));
