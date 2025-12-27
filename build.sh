@@ -83,6 +83,7 @@ environment:
   PDP10_GCC_AS           assembler path
   PDP10_GCC_BUILD_ALIAS  configure --build value
   PDP10_GCC_HOST_ALIAS   configure --host value
+  CC                     host C compiler, default cc
   SUDO                   sudo command, default "sudo -n"
   DOAS                   doas command, default "doas"
 EOF
@@ -232,6 +233,7 @@ case "${1:-}" in
 		;;
 esac
 
+HOSTCC="${CC:-cc}"
 HOSTCFLAGS="-std=gnu89 -g3 -O0 -w \
 -fno-strict-aliasing \
 -Wno-implicit-int \
@@ -252,8 +254,7 @@ BUILD="$(pwd)"
 TARGET="${PDP10_GCC_TARGET:-pdp10-dec-none}"
 PREFIX="${PDP10_GCC_PREFIX:-/usr/local}"
 AS="${PDP10_GCC_AS:-$PREFIX/bin/$TARGET-as}"
-SUDO="${SUDO:-sudo -n}"
-DOAS="${DOAS:-doas}"
+SUDO="${SUDO:-doas}"
 CONFIGURE_HOST=""
 
 if [ -n "${PDP10_GCC_BUILD_ALIAS:-}" ] || [ -n "${PDP10_GCC_HOST_ALIAS:-}" ]; then
@@ -291,6 +292,7 @@ fi
 echo "==> target: $TARGET"
 echo "==> prefix: $PREFIX"
 echo "==> as:     $AS"
+echo "==> cc:     $HOSTCC"
 
 if [ ! -d "$PREFIX" ]; then
 	echo "==> mkdir:  $PREFIX"
@@ -307,7 +309,7 @@ if [ ! -d "$PREFIX" ]; then
 fi
 
 echo "==> configure"
-CC=gcc CFLAGS="$HOSTCFLAGS" "$SRC/configure" $CONFIGURE_HOST \
+CC="$HOSTCC" CFLAGS="$HOSTCFLAGS" "$SRC/configure" $CONFIGURE_HOST \
 	--target="$TARGET" \
 	--prefix="$PREFIX" \
 	--enable-languages=c \
@@ -319,6 +321,8 @@ CC=gcc CFLAGS="$HOSTCFLAGS" "$SRC/configure" $CONFIGURE_HOST \
 
 echo "==> make all-gcc"
 make all-gcc \
+	CC="$HOSTCC" \
+	CC_FOR_BUILD="$HOSTCC" \
 	CFLAGS="$HOSTCFLAGS" \
 	HOST_CFLAGS="$HOSTCFLAGS" \
 	BOOT_CFLAGS="$HOSTCFLAGS" \
