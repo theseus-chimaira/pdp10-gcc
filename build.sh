@@ -79,11 +79,12 @@ modes:
 
 environment:
   PDP10_GCC_TARGET       target triplet, default pdp10-dec-none
-  PDP10_GCC_PREFIX       install prefix, default /usr/local
+  PDP10_GCC_PREFIX       install prefix, default /usr/local (/usr/cross on OpenBSD)
   PDP10_GCC_AS           assembler path
+  CC                     host C compiler, default cc
   PDP10_GCC_BUILD_ALIAS  configure --build value
   PDP10_GCC_HOST_ALIAS   configure --host value
-  CC                     host C compiler, default cc
+                         octeon-unknown-openbsd7.8/7.9 are treated as mips64 OpenBSD
   SUDO                   sudo command, default "sudo -n"
   DOAS                   doas command, default "doas"
 EOF
@@ -252,13 +253,47 @@ HOSTCFLAGS="-std=gnu89 -g3 -O0 -w \
 SRC="$(cd "$(dirname "$0")" && pwd)"
 BUILD="$(pwd)"
 TARGET="${PDP10_GCC_TARGET:-pdp10-dec-none}"
-PREFIX="${PDP10_GCC_PREFIX:-/usr/local}"
+UNAME_S="$(uname -s 2>/dev/null || echo unknown)"
+UNAME_M="$(uname -m 2>/dev/null || echo unknown)"
+UNAME_R="$(uname -r 2>/dev/null || echo unknown)"
+
+if [ -n "${PDP10_GCC_PREFIX+x}" ]; then
+	PREFIX="$PDP10_GCC_PREFIX"
+elif [ "$UNAME_S" = OpenBSD ]; then
+	PREFIX=/usr/cross
+else
+	PREFIX=/usr/local
+fi
+
 AS="${PDP10_GCC_AS:-$PREFIX/bin/$TARGET-as}"
-SUDO="${SUDO:-doas}"
+SUDO="${SUDO:-sudo -n}"
+DOAS="${DOAS:-doas}"
 CONFIGURE_HOST=""
 
+canonical_host_alias () {
+	case "$1" in
+		octeon-unknown-openbsd7.8)
+			echo mips64-unknown-openbsd7.8
+			;;
+		octeon-unknown-openbsd7.9)
+			echo mips64-unknown-openbsd7.9
+			;;
+		octeon-unknown-openbsd*)
+			echo "mips64-unknown-openbsd${1#octeon-unknown-openbsd}"
+			;;
+		*)
+			echo "$1"
+			;;
+	esac
+}
+
 if [ -n "${PDP10_GCC_BUILD_ALIAS:-}" ] || [ -n "${PDP10_GCC_HOST_ALIAS:-}" ]; then
-	CONFIGURE_HOST="--build=${PDP10_GCC_BUILD_ALIAS:-x86_64-unknown-linux-gnu} --host=${PDP10_GCC_HOST_ALIAS:-${PDP10_GCC_BUILD_ALIAS:-x86_64-unknown-linux-gnu}}"
+	BUILD_ALIAS=`canonical_host_alias "${PDP10_GCC_BUILD_ALIAS:-x86_64-unknown-linux-gnu}"`
+	HOST_ALIAS=`canonical_host_alias "${PDP10_GCC_HOST_ALIAS:-${PDP10_GCC_BUILD_ALIAS:-x86_64-unknown-linux-gnu}}"`
+	CONFIGURE_HOST="--build=$BUILD_ALIAS --host=$HOST_ALIAS"
+elif [ "$UNAME_S" = OpenBSD ] && [ "$UNAME_M" = octeon ]; then
+	HOST_ALIAS=`canonical_host_alias "octeon-unknown-openbsd$UNAME_R"`
+	CONFIGURE_HOST="--build=$HOST_ALIAS --host=$HOST_ALIAS"
 fi
 
 if [ -d /system ] || [ "$(uname -o 2>/dev/null || true)" = Android ]; then
@@ -269,7 +304,9 @@ if [ -d /system ] || [ "$(uname -o 2>/dev/null || true)" = Android ]; then
 	AS="${PDP10_GCC_AS:-$PREFIX/bin/$TARGET-as}"
 
 	if [ -z "$CONFIGURE_HOST" ]; then
-		CONFIGURE_HOST="--build=${PDP10_GCC_BUILD_ALIAS:-x86_64-unknown-linux-gnu} --host=${PDP10_GCC_HOST_ALIAS:-x86_64-unknown-linux-gnu}"
+		BUILD_ALIAS=`canonical_host_alias "${PDP10_GCC_BUILD_ALIAS:-x86_64-unknown-linux-gnu}"`
+		HOST_ALIAS=`canonical_host_alias "${PDP10_GCC_HOST_ALIAS:-x86_64-unknown-linux-gnu}"`
+		CONFIGURE_HOST="--build=$BUILD_ALIAS --host=$HOST_ALIAS"
 	fi
 fi
 
@@ -293,6 +330,15 @@ echo "==> target: $TARGET"
 echo "==> prefix: $PREFIX"
 echo "==> as:     $AS"
 echo "==> cc:     $HOSTCC"
+if [ -n "$CONFIGURE_HOST" ]; then
+	echo "==> host:   $CONFIGURE_HOST"
+fi
+
+if [ ! -x "$AS" ]; then
+	echo "error: target assembler is not executable: $AS" >&2
+	echo "       set PDP10_GCC_AS=/path/to/$TARGET-as or PDP10_GCC_PREFIX=/path/to/prefix" >&2
+	exit 1
+fi
 
 if [ ! -d "$PREFIX" ]; then
 	echo "==> mkdir:  $PREFIX"
