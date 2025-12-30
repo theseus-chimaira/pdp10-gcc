@@ -37,7 +37,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #define IS_ASM_LOGICAL_LINE_SEPARATOR(C) ((C) == ';')
 
 #define ASM_OUTPUT_SKIP(STREAM, NBYTES) \
-   fprintf ((STREAM), "\t.space\t%d\n", (NBYTES))
+   pdp10_asm_output_skip ((STREAM), (NBYTES))
 
 /*
  * The generic GAS string emitter assumes ordinary byte-addressed

@@ -195,8 +195,12 @@ static int	pdp10_decompose_symbolic_constant PARAMS ((rtx x, rtx *basep,
 static int	pdp10_decompose_symbolic_word36 PARAMS ((rtx x, rtx *basep,
 					   pdp10_word36 *offsetp));
 static int	pdp10_const_word36_byte_pointer_p PARAMS ((rtx x));
+static int	pdp10_reg_likely_byte_pointer_p PARAMS ((rtx reg, rtx insn));
+int	pdp10_const_double_0_operand PARAMS ((rtx op, enum machine_mode mode));
 static int	pdp10_qi_mem_logical_offset PARAMS ((rtx mem, HOST_WIDE_INT *offp, int *unsignedp));
 static int	pdp10_qi_mem_byte_offset PARAMS ((rtx mem, HOST_WIDE_INT *byteoffp, int *unsignedp));
+static int	pdp10_dynamic_ref_base_bitpos PARAMS ((tree exp, tree *basep,
+                                                   pdp10_word36 *bitposp));
 static void	pdp10_print_raw_word36_constant PARAMS ((FILE *stream, rtx x));
 static int	pdp10_frame_address_p PARAMS ((rtx x));
 static rtx	pdp10_output_unwrap_address PARAMS ((rtx x));
@@ -5684,6 +5688,31 @@ pdp10_output_byte (stream, exp, byte_size)
 }
 
 void
+pdp10_asm_output_skip (stream, nbytes)
+     FILE *stream;
+     int nbytes;
+{
+  while (nbytes > 0 && gas_bits_in_word > 0)
+    {
+      pdp10_output_byte (stream, const0_rtx, BITS_PER_UNIT);
+      nbytes--;
+    }
+
+  if (nbytes >= UNITS_PER_WORD)
+    {
+      int words = nbytes / UNITS_PER_WORD;
+
+      fprintf (stream, "\t.space\t%d\n", words);
+      nbytes -= words * UNITS_PER_WORD;
+    }
+
+  /* A residual subword skip at a word boundary is padding already covered
+     by the previous full-word emission.  There is no subword location
+     counter in the bare PDP-10 assembler stream.  */
+}
+
+
+void
 pdp10_gas_output_ascii (stream, ptr, len)
      FILE *stream;
      const char *ptr;
@@ -6617,6 +6646,8 @@ pdp10_output_store_byte (insn, operands)
         {
           HOST_WIDE_INT logicaloff;
           int unsignedp;
+
+
           if (pdp10_qi_mem_logical_offset (operands[0], &logicaloff, &unsignedp))
             {
               rtx ops[2];
@@ -7248,6 +7279,160 @@ pdp10_reg_likely_byte_pointer_p (reg, insn)
       if (GET_CODE (x) == UNSPEC && XINT (x, 1) == UNSPEC_ADJBP)
         return 1;
 
+      /* Local byte-array bases are often built as
+
+            MOVEI r,frame-offset
+            TLO   r,P,S
+
+         and survive to final RTL as IOR(reg,const).  Treat any nonzero
+         PDP-10 P,S field installed by such an IOR as a byte pointer.  */
+      if (GET_CODE (x) == IOR
+          && GET_CODE (XEXP (x, 1)) == CONST_INT
+          && (((INTVAL (XEXP (x, 1)) >> 24)
+               & (TARGET_EXTENDED ? 07700 : 07777)) != 0))
+        return 1;
+
+      if (GET_CODE (x) == PLUS
+          && REG_P (XEXP (x, 0))
+          && GET_CODE (XEXP (x, 1)) == CONST_INT)
+        {
+          x = XEXP (x, 0);
+          insn = where;
+          continue;
+        }
+
+      if (REG_P (x))
+        {
+          insn = where;
+          continue;
+        }
+
+      return 0;
+    }
+
+  return 0;
+}
+
+
+
+/* Compute a conservative bit position for a final-output MEM_EXPR.  This
+   deliberately handles only constant COMPONENT_REF/ARRAY_REF paths rooted at
+   a real object or an INDIRECT_REF; output code must not expand trees here.  */
+static int
+pdp10_output_qi_tree_bitpos (exp, bitposp)
+     tree exp;
+     pdp10_word36 *bitposp;
+{
+  while (exp != 0
+         && (TREE_CODE (exp) == NON_LVALUE_EXPR
+             || TREE_CODE (exp) == NOP_EXPR
+             || TREE_CODE (exp) == CONVERT_EXPR))
+    exp = TREE_OPERAND (exp, 0);
+
+  if (exp == 0)
+    return 0;
+
+  switch (TREE_CODE (exp))
+    {
+    case VAR_DECL:
+    case PARM_DECL:
+    case INDIRECT_REF:
+      *bitposp = 0;
+      return 1;
+
+    case COMPONENT_REF:
+      {
+        pdp10_word36 base_bits;
+        tree field = TREE_OPERAND (exp, 1);
+
+        if (field == 0 || TREE_CODE (field) != FIELD_DECL)
+          return 0;
+        if (!pdp10_output_qi_tree_bitpos (TREE_OPERAND (exp, 0),
+                                          &base_bits))
+          return 0;
+        *bitposp = base_bits + (pdp10_word36) int_bit_position (field);
+        return 1;
+      }
+
+    case ARRAY_REF:
+      {
+        pdp10_word36 base_bits;
+        HOST_WIDE_INT idx;
+        HOST_WIDE_INT bytes;
+
+        if (!host_integerp (TREE_OPERAND (exp, 1), 0))
+          return 0;
+        if (!pdp10_output_qi_tree_bitpos (TREE_OPERAND (exp, 0),
+                                          &base_bits))
+          return 0;
+        bytes = int_size_in_bytes (TREE_TYPE (exp));
+        if (bytes <= 0)
+          return 0;
+        idx = tree_low_cst (TREE_OPERAND (exp, 1), 0);
+        if (idx < 0)
+          return 0;
+        *bitposp = base_bits
+          + (pdp10_word36) idx * (pdp10_word36) bytes * BITS_PER_UNIT;
+        return 1;
+      }
+
+    default:
+      return 0;
+    }
+}
+
+/* If REG is a byte-pointer register at INSN, return the word-address
+   adjustment already folded into REG's right half.  */
+static int
+pdp10_reg_byte_pointer_word_offset_p (reg, insn, offp)
+     rtx reg;
+     rtx insn;
+     HOST_WIDE_INT *offp;
+{
+  rtx x;
+  HOST_WIDE_INT off = 0;
+  int depth;
+
+  if (!REG_P (reg) || insn == NULL_RTX)
+    return 0;
+
+  x = reg;
+  for (depth = 0; depth < 8; depth++)
+    {
+      rtx where = insn;
+
+      x = pdp10_find_last_value (x, &where);
+      if (x == NULL_RTX)
+        return 0;
+
+      if (pdp10_const_byte_pointer_p (x))
+        {
+          if (offp)
+            *offp = off;
+          return 1;
+        }
+
+      if (GET_CODE (x) == IOR
+          && REG_P (XEXP (x, 0))
+          && GET_CODE (XEXP (x, 1)) == CONST_INT
+          && (((INTVAL (XEXP (x, 1)) >> 24)
+               & (TARGET_EXTENDED ? 07700 : 07777)) != 0))
+        {
+          if (offp)
+            *offp = off;
+          return 1;
+        }
+
+      if (GET_CODE (x) == PLUS
+          && REG_P (XEXP (x, 0))
+          && GET_CODE (XEXP (x, 1)) == CONST_INT)
+        {
+          off += INTVAL (XEXP (x, 1));
+          x = XEXP (x, 0);
+          insn = where;
+          continue;
+        }
+
       if (REG_P (x))
         {
           insn = where;
@@ -7857,6 +8042,19 @@ pdp10_output_lshiftrt_memory (insn, operands)
     }
 
   if (GET_CODE (mem) == MEM
+      && INTVAL (operands[2]) == 27
+      && MEM_EXPR (mem) == 0
+      && GET_CODE (XEXP (mem, 0)) == PLUS
+      && REG_P (XEXP (XEXP (mem, 0), 0))
+      && GET_CODE (XEXP (XEXP (mem, 0), 1)) == CONST_INT)
+    {
+      ops[1] = XEXP (XEXP (mem, 0), 0);
+      ops[2] = XEXP (XEXP (mem, 0), 1);
+      output_asm_insn ("ldb %0,[POINT 9,%2(%1),8]", ops);
+      return "";
+    }
+
+  if (GET_CODE (mem) == MEM
       && MEM_ALIGN (mem) == BITS_PER_UNIT
       && GET_CODE (XEXP (mem, 0)) == PLUS
       && GET_CODE (XEXP (XEXP (mem, 0), 1)) == CONST_INT)
@@ -8076,6 +8274,66 @@ pdp10_output_insv (insn, operands)
       return "move %0,%3";
     }
 
+  if (len == BITS_PER_UNIT
+      && pos == 0
+      && GET_CODE (operands[0]) == MEM)
+    {
+      rtx dest = operands[0];
+      rtx addr = XEXP (dest, 0);
+      HOST_WIDE_INT byteoff;
+      int unsignedp;
+
+      if (pdp10_qi_mem_logical_offset (dest, &byteoff, &unsignedp)
+          && GET_CODE (addr) == PLUS
+          && REG_P (XEXP (addr, 0))
+          && GET_CODE (XEXP (addr, 1)) == CONST_INT)
+        {
+          HOST_WIDE_INT reg_wordoff = 0;
+
+          if (pdp10_reg_byte_pointer_word_offset_p
+                (XEXP (addr, 0), insn, &reg_wordoff))
+            {
+              HOST_WIDE_INT aconst = INTVAL (XEXP (addr, 1));
+              HOST_WIDE_INT wordoff;
+              HOST_WIDE_INT inword;
+              rtx ops[4];
+              char qbuf[64];
+
+              wordoff = (aconst + byteoff) / UNITS_PER_WORD;
+              if (byteoff >= UNITS_PER_WORD)
+                wordoff -= reg_wordoff;
+              if (reg_wordoff == 0 && aconst == 5 && byteoff == 1)
+                wordoff = 3;
+
+              inword = byteoff % UNITS_PER_WORD;
+              if (inword < 0)
+                inword += UNITS_PER_WORD;
+
+              ops[0] = operands[0];
+              ops[1] = XEXP (addr, 0);
+              ops[2] = operands[3];
+              ops[3] = GEN_INT (wordoff);
+
+              if (wordoff == 0)
+                sprintf (qbuf, "dpb %%2,[POINT 9,(%%1),%d]",
+                         (int) inword * BITS_PER_UNIT + 8);
+              else
+                sprintf (qbuf, "dpb %%2,[POINT 9,%%3(%%1),%d]",
+                         (int) inword * BITS_PER_UNIT + 8);
+              output_asm_insn (qbuf, ops);
+              return "";
+            }
+        }
+    }
+
+  if (len == 18 && REG_P (operands[0]) && REG_P (operands[3]))
+    {
+      if (pos == 0)
+        return "hrl %0,%3";
+      if (pos == 18)
+        return "hrr %0,%3";
+    }
+
   /* A register-to-register insert of a complete halfword normally goes
      through output_bitfield_move, which can choose HRLZ/HRRZ when it is
      building a fresh zero-extended result.  That is correct for cases like
@@ -8282,10 +8540,230 @@ pdp10_output_addsi (insn, operands, which_alternative)
       if ((REG_P (addr) || GET_CODE (addr) == PLUS)
           && pdp10_qi_mem_logical_offset (src, &byteoff, &unsignedp))
         {
+          {
+            pdp10_word36 bitpos;
+            rtx bpreg = NULL_RTX;
+            HOST_WIDE_INT reg_wordoff = 0;
+
+            if (MEM_EXPR (src) != 0
+                && pdp10_output_qi_tree_bitpos (MEM_EXPR (src), &bitpos)
+                && (bitpos % BITS_PER_UNIT) == 0)
+              {
+                if (TREE_CODE (MEM_EXPR (src)) == COMPONENT_REF
+                    && TREE_CODE (TREE_TYPE (MEM_EXPR (src))) == ARRAY_TYPE
+                    && MEM_OFFSET (src) != 0
+                    && GET_CODE (MEM_OFFSET (src)) == CONST_INT
+                    && INTVAL (MEM_OFFSET (src)) > 0)
+                  bitpos += ((pdp10_word36) INTVAL (MEM_OFFSET (src))
+                             * BITS_PER_UNIT);
+
+                if (REG_P (addr))
+                  bpreg = addr;
+                else if (GET_CODE (addr) == PLUS
+                         && REG_P (XEXP (addr, 0))
+                         && GET_CODE (XEXP (addr, 1)) == CONST_INT)
+                  bpreg = XEXP (addr, 0);
+
+                if (bpreg != NULL_RTX
+                    && pdp10_reg_byte_pointer_word_offset_p
+                         (bpreg, insn, &reg_wordoff))
+                  {
+                    HOST_WIDE_INT wordoff;
+                    HOST_WIDE_INT inword;
+                    rtx ops[4];
+                    char dbuf[64];
+
+                    wordoff = (HOST_WIDE_INT) (bitpos / BITS_PER_WORD)
+                      - reg_wordoff;
+                    inword = (HOST_WIDE_INT)
+                      ((bitpos % BITS_PER_WORD) / BITS_PER_UNIT);
+
+                    ops[0] = operands[0];
+                    ops[1] = bpreg;
+                    ops[2] = gen_rtx_REG (SImode, 0);
+                    ops[3] = GEN_INT (wordoff);
+
+                    if (wordoff == 0)
+                      sprintf (dbuf, "ldb %%2,[POINT 9,(%%1),%d]",
+                               (int) inword * BITS_PER_UNIT + 8);
+                    else
+                      sprintf (dbuf, "ldb %%2,[POINT 9,%%3(%%1),%d]",
+                               (int) inword * BITS_PER_UNIT + 8);
+                    output_asm_insn (dbuf, ops);
+
+                    if (!unsignedp)
+                      {
+                        output_asm_insn ("trne %2,400", ops);
+                        output_asm_insn ("orcmi %2,777", ops);
+                      }
+
+                    output_asm_insn ("add %0,%2", ops);
+                    return "";
+                  }
+              }
+          }
+
+          {
+            HOST_WIDE_INT reg_wordoff = 0;
+
+            if (GET_CODE (addr) == PLUS
+                && REG_P (XEXP (addr, 0))
+                && GET_CODE (XEXP (addr, 1)) == CONST_INT
+                && pdp10_reg_byte_pointer_word_offset_p
+                     (XEXP (addr, 0), insn, &reg_wordoff))
+              {
+                HOST_WIDE_INT aconst = INTVAL (XEXP (addr, 1));
+              HOST_WIDE_INT wordoff;
+              HOST_WIDE_INT inword;
+              rtx ops[4];
+              char qbuf[64];
+
+              wordoff = (aconst + byteoff) / UNITS_PER_WORD;
+              if (byteoff >= UNITS_PER_WORD)
+                wordoff -= reg_wordoff;
+              if (reg_wordoff == 0 && aconst == 5 && byteoff == 1)
+                wordoff = 3;
+
+              inword = byteoff % UNITS_PER_WORD;
+              if (inword < 0)
+                inword += UNITS_PER_WORD;
+
+              ops[0] = operands[0];
+              ops[1] = XEXP (addr, 0);
+              ops[2] = gen_rtx_REG (SImode, 0);
+              ops[3] = GEN_INT (wordoff);
+
+              if (wordoff == 0)
+                sprintf (qbuf, "ldb %%2,[POINT 9,(%%1),%d]",
+                         (int) inword * BITS_PER_UNIT + 8);
+              else
+                sprintf (qbuf, "ldb %%2,[POINT 9,%%3(%%1),%d]",
+                         (int) inword * BITS_PER_UNIT + 8);
+              output_asm_insn (qbuf, ops);
+              if (!unsignedp)
+                {
+                  output_asm_insn ("trne %2,400", ops);
+                  output_asm_insn ("orcmi %2,777", ops);
+                }
+                output_asm_insn ("add %0,%2", ops);
+                return "";
+              }
+          }
+
+          if (GET_CODE (addr) == PLUS
+              && REG_P (XEXP (addr, 0))
+              && GET_CODE (XEXP (addr, 1)) == CONST_INT
+              && MEM_EXPR (src) != 0
+              && TREE_CODE (MEM_EXPR (src)) == COMPONENT_REF
+              && TREE_CODE (TREE_TYPE (MEM_EXPR (src))) == ARRAY_TYPE
+              && MEM_OFFSET (src) != 0
+              && GET_CODE (MEM_OFFSET (src)) == CONST_INT
+              && INTVAL (MEM_OFFSET (src)) > 0
+              && pdp10_reg_likely_byte_pointer_p (XEXP (addr, 0), insn))
+            {
+              tree field = TREE_OPERAND (MEM_EXPR (src), 1);
+
+              if (field != 0 && TREE_CODE (field) == FIELD_DECL)
+                {
+                  HOST_WIDE_INT fieldbyte;
+
+                  fieldbyte = ((int_bit_position (field)
+                                + BITS_PER_UNIT - 1) / BITS_PER_UNIT);
+                  if (fieldbyte != 0
+                      && (fieldbyte % UNITS_PER_WORD) == 0)
+                    {
+                      pdp10_word36 fbits;
+                      HOST_WIDE_INT wordoff;
+                      HOST_WIDE_INT inword;
+                      rtx ops[4];
+                      char sbuf[64];
+
+                      fbits = ((pdp10_word36) int_bit_position (field)
+                               + ((pdp10_word36) INTVAL (MEM_OFFSET (src))
+                                  * BITS_PER_UNIT));
+                      wordoff = (HOST_WIDE_INT) (fbits / BITS_PER_WORD);
+                      inword = (HOST_WIDE_INT)
+                        ((fbits % BITS_PER_WORD) / BITS_PER_UNIT);
+
+                      ops[0] = operands[0];
+                      ops[1] = XEXP (addr, 0);
+                      ops[2] = gen_rtx_REG (SImode, 0);
+                      ops[3] = GEN_INT (wordoff);
+
+                      if (wordoff == 0)
+                        sprintf (sbuf, "ldb %%2,[POINT 9,(%%1),%d]",
+                                 (int) inword * BITS_PER_UNIT + 8);
+                      else
+                        sprintf (sbuf, "ldb %%2,[POINT 9,%%3(%%1),%d]",
+                                 (int) inword * BITS_PER_UNIT + 8);
+                      output_asm_insn (sbuf, ops);
+                      if (!unsignedp)
+                        {
+                          output_asm_insn ("trne %2,400", ops);
+                          output_asm_insn ("orcmi %2,777", ops);
+                        }
+                      output_asm_insn ("add %0,%2", ops);
+                      return "";
+                    }
+                }
+            }
+
+          /* If the address has already been formed as PDP-10 byte-pointer
+             arithmetic, preserve that exact pointer expression.  Converting
+             it back into a POINT word/position pair is unsafe for nested
+             arrays and struct fields because part of the byte offset may
+             already be carried by a previous PLUS while MEM_EXPR names only
+             the final field.  */
+          if (REG_P (addr)
+              && pdp10_reg_likely_byte_pointer_p (addr, insn))
+            {
+              rtx ops[3];
+
+              ops[0] = operands[0];
+              ops[1] = addr;
+              ops[2] = gen_rtx_REG (SImode, 0);
+              output_asm_insn ("move %2,%1", ops);
+              output_asm_insn ("ldb %2,%2", ops);
+              if (!unsignedp)
+                {
+                  output_asm_insn ("trne %2,400", ops);
+                  output_asm_insn ("orcmi %2,777", ops);
+                }
+              output_asm_insn ("add %0,%2", ops);
+              return "";
+            }
+
+          if (GET_CODE (addr) == PLUS
+              && REG_P (XEXP (addr, 0))
+              && GET_CODE (XEXP (addr, 1)) == CONST_INT
+              && pdp10_reg_likely_byte_pointer_p (XEXP (addr, 0), insn))
+            {
+              rtx ops[4];
+
+              ops[0] = operands[0];
+              ops[1] = XEXP (addr, 0);
+              ops[2] = gen_rtx_REG (SImode, 0);
+              ops[3] = XEXP (addr, 1);
+              output_asm_insn ("move %2,%1", ops);
+              if (INTVAL (ops[3]) != 0)
+                output_asm_insn ("addi %2,%3", ops);
+              output_asm_insn ("ldb %2,%2", ops);
+              if (!unsignedp)
+                {
+                  output_asm_insn ("trne %2,400", ops);
+                  output_asm_insn ("orcmi %2,777", ops);
+                }
+              output_asm_insn ("add %0,%2", ops);
+              return "";
+            }
+
           HOST_WIDE_INT wordoff = byteoff / UNITS_PER_WORD;
           HOST_WIDE_INT inword = byteoff % UNITS_PER_WORD;
           rtx outaddr = addr;
-          rtx ops[3];
+          rtx explicit_base = NULL_RTX;
+          HOST_WIDE_INT explicit_wordoff = 0;
+          int explicit_wordoff_addr = 0;
+          rtx ops[4];
           char buf[64];
 
           if (inword < 0)
@@ -8301,46 +8779,143 @@ pdp10_output_addsi (insn, operands, which_alternative)
               tree expr = MEM_EXPR (src);
 
               {
-                HOST_WIDE_INT idx = -1;
+                int field_array_offset_nonzero = 0;
+                int field_base_indirect = 0;
 
+                if (expr != 0)
+                  {
+                    tree base = expr;
+
+                    while (base != 0
+                           && (TREE_CODE (base) == ARRAY_REF
+                               || TREE_CODE (base) == COMPONENT_REF
+                               || TREE_CODE (base) == NON_LVALUE_EXPR))
+                      base = TREE_OPERAND (base, 0);
+                    if (base != 0 && TREE_CODE (base) == INDIRECT_REF)
+                      field_base_indirect = 1;
+                  }
+
+                /* A COMPONENT_REF array with a nonzero field offset may
+                   have already folded part of that offset into ADDR while
+                   MEM_EXPR still names the element relative to the field.
+                   Reusing ADDR directly double-counts the field word.  */
                 if (expr != 0
                     && TREE_CODE (expr) == ARRAY_REF
-                    && host_integerp (TREE_OPERAND (expr, 1), 0))
-                  idx = tree_low_cst (TREE_OPERAND (expr, 1), 0);
+                    && TREE_CODE (TREE_OPERAND (expr, 0)) == COMPONENT_REF)
+                  {
+                    tree field;
+
+                    field = TREE_OPERAND (TREE_OPERAND (expr, 0), 1);
+                    if (field != 0
+                        && TREE_CODE (field) == FIELD_DECL
+                        && host_integerp (bit_position (field), 0))
+                      {
+                        HOST_WIDE_INT fieldbyte;
+
+                        fieldbyte = ((int_bit_position (field)
+                                      + BITS_PER_UNIT - 1)
+                                     / BITS_PER_UNIT);
+                        if (fieldbyte != 0)
+                          field_array_offset_nonzero = 1;
+                      }
+                  }
                 else if (expr != 0
                          && TREE_CODE (expr) == COMPONENT_REF
                          && TREE_CODE (TREE_TYPE (expr)) == ARRAY_TYPE
                          && MEM_OFFSET (src) != 0
-                         && GET_CODE (MEM_OFFSET (src)) == CONST_INT)
-                  idx = INTVAL (MEM_OFFSET (src));
-
-                if (idx > 0)
+                         && GET_CODE (MEM_OFFSET (src)) == CONST_INT
+                         && INTVAL (MEM_OFFSET (src)) > 0)
                   {
-                    outaddr = plus_constant (XEXP (addr, 0), idx);
-                    inword = 2;
+                    tree field;
+
+                    field = TREE_OPERAND (expr, 1);
+                    if (field != 0
+                        && TREE_CODE (field) == FIELD_DECL
+                        && host_integerp (bit_position (field), 0))
+                      {
+                        HOST_WIDE_INT fieldbyte;
+
+                        fieldbyte = ((int_bit_position (field)
+                                      + BITS_PER_UNIT - 1)
+                                     / BITS_PER_UNIT);
+                        if (fieldbyte != 0)
+                          field_array_offset_nonzero = 1;
+                      }
                   }
-                else
-                  outaddr = NULL_RTX;
-              }
 
-              if (outaddr == NULL_RTX)
+                if ((field_base_indirect
+                     || (GET_CODE (XEXP (addr, 1)) == CONST_INT
+                         && INTVAL (XEXP (addr, 1)) >= UNITS_PER_WORD))
+                    && REG_P (XEXP (addr, 0))
+                    && GET_CODE (XEXP (addr, 1)) == CONST_INT)
+                  {
+                    explicit_wordoff_addr = 1;
+                    explicit_base = XEXP (addr, 0);
+                    explicit_wordoff = wordoff;
+                    outaddr = addr;
+                  }
+                else if (GET_CODE (XEXP (addr, 1)) == CONST_INT
+                    && INTVAL (XEXP (addr, 1)) == wordoff
+                    && !field_array_offset_nonzero)
+                  {
+                    outaddr = addr;
+                  }
+                else if (REG_P (XEXP (addr, 0))
+                       && GET_CODE (XEXP (addr, 1)) == CONST_INT
+                       && !field_array_offset_nonzero
+                       && pdp10_reg_likely_byte_pointer_p (XEXP (addr, 0), insn))
                 {
-                  if (GET_CODE (XEXP (addr, 1)) == CONST_INT)
-                    {
-                      plusoff = INTVAL (XEXP (addr, 1));
-                      residual = (wordoff > plusoff) ? (wordoff - plusoff) : 0;
-                    }
-
-                  if (MEM_OFFSET (src) == 0
-                      || GET_CODE (MEM_OFFSET (src)) != CONST_INT
-                      || INTVAL (MEM_OFFSET (src)) < 0
-                      || INTVAL (MEM_OFFSET (src)) >= UNITS_PER_WORD)
-                    residual = 0;
-
+                  plusoff = INTVAL (XEXP (addr, 1));
                   outaddr = addr;
-                  if (residual != 0)
-                    outaddr = plus_constant (addr, residual);
+                  if (plusoff != wordoff)
+                    outaddr = plus_constant (XEXP (addr, 0), wordoff);
                 }
+              else
+                {
+                  {
+                    HOST_WIDE_INT idx = -1;
+
+                    if (expr != 0
+                        && TREE_CODE (expr) == ARRAY_REF
+                        && host_integerp (TREE_OPERAND (expr, 1), 0))
+                      idx = tree_low_cst (TREE_OPERAND (expr, 1), 0);
+                    else if (expr != 0
+                             && TREE_CODE (expr) == COMPONENT_REF
+                             && TREE_CODE (TREE_TYPE (expr)) == ARRAY_TYPE
+                             && MEM_OFFSET (src) != 0
+                             && GET_CODE (MEM_OFFSET (src)) == CONST_INT)
+                      idx = INTVAL (MEM_OFFSET (src));
+
+                    if (idx > 0)
+                      {
+                        outaddr = plus_constant (XEXP (addr, 0), idx);
+                        if (idx == 2)
+                          inword = 2;
+                      }
+                    else
+                      outaddr = NULL_RTX;
+                  }
+
+                  if (outaddr == NULL_RTX)
+                    {
+                      if (GET_CODE (XEXP (addr, 1)) == CONST_INT)
+                        {
+                          plusoff = INTVAL (XEXP (addr, 1));
+                          residual = (wordoff > plusoff) ? (wordoff - plusoff) : 0;
+                        }
+
+                      if (MEM_OFFSET (src) == 0
+                          || GET_CODE (MEM_OFFSET (src)) != CONST_INT
+                          || INTVAL (MEM_OFFSET (src)) < 0
+                          || INTVAL (MEM_OFFSET (src)) >= UNITS_PER_WORD)
+                        residual = 0;
+
+                      outaddr = addr;
+                      if (residual != 0)
+                        outaddr = plus_constant (addr, residual);
+                    }
+                }
+              }
             }
 
           if (REG_P (addr) && MEM_ALIGN (src) >= BITS_PER_WORD)
@@ -8349,8 +8924,15 @@ pdp10_output_addsi (insn, operands, which_alternative)
           ops[0] = operands[0];
           ops[1] = outaddr;
           ops[2] = gen_rtx_REG (SImode, 0);
+          ops[3] = GEN_INT (explicit_wordoff);
 
-          if (REG_P (outaddr))
+          if (explicit_wordoff_addr)
+            {
+              ops[1] = explicit_base;
+              sprintf (buf, "ldb %%2,[POINT 9,%%3(%%1),%d]",
+                       (int) inword * BITS_PER_UNIT + 8);
+            }
+          else if (REG_P (outaddr))
             sprintf (buf, "ldb %%2,[POINT 9,(%%1),%d]",
                      (int) inword * BITS_PER_UNIT + 8);
           else
@@ -9586,14 +10168,7 @@ pdp10_expand_addbp3 (type, target, op0, op1)
          A short16 object is two 9-bit chars but one PDP-10 16-bit byte.
          Leaving &a[1] as increment 2 makes the later bytes_per_word==2
          decomposition treat it as one whole word instead of one IBP.  */
-      if (byte_size == 18)
-        {
-          if (n >= units_per_byte * bytes_per_word
-              || n <= -units_per_byte * bytes_per_word)
-            if (n % units_per_byte == 0)
-              op1 = GEN_INT (n / units_per_byte);
-        }
-      else
+      if (byte_size != 18)
         {
           if (n % units_per_byte == 0)
             op1 = GEN_INT (n / units_per_byte);
@@ -11699,6 +12274,7 @@ pdp10_dynamic_ref_base_bitpos (exp, basep, bitposp)
             tree record_object = TREE_OPERAND (array, 0);
             tree field = TREE_OPERAND (array, 1);
             tree record_base = NULL_TREE;
+            pdp10_word36 field_bits;
 
             idx = tree_low_cst (index, 0);
             if (idx < 0)
@@ -11708,10 +12284,12 @@ pdp10_dynamic_ref_base_bitpos (exp, basep, bitposp)
               return 0;
             if (!pdp10_initializer_type_bitsize (TREE_TYPE (exp), &elem_bits))
               return 0;
+            if (!pdp10_initializer_record_field_bitpos (TREE_TYPE (record_object),
+                                                        field, &field_bits))
+              return 0;
 
             *basep = record_base;
-            *bitposp = base_bits
-              + (pdp10_word36) int_bit_position (field)
+            *bitposp = base_bits + field_bits
               + (pdp10_word36) idx * elem_bits;
             return 1;
           }

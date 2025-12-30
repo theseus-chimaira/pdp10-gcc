@@ -231,6 +231,7 @@ extern const char *
 #ifdef RTX_CODE
 extern void	pdp10_output_byte PARAMS ((FILE *stream, rtx exp,
 					   int byte_size));
+extern void	pdp10_asm_output_skip PARAMS ((FILE *stream, int nbytes));
 extern rtx	pdp10_compare_op0, pdp10_compare_op1;
 #endif
 
