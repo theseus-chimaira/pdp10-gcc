@@ -6871,6 +6871,104 @@
        operands[1] = tmp;
      }")
 
+
+
+
+;; Normalize the same source when CSE has already propagated the symbolic
+;; address into the BLT setup itself.
+(define_peephole2
+  [(set (match_operand:SI 0 "register_operand" "")
+        (unspec:SI [(match_operand:SI 1 "address_operand" "")
+                    (match_operand:SI 2 "address_operand" "")]
+                   UNSPEC_BLT_SETUP))
+   (parallel [(unspec_volatile:BLK [(match_dup 0)] VUNSPEC_BLT)
+              (clobber (match_dup 0))
+              (use (match_operand:BLK 3 "memory_operand" ""))])]
+  "pdp10_normalize_blt_source_p (operands[1], operands[2],
+                                  XEXP (operands[3], 0), 0)"
+  [(set (match_dup 0)
+        (unspec:SI [(match_dup 4) (match_dup 2)] UNSPEC_BLT_SETUP))
+   (parallel [(unspec_volatile:BLK [(match_dup 0)] VUNSPEC_BLT)
+              (clobber (match_dup 0))
+              (use (match_dup 3))])]
+  "if (!pdp10_normalize_blt_source_p (operands[1], operands[2],
+                                      XEXP (operands[3], 0), &operands[4]))
+     abort ();")
+
+;; Normalize a full-word aggregate source address that survived as a symbolic
+;; C-storage-unit offset before BLT setup.  Example: the source for gp[1]
+;; of a three-word struct can arrive as gp+12 storage units; BLT needs gp+3
+;; word addresses.
+(define_peephole2
+  [(set (match_operand:SI 0 "register_operand" "")
+        (match_operand:SI 1 "" ""))
+   (set (match_operand:SI 2 "register_operand" "")
+        (unspec:SI [(match_dup 0)
+                    (match_operand:SI 3 "address_operand" "")]
+                   UNSPEC_BLT_SETUP))
+   (parallel [(unspec_volatile:BLK [(match_dup 2)] VUNSPEC_BLT)
+              (clobber (match_dup 2))
+              (use (match_operand:BLK 4 "memory_operand" ""))])]
+  "pdp10_normalize_blt_source_p (operands[1], operands[3],
+                                  XEXP (operands[4], 0), 0)"
+  [(set (match_dup 0) (match_dup 5))
+   (set (match_dup 2)
+        (unspec:SI [(match_dup 0) (match_dup 3)] UNSPEC_BLT_SETUP))
+   (parallel [(unspec_volatile:BLK [(match_dup 2)] VUNSPEC_BLT)
+              (clobber (match_dup 2))
+              (use (match_dup 4))])]
+  "if (!pdp10_normalize_blt_source_p (operands[1], operands[3],
+                                      XEXP (operands[4], 0), &operands[5]))
+     abort ();")
+
+;; Remove unneeded address recomputation before a BLT after reload.  Late
+;; aggregate bitfield expansion can extract a word-aligned two-word record
+;; into a temporary slot and immediately BLT that temporary to the real
+;; destination.  On the PDP-10 this is not only larger, it can be wrong when
+;; the source record is already laid out as whole words: the DI shift/repack
+;; path interprets the record pointer byte selector instead of copying the
+;; two physical words.  If the extracted source words, temporary words, and
+;; final BLT all describe consecutive word addresses, bypass the repack and
+;; BLT directly from the source record to the destination.
+(define_peephole2
+  [(set (match_operand:SI 0 "register_operand" "")
+        (match_operand:SI 1 "memory_operand" ""))
+   (set (match_operand:SI 2 "register_operand" "")
+        (match_operand:SI 3 "memory_operand" ""))
+   (set (match_operand:DI 4 "register_operand" "")
+        (unspec:DI [(match_dup 4) (const_int 2)] UNSPEC_LSHC))
+   (set (match_operand:SI 5 "register_operand" "")
+        (lshiftrt:SI (match_dup 5) (neg:SI (const_int -1))))
+   (set (match_operand:DI 6 "register_operand" "")
+        (ashiftrt:DI (match_dup 6) (neg:SI (const_int -1))))
+   (set (match_operand:DI 7 "register_operand" "")
+        (ashift:DI (match_dup 7) (const_int -1)))
+   (set (match_operand:DI 8 "register_operand" "")
+        (ashiftrt:DI (match_dup 8) (neg:SI (const_int 1))))
+   (set (match_operand:SI 9 "memory_operand" "")
+        (match_operand:SI 10 "register_operand" ""))
+   (set (match_operand:SI 11 "memory_operand" "")
+        (match_operand:SI 12 "register_operand" ""))
+   (set (match_operand:SI 13 "register_operand" "")
+        (unspec:SI [(match_operand:SI 14 "address_operand" "")
+                    (match_operand:SI 15 "address_operand" "")]
+                   UNSPEC_BLT_SETUP))
+   (parallel [(unspec_volatile:BLK [(match_dup 13)] VUNSPEC_BLT)
+              (clobber (match_dup 13))
+              (use (match_operand:BLK 16 "memory_operand" ""))])]
+  "rtx_equal_p (XEXP (operands[1], 0),
+                plus_constant (XEXP (operands[3], 0), 1))
+   && rtx_equal_p (XEXP (operands[11], 0),
+                   plus_constant (XEXP (operands[9], 0), 1))
+   && rtx_equal_p (operands[14], XEXP (operands[9], 0))
+   && rtx_equal_p (XEXP (operands[16], 0), plus_constant (operands[15], 1))"
+  [(set (match_dup 13)
+        (unspec:SI [(match_dup 17) (match_dup 15)] UNSPEC_BLT_SETUP))
+   (parallel [(unspec_volatile:BLK [(match_dup 13)] VUNSPEC_BLT)
+              (clobber (match_dup 13))
+              (use (match_dup 16))])]
+  "operands[17] = XEXP (operands[3], 0);")
+
 ;; Remove an unneccesary MOVEI instruction.
 (define_peephole2
   [(set (match_operand:SI 0 "register_operand" "")
