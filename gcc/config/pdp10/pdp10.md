@@ -3897,14 +3897,13 @@
   "lshc %0,%3(%2)")
 
 (define_insn "ashlsi3"
-  [(set (match_operand:SI 0 "register_operand" "=r,r,r")
-	(ashift:SI (match_operand:SI 1 "register_operand" "0,0,0")
-		   (match_operand:SI 2 "general_operand" "x,K,m")))]
+  [(set (match_operand:SI 0 "register_operand" "=r,r")
+	(ashift:SI (match_operand:SI 1 "register_operand" "0,0")
+		   (match_operand:SI 2 "nonmemory_operand" "x,K")))]
   ""
   "@
    lsh %0,(%2)
-   lsh %0,%2
-   lsh %0,@%2")
+   lsh %0,%2")
 
 (define_insn "*LSH_left_plus"
   [(set (match_operand:SI 0 "register_operand" "=r")
