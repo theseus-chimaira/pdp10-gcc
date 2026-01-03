@@ -2009,11 +2009,34 @@
 		    (match_operand:SI 2 "address_operand" "r,p,r,p")]
 		   UNSPEC_BLT_SETUP))]
   ""
-  "@
-   movei %0,(%2)\;hrl %0,%1
-   movei %0,%a2\;hrl %0,%1
-   movei %0,(%2)\;hrli %0,%a1
-   movei %0,%a2\;hrli %0,%a1")
+  {
+    /* A BLT source encoded as SYMBOL+N can still be a C storage-unit
+       offset when copying an aggregate into a stack temporary after CSE.
+       BLT wants a word address.  Normalize only the final-output case that
+       exposed the struct_array_call failure: symbolic source, stack-like
+       destination, and a source offset divisible by the PDP-10 word size.  */
+    if ((which_alternative == 3 || which_alternative == 1)
+        && GET_CODE (operands[1]) == CONST
+        && GET_CODE (XEXP (operands[1], 0)) == PLUS
+        && GET_CODE (XEXP (XEXP (operands[1], 0), 1)) == CONST_INT
+        && GET_CODE (XEXP (XEXP (operands[1], 0), 0)) == SYMBOL_REF
+        && (GET_CODE (operands[2]) == PLUS || REG_P (operands[2])))
+      {
+        HOST_WIDE_INT off = INTVAL (XEXP (XEXP (operands[1], 0), 1));
+        if (off >= UNITS_PER_WORD && off % UNITS_PER_WORD == 0)
+          operands[1] = plus_constant (XEXP (XEXP (operands[1], 0), 0),
+                                       off / UNITS_PER_WORD);
+      }
+
+    switch (which_alternative)
+      {
+      case 0: return "movei %0,(%2)\;hrl %0,%1";
+      case 1: return "movei %0,%a2\;hrl %0,%1";
+      case 2: return "movei %0,(%2)\;hrli %0,%a1";
+      case 3: return "movei %0,%a2\;hrli %0,%a1";
+      default: abort ();
+      }
+  })
 
 (define_insn "*MOVEI_const_plus_reg"
   [(set (match_operand:SI 0 "register_operand" "=r")
@@ -3174,7 +3197,7 @@
   "@
    movn %0,%1
    movnm %1,%0
-   movni %0,%N1
+   movni %0,%1
    movns %0")
 
 (define_insn "*MOVNI_reg"

@@ -3897,7 +3897,33 @@ expand_assignment (to, from, want_value, suggest_reg)
 
       if (offset != 0)
 	{
-	  rtx offset_rtx = expand_expr (offset, NULL_RTX, VOIDmode, EXPAND_SUM);
+	  rtx offset_rtx;
+
+#if REAL_BITS_PER_UNIT == 36
+	  /* PDP-10: as on the load side, a dynamic final QImode ARRAY_REF
+	     inside a nested record can come back from get_inner_reference with
+	     OFFSET scaled by the containing record size.  For assignment to a
+	     native 9-bit byte array element, rebuild the dynamic byte offset
+	     from the final ARRAY_REF index so p->r[0].b[i] stores byte i rather
+	     than word i * sizeof (r[0]).  */
+	  if (TREE_CODE (to) == ARRAY_REF
+	      && bitsize == BITS_PER_UNIT
+	      && pdp10_bytesize (TREE_TYPE (to)) == BITS_PER_UNIT
+	      && TREE_CODE (TREE_TYPE (TREE_OPERAND (to, 0))) == ARRAY_TYPE
+	      && ! TREE_CONSTANT (TREE_OPERAND (to, 1)))
+	    {
+	      tree domain = TYPE_DOMAIN (TREE_TYPE (TREE_OPERAND (to, 0)));
+	      tree low_bound = domain ? TYPE_MIN_VALUE (domain) : integer_zero_node;
+	      tree index = convert (sizetype, TREE_OPERAND (to, 1));
+
+	      if (! integer_zerop (low_bound))
+		index = size_diffop (index, convert (sizetype, low_bound));
+
+	      offset_rtx = expand_expr (index, NULL_RTX, VOIDmode, EXPAND_SUM);
+	    }
+	  else
+#endif
+	    offset_rtx = expand_expr (offset, NULL_RTX, VOIDmode, EXPAND_SUM);
 
 	  if (GET_CODE (to_rtx) != MEM
 	      /* PDP-10.  */
@@ -7808,7 +7834,39 @@ expand_expr (exp, target, tmode, modifier)
 
 	if (offset != 0)
 	  {
-	    rtx offset_rtx = expand_expr (offset, NULL_RTX, VOIDmode, EXPAND_SUM);
+	    rtx offset_rtx;
+
+#if REAL_BITS_PER_UNIT == 36
+	    /* PDP-10: get_inner_reference can scale a dynamic final QImode
+	       ARRAY_REF by the size of the containing record after nested
+	       COMPONENT_REF/ARRAY_REF folding.  That makes a reference like
+
+	           p->outer_array[0].byte_array[i]
+
+	       arrive here as offset i * sizeof (outer_array[0]) even though
+	       the selected object is one 9-bit byte.  Rebuild the dynamic
+	       final array offset from the ARRAY_REF index itself so the byte
+	       pointer path below advances by i PDP-10 bytes, not by record
+	       words.  Constant QI subscripts are still handled by the existing
+	       BITPOS path in MD_ARRAY_OFFSET.  */
+	    if (code == ARRAY_REF
+		&& bitsize == BITS_PER_UNIT
+		&& pdp10_bytesize (TREE_TYPE (exp)) == BITS_PER_UNIT
+		&& TREE_CODE (TREE_TYPE (TREE_OPERAND (exp, 0))) == ARRAY_TYPE
+		&& ! TREE_CONSTANT (TREE_OPERAND (exp, 1)))
+	      {
+		tree domain = TYPE_DOMAIN (TREE_TYPE (TREE_OPERAND (exp, 0)));
+		tree low_bound = domain ? TYPE_MIN_VALUE (domain) : integer_zero_node;
+		tree index = convert (sizetype, TREE_OPERAND (exp, 1));
+
+		if (! integer_zerop (low_bound))
+		  index = size_diffop (index, convert (sizetype, low_bound));
+
+		offset_rtx = expand_expr (index, NULL_RTX, VOIDmode, EXPAND_SUM);
+	      }
+	    else
+#endif
+	      offset_rtx = expand_expr (offset, NULL_RTX, VOIDmode, EXPAND_SUM);
 
 	    /* If this object is in a register, put it into memory.
 	       This case can't occur in C, but can in Ada if we have
