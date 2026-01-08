@@ -2226,7 +2226,6 @@ assemble_real (d, mode, align)
   switch (BITS_PER_UNIT)
     {
     case 8:
-    case 9:
       switch (mode)
 	{
 	case SFmode:
@@ -2237,6 +2236,53 @@ assemble_real (d, mode, align)
 	  REAL_VALUE_TO_TARGET_DOUBLE (d, data);
 	  assemble_integer (GEN_INT (data[0]), 4, align, 1);
 	  assemble_integer (GEN_INT (data[1]), 4, nalign, 1);
+	  break;
+	case XFmode:
+	  REAL_VALUE_TO_TARGET_LONG_DOUBLE (d, data);
+	  assemble_integer (GEN_INT (data[0]), 4, align, 1);
+	  assemble_integer (GEN_INT (data[1]), 4, nalign, 1);
+	  assemble_integer (GEN_INT (data[2]), 4, nalign, 1);
+	  break;
+	case TFmode:
+	  REAL_VALUE_TO_TARGET_LONG_DOUBLE (d, data);
+	  assemble_integer (GEN_INT (data[0]), 4, align, 1);
+	  assemble_integer (GEN_INT (data[1]), 4, nalign, 1);
+	  assemble_integer (GEN_INT (data[2]), 4, nalign, 1);
+	  assemble_integer (GEN_INT (data[3]), 4, nalign, 1);
+	  break;
+	default:
+	  abort ();
+	}
+      break;
+
+    case 9:
+      /* PDP-10 single and double floats occupy 36-bit words.
+	 REAL_VALUE_TO_TARGET_SINGLE only returns a 32-bit container, so use
+	 the target double conversion and repack the same 36-bit words that
+	 the PDP-10 operand printer emits for assembler literals.  */
+      switch (mode)
+	{
+	case SFmode:
+	  {
+	    HOST_WIDE_INT word;
+	    REAL_VALUE_TO_TARGET_DOUBLE (d, data);
+	    word = ((HOST_WIDE_INT) data[0] << 4)
+	      + (((unsigned long) data[1] >> 28) & 0xfUL);
+	    assemble_integer (GEN_INT (word), 4, align, 1);
+	  }
+	  break;
+	case DFmode:
+	  {
+	    HOST_WIDE_INT word0;
+	    HOST_WIDE_INT word1;
+	    REAL_VALUE_TO_TARGET_DOUBLE (d, data);
+	    word0 = ((HOST_WIDE_INT) data[0] << 4)
+	      + (((unsigned long) data[1] >> 28) & 0xfUL);
+	    word1 = (((HOST_WIDE_INT) data[1] << 8) & 0xfffffffUL)
+	      + (((unsigned long) data[2] >> 24) & 0xffUL);
+	    assemble_integer (GEN_INT (word0), 4, align, 1);
+	    assemble_integer (GEN_INT (word1), 4, nalign, 1);
+	  }
 	  break;
 	case XFmode:
 	  REAL_VALUE_TO_TARGET_LONG_DOUBLE (d, data);

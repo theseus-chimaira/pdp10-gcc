@@ -2154,7 +2154,7 @@
   "@
    move %0,%1%; movsf
    movei %0,0%; movsf
-   movsi %0,%G1%; movsf
+   move %0,[%1]%; movsf
    move %0,[%1]%; movsf
    setzm %0%; movsf
    movem %1,%0%; movsf")
@@ -5166,31 +5166,9 @@
   ""
   "if (!TARGET_KI10up)
      {
-       rtx temp = gen_reg_rtx (DImode);
-       rtx temp0 = gen_rtx_SUBREG (SImode, temp, 0);
-       rtx temp1 = gen_rtx_SUBREG (SImode, temp, 4);
-
-       /* Sequence taken from KCC.  */
-       emit_insn (gen_MUL (temp,
-			   gen_rtx_SUBREG (SImode, operands[1], 0),
-			   GEN_INT (0400)));
-       emit_insn (gen_TSC (temp0, temp0));
-       /*emit_insn (gen_ashrsi3 (operands[0], temp1,
-			     gen_rtx_PLUS (SImode, temp0, GEN_INT (-0243))));*/
-       emit_insn
-	 (gen_rtx_SET
-	    (VOIDmode,
-	     operands[0],
-	     gen_rtx_ASHIFTRT
-	       (SImode,
-		temp0,
-		gen_rtx_NEG
-		  (SImode,
-		   gen_rtx_PLUS
-		     (SImode,
-		      temp1,
-		      GEN_INT (-0243))))));
-					     
+       emit_library_call_value (gen_rtx_SYMBOL_REF (Pmode, \"__fixsfsi\"),
+                                operands[0], LCT_NORMAL, SImode, 1,
+                                operands[1], SFmode);
        DONE;
      }")
 

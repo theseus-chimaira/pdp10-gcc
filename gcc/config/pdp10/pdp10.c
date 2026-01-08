@@ -5964,6 +5964,18 @@ pdp10_assemble_integer (x, size, aligned_p)
     }
 
   if (aligned_p
+      && ((size == 4 && GET_CODE (x) == CONST_DOUBLE && GET_MODE (x) == SFmode)
+          || (size == 8 && GET_CODE (x) == CONST_DOUBLE && GET_MODE (x) == DFmode)))
+    {
+      pdp10_output_byte (asm_out_file, NULL_RTX, 0);
+      fputc ('	', asm_out_file);
+      pdp10_print_operand (asm_out_file, x, PRINT_OP_GIW);
+      fputc ('\n', asm_out_file);
+      pdp10_byte_count += size;
+      return true;
+    }
+
+  if (aligned_p
       && size == 4
       && (pdp10_const_byte_pointer_p (x)
 	  || (!TARGET_EXTENDED
