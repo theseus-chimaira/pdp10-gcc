@@ -2173,7 +2173,7 @@
   "@
    dmove %0,%1
    setzb %0,%Z0%; movdf
-   movsi %0,%G1%; movdf\;movei %Z0,0%; movdf
+   move %0,[%A1]%; movdf\;movei %Z0,0%; movdf
    dmove %0,[%1]
    setzm %0%; movdf\;setzm %Z0%; movdf
    dmovem %1,%0"
@@ -2186,7 +2186,7 @@
   "@
    move %0,%1%; movdf\;move %Z0,%Z1%; movdf
    setzb %0,%Z0%; movdf
-   movsi %0,%G1%; movdf\;movei %Z0,0%; movdf
+   move %0,[%A1]%; movdf\;movei %Z0,0%; movdf
    move %0,[%A1]%; movdf\;move %Z0,[%B1]%; movdf
    setzm %0%; movdf\;setzm %Z0%; movdf
    movem %1,%0%; movdf\;movem %Z1,%Z0%; movdf"

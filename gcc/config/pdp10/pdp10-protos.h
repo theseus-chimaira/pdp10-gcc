@@ -47,6 +47,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 int		pdp10_pointer_alignment PARAMS ((rtx x));
 int		pdp10_pointer_offset PARAMS ((rtx x));
 int		pdp10_scalar_mem_p PARAMS ((rtx op));
+int		pdp10_qi_mem_expr_bitpos PARAMS ((rtx mem, int *bitposp));
 
 /* Run-time Target Specification.  */
 extern void	pdp10_override_options PARAMS ((void));

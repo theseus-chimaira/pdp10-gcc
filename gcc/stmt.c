@@ -4015,7 +4015,7 @@ expand_decl (decl)
 					      TYPE_ALIGN (TREE_TYPE (decl)));
 
       /* PDP-10: convert to the right kind of pointer.  */
-      address = pdp10_convert_ptr (NULL_RTX, address, NULL_RTX, 36,
+      address = pdp10_convert_ptr (NULL_TREE, address, NULL_RTX, 36,
 				   pdp10_bytesize (TREE_TYPE (decl)), 1);
 
       /* Reference the variable indirect through that rtx.  */
