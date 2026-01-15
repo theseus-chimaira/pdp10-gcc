@@ -4831,13 +4831,12 @@
 ;; Floating-point Arithmetic
 
 (define_insn "addsf3"
-  [(set (match_operand:SF 0 "nonimmediate_operand" "=r,r,r,m")
-	(plus:SF (match_operand:SF 1 "reg_or_mem_operand" "%0,0,0,0")
-		 (match_operand:SF 2 "general_operand" "rm,G,F,r")))]
+  [(set (match_operand:SF 0 "nonimmediate_operand" "=r,r,m")
+	(plus:SF (match_operand:SF 1 "reg_or_mem_operand" "%0,0,0")
+		 (match_operand:SF 2 "general_operand" "rm,F,r")))]
   ""
   "@
    fadr %0,%2
-   fadri %0,%G2
    fadr %0,[%2]
    fadrm %2,%0")
 
@@ -4882,13 +4881,12 @@
    gfad %0,[%2]")
 
 (define_insn "subsf3"
-  [(set (match_operand:SF 0 "nonimmediate_operand" "=r,r,r,m")
-	(minus:SF (match_operand:SF 1 "register_operand" "0,0,0,r")
-		  (match_operand:SF 2 "general_operand" "rm,G,F,0")))]
+  [(set (match_operand:SF 0 "nonimmediate_operand" "=r,r,m")
+	(minus:SF (match_operand:SF 1 "register_operand" "0,0,r")
+		  (match_operand:SF 2 "general_operand" "rm,F,0")))]
   ""
   "@
    fsbr %0,%2
-   fsbri %0,%G2
    fsbr %0,[%2]
    fsbrm %1,%0")
 
@@ -4968,13 +4966,12 @@
    dmovnm %1,%0")
 
 (define_insn "mulsf3"
-  [(set (match_operand:SF 0 "nonimmediate_operand" "=r,r,r,m")
-	(mult:SF (match_operand:SF 1 "reg_or_mem_operand" "%0,0,0,0")
-		 (match_operand:SF 2 "general_operand" "rm,G,F,r")))]
+  [(set (match_operand:SF 0 "nonimmediate_operand" "=r,r,m")
+	(mult:SF (match_operand:SF 1 "reg_or_mem_operand" "%0,0,0")
+		 (match_operand:SF 2 "general_operand" "rm,F,r")))]
   ""
   "@
    fmpr %0,%2
-   fmpri %0,%G2
    fmpr %0,[%2]
    fmprm %2,%0")
 
@@ -5019,13 +5016,12 @@
    gfmp %0,[%2]")
 
 (define_insn "divsf3"
-  [(set (match_operand:SF 0 "nonimmediate_operand" "=r,r,r,m")
-	(div:SF (match_operand:SF 1 "register_operand" "0,0,0,r")
-		(match_operand:SF 2 "general_operand" "rm,G,F,0")))]
+  [(set (match_operand:SF 0 "nonimmediate_operand" "=r,r,m")
+	(div:SF (match_operand:SF 1 "register_operand" "0,0,r")
+		(match_operand:SF 2 "general_operand" "rm,F,0")))]
   ""
   "@
    fdvr %0,%2
-   fdvri %0,%G2
    fdvr %0,[%2]
    fdvrm %1,%0")
 
