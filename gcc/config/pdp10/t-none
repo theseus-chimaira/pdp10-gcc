@@ -17,7 +17,7 @@ LIB2FUNCS_EXCLUDE = _floatdidf _floatdisf _fixunsdfsi _fixunssfsi \
 
 # Provide a real public abort symbol for freestanding pdp10-dec-none users.
 LIB2FUNCS_EXTRA = $(srcdir)/config/pdp10/abort.asm \
-  $(srcdir)/config/pdp10/runtime-libgcc-extra.s
+  $(srcdir)/config/pdp10/libgcc-pdp10.s
 
 # No EH unwinder objects for the C-only bare target yet.
 LIB2ADDEH =
