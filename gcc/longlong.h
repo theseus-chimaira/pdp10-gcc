@@ -772,8 +772,51 @@ UDItype __umulsidi3 (USItype, USItype);
   } while (0)
 #endif /* __ns32000__ */
 
-#if defined (__pdp10__) && W_TYPE_SIZE == 32
-#endif /* __pdp10__ */
+#if (defined (__pdp10__) || defined (__PDP10__) || defined (__PDP10))
+/*
+   PDP-10 assembler expressions cannot always carry an undefined
+   external symbol through the byte-addressing forms emitted for the
+   generic __clz_tab table lookup.  In particular, libgcc2.c's
+   L_ffsdi2 object can fail at assembly time with:
+
+     Undefined label in expression: __clz_tab
+
+   Use small portable loops for the PDP-10 bare target instead of the
+   generic table-based count_leading_zeros/count_trailing_zeros macros.
+   This keeps libgcc self-contained during assembly; the standalone L_clz
+   object may still be built for other libgcc users, but _ffsdi2 no longer
+   depends on an external table expression.
+*/
+#ifndef count_leading_zeros
+#define count_leading_zeros(count, x) \
+  do { \
+    UWtype __clz_x = (UWtype) (x); \
+    UWtype __clz_c = 0; \
+    UWtype __clz_m = (UWtype) 1 << (W_TYPE_SIZE - 1); \
+    while (__clz_m != 0 && (__clz_x & __clz_m) == 0) \
+      { \
+        ++__clz_c; \
+        __clz_m >>= 1; \
+      } \
+    (count) = __clz_c; \
+  } while (0)
+#define COUNT_LEADING_ZEROS_0 W_TYPE_SIZE
+#endif
+
+#ifndef count_trailing_zeros
+#define count_trailing_zeros(count, x) \
+  do { \
+    UWtype __ctz_x = (UWtype) (x); \
+    UWtype __ctz_c = 0; \
+    while ((__ctz_x & 1) == 0) \
+      { \
+        ++__ctz_c; \
+        __ctz_x >>= 1; \
+      } \
+    (count) = __ctz_c; \
+  } while (0)
+#endif
+#endif /* __pdp10__ || __PDP10__ || __PDP10 */
 
 #if defined (__pdp11__)
 #endif /* __pdp11__ */
