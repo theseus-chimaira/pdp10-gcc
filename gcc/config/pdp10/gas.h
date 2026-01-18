@@ -34,6 +34,14 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
    pdp10.c.  */
 #define TARGET_ASM_NAMED_SECTION pdp10_asm_named_section
 
+/* pdp10-dec-none is a freestanding C-only bring-up target.  It has no
+   crtstuff/EH frame registration runtime yet, and the bare PDP-10 assembler
+   must not see libgcc2 __main references to __register_frame_info or
+   __deregister_frame_info.  Keep named sections for data/code selection,
+   but explicitly suppress DWARF2 EH frame runtime integration.  */
+#define DWARF2_UNWIND_INFO 0
+#define EH_FRAME_IN_DATA_SECTION 1
+
 #define IS_ASM_LOGICAL_LINE_SEPARATOR(C) ((C) == ';')
 
 #define ASM_OUTPUT_SKIP(STREAM, NBYTES) \

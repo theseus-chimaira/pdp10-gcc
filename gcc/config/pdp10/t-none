@@ -13,7 +13,10 @@ LIBGCC2_DEBUG_CFLAGS = -g0
 # and assembler FP opcode support which are deliberately deferred.
 LIB2FUNCS_EXCLUDE = _floatdidf _floatdisf _fixunsdfsi _fixunssfsi \
   _fixunsdfdi _fixdfdi _fixunssfdi _fixsfdi _fixxfdi _fixunsxfdi \
-  _floatdixf _fixunsxfsi _fixtfdi _fixunstfdi _floatditf
+  _floatdixf _fixunsxfsi _fixtfdi _fixunstfdi _floatditf __main
+
+# libgcc2.c __main assumes hosted EH/ctor frame registration.  The bare
+# PDP-10 runtime supplies a no-op __main in libgcc-pdp10.s instead.
 
 # Provide a real public abort symbol for freestanding pdp10-dec-none users.
 LIB2FUNCS_EXTRA = $(srcdir)/config/pdp10/abort.asm \
