@@ -38,8 +38,13 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
    crtstuff/EH frame registration runtime yet, and the bare PDP-10 assembler
    must not see libgcc2 __main references to __register_frame_info or
    __deregister_frame_info.  Keep named sections for data/code selection,
-   but explicitly suppress DWARF2 EH frame runtime integration.  */
-#define DWARF2_UNWIND_INFO 0
+   but explicitly suppress DWARF2 EH frame runtime integration.
+
+   GCC 3.2 tests DWARF2_UNWIND_INFO with #ifdef, not #if.  Defining it to
+   0 still enables dwarf2out_frame_init and requires a valid
+   INCOMING_RETURN_ADDR_RTX.  Undefine it for the bare PDP-10 target.  */
+#undef DWARF2_UNWIND_INFO
+#undef DWARF2_FRAME_INFO
 #define EH_FRAME_IN_DATA_SECTION 1
 
 #define IS_ASM_LOGICAL_LINE_SEPARATOR(C) ((C) == ';')
