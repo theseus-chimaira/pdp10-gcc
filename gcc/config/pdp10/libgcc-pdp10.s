@@ -509,3 +509,77 @@ __fixdfsi:
 	; float high word and clear AC2.  Reuse the tested single-float
 	; decoder so negative fractional values truncate toward zero correctly.
 	jrst __fixsfsi
+
+; Unsigned SImode division/modulo helpers.
+;
+; These are adapted from the original PDP-10 libgcc1.s KCC-derived sequences,
+; but are kept here as plain GAS/deposit-script assembly so the bare
+; pdp10-dec-none runtime archive supplies the public symbols directly.
+;
+; ABI:
+;   __udivsi3: AC1 = numerator, AC2 = denominator, returns quotient in AC1
+;   __umodsi3: AC1 = numerator, AC2 = denominator, returns remainder in AC1
+;
+; Division by zero is undefined by C.  Keep the helper deterministic for
+; direct runtime probes: return zero.
+	.globl	__udivsi3
+	.globl	__umodsi3
+
+__udivsi3:
+	jumpn 2,__p10_udivsi3_nonzero
+	setz 1,
+	popj 17,
+__p10_udivsi3_nonzero:
+	skipge 3,2
+	 jrst __p10_udivsi3_denneg
+	jumpge 1,__p10_udivsi3_idiv
+	caig 3,1
+	 jrst __p10_udivsi3_small
+	move 2,1
+	movei 1,1
+	div 1,3
+	popj 17,
+__p10_udivsi3_denneg:
+	move 2,1
+	movei 1,0
+	jumpge 2,__p10_udivsi3_done
+	camge 2,3
+	 popj 17,
+	sub 2,3
+	aoja 1,__p10_udivsi3_done
+__p10_udivsi3_small:
+	tdza 2,2
+__p10_udivsi3_idiv:
+	idiv 1,3
+__p10_udivsi3_done:
+	popj 17,
+
+__umodsi3:
+	jumpn 2,__p10_umodsi3_nonzero
+	setz 1,
+	popj 17,
+__p10_umodsi3_nonzero:
+	skipge 3,2
+	 jrst __p10_umodsi3_denneg
+	jumpge 1,__p10_umodsi3_idiv
+	caig 3,1
+	 jrst __p10_umodsi3_small
+	move 2,1
+	movei 1,1
+	div 1,3
+	jrst __p10_umodsi3_done
+__p10_umodsi3_denneg:
+	move 2,1
+	movei 1,0
+	jumpge 2,__p10_umodsi3_done
+	camge 2,3
+	 jrst __p10_umodsi3_done
+	sub 2,3
+	aoja 1,__p10_umodsi3_done
+__p10_umodsi3_small:
+	tdza 2,2
+__p10_umodsi3_idiv:
+	idiv 1,3
+__p10_umodsi3_done:
+	move 1,2
+	popj 17,

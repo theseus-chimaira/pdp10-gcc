@@ -13,7 +13,16 @@ LIBGCC2_DEBUG_CFLAGS = -g0
 # and assembler FP opcode support which are deliberately deferred.
 LIB2FUNCS_EXCLUDE = _floatdidf _floatdisf _fixunsdfsi _fixunssfsi \
   _fixunsdfdi _fixdfdi _fixunssfdi _fixsfdi _fixxfdi _fixunsxfdi \
-  _floatdixf _fixunsxfsi _fixtfdi _fixunstfdi _floatditf __main
+  _floatdixf _fixunsxfsi _fixtfdi _fixunstfdi _floatditf __main \
+  _divdi3 _moddi3 _udivdi3 _umoddi3
+
+
+# The DImode division/modulo helpers are also supplied by libgcc-pdp10.s.
+# GCC 3.2's generic libgcc2 implementations lower through unsigned SImode
+# helpers such as __umodsi3 before the bare PDP-10 runtime archive has been
+# assembled, and the current deposit-script assembler intentionally rejects
+# undefined symbols in word expressions.  Use the PDP-10 assembly helpers
+# directly instead of building the hosted generic libgcc2 variants.
 
 # libgcc2.c __main assumes hosted EH/ctor frame registration.  The bare
 # PDP-10 runtime supplies a no-op __main in libgcc-pdp10.s instead.
