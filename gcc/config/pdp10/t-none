@@ -17,7 +17,7 @@ LIB2FUNCS_EXCLUDE = _floatdidf _floatdisf _fixunsdfsi _fixunssfsi \
   _divdi3 _moddi3 _udivdi3 _umoddi3 _udivmoddi4
 
 
-# The DImode division/modulo helpers are also supplied by libgcc-pdp10.s.
+# The DImode division/modulo helpers are supplied by libgcc1.s.
 # GCC 3.2's generic libgcc2 implementations lower through unsigned SImode
 # helpers such as __umodsi3 before the bare PDP-10 runtime archive has been
 # assembled, and the current deposit-script assembler intentionally rejects
@@ -28,11 +28,11 @@ LIB2FUNCS_EXCLUDE = _floatdidf _floatdisf _fixunsdfsi _fixunssfsi \
 # explicitly here.
 
 # libgcc2.c __main assumes hosted EH/ctor frame registration.  The bare
-# PDP-10 runtime supplies a no-op __main in libgcc-pdp10.s instead.
+# PDP-10 runtime supplies a no-op __main in libgcc1.s instead.
 
 # Provide a real public abort symbol for freestanding pdp10-dec-none users.
 LIB2FUNCS_EXTRA = $(srcdir)/config/pdp10/abort.asm \
-  $(srcdir)/config/pdp10/libgcc-pdp10.s
+  $(srcdir)/config/pdp10/libgcc1.s
 
 # No EH unwinder objects for the C-only bare target yet.
 LIB2ADDEH =
