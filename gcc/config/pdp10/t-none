@@ -14,7 +14,7 @@ LIBGCC2_DEBUG_CFLAGS = -g0
 LIB2FUNCS_EXCLUDE = _floatdidf _floatdisf _fixunsdfsi _fixunssfsi \
   _fixunsdfdi _fixdfdi _fixunssfdi _fixsfdi _fixxfdi _fixunsxfdi \
   _floatdixf _fixunsxfsi _fixtfdi _fixunstfdi _floatditf __main \
-  _divdi3 _moddi3 _udivdi3 _umoddi3 _udivmoddi4
+  _divdi3 _moddi3 _udivdi3 _umoddi3 _udivmoddi4 _udivsi3 _umodsi3
 
 
 # The DImode division/modulo helpers are supplied by libgcc1.s.
@@ -25,14 +25,22 @@ LIB2FUNCS_EXCLUDE = _floatdidf _floatdisf _fixunsdfsi _fixunssfsi \
 # directly instead of building the hosted generic libgcc2 variants.  Exclude
 # _udivmoddi4 too: even when the public div/mod helpers are excluded, libgcc2
 # still builds the standalone unsigned DImode core object unless it is named
-# explicitly here.
+# explicitly here.  Exclude the generic unsigned SImode helpers too, because
+# the merged bare-runtime block provides public __udivsi3/__umodsi3 symbols.
 
 # libgcc2.c __main assumes hosted EH/ctor frame registration.  The bare
 # PDP-10 runtime supplies a no-op __main in libgcc1.s instead.
 
+# Build the merged PDP-10 assembly runtime through GCC's libgcc1
+# mechanism so libgcc1.s is preprocessed and only the selected
+# PDP-10 bare-runtime block is assembled.  Do not list libgcc1.s
+# in LIB2FUNCS_EXTRA: that assembles the whole preprocessor-driven
+# file and exposes duplicate local labels from disabled sections.
+LIB1ASMSRC = pdp10/libgcc1.s
+LIB1ASMFUNCS = pdp10_bare_runtime
+
 # Provide a real public abort symbol for freestanding pdp10-dec-none users.
-LIB2FUNCS_EXTRA = $(srcdir)/config/pdp10/abort.asm \
-  $(srcdir)/config/pdp10/libgcc1.s
+LIB2FUNCS_EXTRA = $(srcdir)/config/pdp10/abort.asm
 
 # No EH unwinder objects for the C-only bare target yet.
 LIB2ADDEH =

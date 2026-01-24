@@ -248,6 +248,7 @@ FUNC(flsidf):
    not use libgcc1.s as a per-helper LIB1ASMSRC file.  Keep public bare
    runtime helpers here until they are split into the classic L_xxx libgcc1
    form or moved to a proper crt/libc runtime.  */
+#ifdef Lpdp10_bare_runtime
 ; Extra weak-ish runtime stubs for smoke/semantic tests that reference libgcc
 ; helpers not yet provided by the real DAIMON test support.
 ;
@@ -832,6 +833,7 @@ __p10_umodsi3_idiv:
 __p10_umodsi3_done:
 	move 1,2
 	popj 17,
+#endif
 
 	SECTION_END
 
