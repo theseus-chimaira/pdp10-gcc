@@ -85,8 +85,9 @@ environment:
   PDP10_GCC_BUILD_ALIAS  configure --build value
   PDP10_GCC_HOST_ALIAS   configure --host value
                          octeon-unknown-openbsd7.8/7.9 are treated as mips64 OpenBSD
-  SUDO                   sudo command, default "sudo -n"
   DOAS                   doas command, default "doas"
+  SUDO                   sudo command, default "sudo -n"
+  PDP10_GCC_INSTALL_PRIV install privilege mode: auto, always, never; default auto
 EOF
 }
 
@@ -266,8 +267,9 @@ else
 fi
 
 AS="${PDP10_GCC_AS:-$PREFIX/bin/$TARGET-as}"
-SUDO="${SUDO:-sudo -n}"
 DOAS="${DOAS:-doas}"
+SUDO="${SUDO:-sudo -n}"
+INSTALL_PRIV="${PDP10_GCC_INSTALL_PRIV:-auto}"
 CONFIGURE_HOST=""
 
 canonical_host_alias () {
@@ -340,17 +342,57 @@ if [ ! -x "$AS" ]; then
 	exit 1
 fi
 
+privileged_command () {
+	if have_command "$DOAS"; then
+		$DOAS "$@"
+	elif have_command "$SUDO"; then
+		$SUDO "$@"
+	else
+		"$@"
+	fi
+}
+
+needs_install_privilege () {
+	case "$INSTALL_PRIV" in
+		always)
+			return 0
+			;;
+		never)
+			return 1
+			;;
+		auto)
+			:
+			;;
+		*)
+			echo "error: invalid PDP10_GCC_INSTALL_PRIV: $INSTALL_PRIV" >&2
+			echo "       expected auto, always, or never" >&2
+			exit 1
+			;;
+	esac
+
+	# System prefixes often have mixed ownership: the prefix itself may be
+	# writable, while subdirectories such as man/man1 are not.  Prefer a
+	# privileged install for those prefixes unless explicitly disabled.
+	if [ "`id -u`" = 0 ]; then
+		return 1
+	fi
+
+	case "$PREFIX" in
+		/usr/local|/usr/local/*|/usr/cross|/usr/cross/*)
+			return 0
+			;;
+	esac
+
+	[ ! -w "$PREFIX" ]
+}
+
 if [ ! -d "$PREFIX" ]; then
 	echo "==> mkdir:  $PREFIX"
 
 	if mkdir -p "$PREFIX" 2>/dev/null; then
 		:
-	elif have_command "$SUDO"; then
-		$SUDO mkdir -p "$PREFIX"
-	elif have_command "$DOAS"; then
-		$DOAS mkdir -p "$PREFIX"
 	else
-		mkdir -p "$PREFIX"
+		privileged_command mkdir -p "$PREFIX"
 	fi
 fi
 
@@ -375,12 +417,9 @@ make all-gcc \
 	WARN_CFLAGS=
 
 echo "==> install"
-if [ -w "$PREFIX" ]; then
-	make install
-elif have_command "$SUDO"; then
-	$SUDO make install
-elif have_command "$DOAS"; then
-	$DOAS make install
+if needs_install_privilege; then
+	echo "==> install privilege: doas/sudo"
+	privileged_command make install
 else
 	make install
 fi
