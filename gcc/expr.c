@@ -5830,18 +5830,17 @@ get_inner_reference (exp, pbitsize, pbitpos, poffset, pmode,
 					   unit_size));
 #endif
 
-	  /* PDP-10: If accessing data smaller than an array item
-	     (say, in a struct member in an array of structs), and the
-	     data is smaller than a word, make offset count in number
-	     of bytes.  */
+	  /* PDP-10: MD_ARRAY_OFFSET keeps aggregate element offsets in
+	     addressable units so component references can still choose the
+	     correct PDP-10 word and byte position.  HImode fields are selected
+	     as halfword offsets by the generic expander, so convert the
+	     aggregate byte offset to halfword units here.  QImode fields must
+	     remain byte offsets.  */
 	  if (TREE_CONSTANT (unit_size)
-	      && *pbitsize < 32
+	      && *pbitsize == 18
 	      && 9 * tree_low_cst (unit_size, 1) > *pbitsize)
-	    {
-	      int n = 9 * tree_low_cst (unit_size, 1) / *pbitsize;
-	      offset = size_binop (MULT_EXPR, offset,
-				   convert (sizetype, build_int_2 (n, 0)));
-	    }
+	    offset = size_binop (TRUNC_DIV_EXPR, offset,
+				 convert (sizetype, build_int_2 (2, 0)));
 	}
 
       else if (TREE_CODE (exp) == PLACEHOLDER_EXPR)

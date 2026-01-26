@@ -13925,12 +13925,23 @@ void pdp10_md_array_offset (tree exp, tree index, tree unit_size,
 {
   if (!TREE_CONSTANT (index) || !TREE_CONSTANT (unit_size))
     {
-      if (tree_low_cst (unit_size, 1) >= UNITS_PER_WORD)
+      tree elem_type = TREE_TYPE (exp);
+
+      /* For arrays of aggregates, keep the offset in GCC addressable
+	 units.  Component references below the ARRAY_REF still need the
+	 byte offset so subword fields inside the aggregate land in the
+	 proper PDP-10 word and byte position.  Scalar arrays, on the
+	 other hand, address whole PDP-10 words/halfwords directly.  */
+      if (TREE_CODE (elem_type) != RECORD_TYPE
+	  && TREE_CODE (elem_type) != UNION_TYPE
+	  && tree_low_cst (unit_size, 1) >= UNITS_PER_WORD)
 	unit_size = size_binop (TRUNC_DIV_EXPR,
 				unit_size,
 				convert (sizetype,
 					 build_int_2 (UNITS_PER_WORD, 0)));
-      else if (tree_low_cst (unit_size, 1) == 2)
+      else if (TREE_CODE (elem_type) != RECORD_TYPE
+	       && TREE_CODE (elem_type) != UNION_TYPE
+	       && tree_low_cst (unit_size, 1) == 2)
 	unit_size = size_binop (TRUNC_DIV_EXPR,
 				unit_size,
 				convert (sizetype,
