@@ -5230,7 +5230,19 @@
   "TARGET_KI10up"
   "fltr %0,%1")
 
-(define_insn "floatunssisf2"
+(define_expand "floatunssisf2"
+  [(set (match_operand:SF 0 "register_operand" "")
+	(unsigned_float:SF (match_operand:SI 1 "reg_or_mem_operand" "")))]
+  ""
+  "if (!TARGET_KI10up)
+     {
+       emit_library_call_value (gen_rtx_SYMBOL_REF (Pmode, \"__floatunssisf\"),
+                                operands[0], LCT_NORMAL, SFmode, 1,
+                                operands[1], SImode);
+       DONE;
+     }")
+
+(define_insn "*floatunssisf2_ki10"
   [(set (match_operand:SF 0 "register_operand" "=r")
 	(unsigned_float:SF (match_operand:SI 1 "reg_or_mem_operand" "rm")))]
   "TARGET_KI10up"
