@@ -5990,13 +5990,32 @@
                        (match_operand:DF 1 "general_operand" "")))]
   ""
   "if (pdp10_const_double_0_operand (operands[1], DFmode))
-     pdp10_compare_op0 = operands[0];
+     {
+       pdp10_compare_op0 = operands[0];
+       pdp10_compare_op1 = CONST0_RTX (DFmode);
+     }
+   else if (!TARGET_KI10up)
+     {
+       rtx op0, op1;
+
+       pdp10_compare_op0 = gen_reg_rtx (SImode);
+       op0 = force_reg (DFmode, operands[0]);
+       op1 = force_reg (DFmode, operands[1]);
+       emit_library_call_value (gen_rtx_SYMBOL_REF (Pmode, \"__cmpdf2\"),
+                                pdp10_compare_op0, LCT_NORMAL, SImode, 2,
+                                op0, DFmode, op1, DFmode);
+       pdp10_compare_op1 = const0_rtx;
+     }
    else
      {
+       rtx op0, op1;
+
        pdp10_compare_op0 = gen_reg_rtx (DFmode);
-       gen_subdf3 (pdp10_compare_op0, operands[0], operands[1]);
+       op0 = force_reg (DFmode, operands[0]);
+       op1 = force_reg (DFmode, operands[1]);
+       emit_insn (gen_subdf3 (pdp10_compare_op0, op0, op1));
+       pdp10_compare_op1 = CONST0_RTX (DFmode);
      }
-   pdp10_compare_op1 = CONST0_RTX (DFmode);
    DONE;")
 
 (define_insn "test_and_skip"
