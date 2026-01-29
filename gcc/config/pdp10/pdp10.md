@@ -622,7 +622,7 @@
 	 2)
 	(match_operand:HI 1 "register_operand" "r"))]
   "pdp10_scalar_mem_p (operands[0])"
-  "movem %1,%0")
+  "hrlm %1,%0")
 
 (define_insn ""
   [(set (match_operand:SI 0 "register_operand" "=r")
@@ -742,13 +742,13 @@
    && pdp10_scalar_mem_p (operands[2])"
   "movem %1,%W2")
 
-;; Load scalar unsigned shorts using MOVE.
+;; Load scalar unsigned shorts from the left half of the scalar word.
 (define_insn ""
   [(set (match_operand:SI 0 "register_operand" "=r")
         (zero_extend:SI
 	 (match_operand:HI 1 "pdp10_maybe_volatile_memory_operand" "m")))]
   "pdp10_scalar_mem_p (operands[1])"
-  "move %0,%W1")
+  "hlrz %0,%W1")
 (define_insn ""
    [(set (match_operand:HI 0 "register_operand" "=r")
 	 (subreg:HI
@@ -758,7 +758,7 @@
 	   (const_int 18))
 	  2))]
   "pdp10_scalar_mem_p (operands[1])"
-  "move %0,%W1")
+  "hlrz %0,%W1")
 ; (define_insn ""
 ;    [(set (match_operand:SI 0 "register_operand" "=r")
 		 ;; This could well be a scalar int variable.
@@ -767,7 +767,7 @@
 ;   "pdp10_scalar_mem_p (operands[1])"
 ;   "move %0,%W1")
 
-;; Load scalar signed shorts using HRRE.
+;; Load scalar signed shorts from the left half of the scalar word.
 (define_insn ""
   [(set (match_operand:SI 0 "register_operand" "=r")
 	(sign_extract:SI
@@ -775,20 +775,22 @@
 	 (const_int 18)
 	 (const_int 18)))]
   "pdp10_scalar_mem_p (operands[1])"
-  "hrre %0,%1")
+  "hlre %0,%1")
 (define_insn ""
   [(set (match_operand:SI 0 "register_operand" "=r")
 	(sign_extend:SI
 	 (match_operand:HI 1 "pdp10_maybe_volatile_memory_operand" "m")))]
   "pdp10_scalar_mem_p (operands[1])"
-  "hrre %0,%W1")
+  "hlre %0,%W1")
 
-;; Store scalar shorts using MOVEM.
+;; Store scalar shorts in the left half of the scalar word.
+;; HImode values are kept in the right half of registers, while scalar
+;; HImode memory is addressed as the left half (POINT 18,...,17).
 (define_insn ""
   [(set (match_operand:HI 0 "memory_operand" "=m")
 	(match_operand:HI 1 "register_operand" "r"))]
   "pdp10_scalar_mem_p (operands[0])"
-  "movem %1,%W0")
+  "hrlm %1,%W0")
 (define_insn ""
   [(set (zero_extract:SI
 	 (match_operand:SI 0 "memory_operand" "+m")
@@ -797,11 +799,12 @@
 	(and:SI (match_operand:SI 1 "register_operand" "r")
 		(const_int RIGHT_HALF)))]
   "pdp10_scalar_mem_p (operands[0])"
-  "movem %1,%0")
+  "hrlm %1,%0")
 
 ;; Same rule for scalar HI objects: storing a promoted register into a
 ;; scalar halfword slot should not require a separate zero-extension
-;; instruction.  The MOVEM writes the right half that scalar loads read.
+;; instruction.  HRLM writes the register right half into the scalar
+;; halfword slot that scalar loads read.
 (define_peephole
   [(set (match_operand:SI 0 "register_operand" "")
 	(zero_extend:SI (match_operand:HI 1 "register_operand" "")))
@@ -809,7 +812,7 @@
 	(match_dup 1))]
   "REGNO (operands[0]) == REGNO (operands[1])
    && pdp10_scalar_mem_p (operands[2])"
-  "movem %1,%W2")
+  "hrlm %1,%W2")
 
 ;; Same for stack scalar HI locals represented as SImode frame slots.
 (define_peephole2
@@ -831,7 +834,7 @@
 	(match_dup 0))]
   "REGNO (operands[0]) == REGNO (operands[1])
    && pdp10_scalar_mem_p (operands[2])"
-  "movem %1,%W2")
+  "hrlm %1,%W2")
 
 (define_insn "*sgeu"
   [(set (match_operand:SI 0 "register_operand" "=x")
