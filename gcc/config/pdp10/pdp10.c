@@ -3814,6 +3814,20 @@ static void	no_long_long_callback PARAMS ((cpp_reader *pfile));
 static void	string_bytesize_callback PARAMS ((cpp_reader *pfile));
 static int	get_pragma_number PARAMS ((cpp_reader *pfile,
 					   const char *pragma));
+static int	pdp10_reorg_set_parts PARAMS ((rtx insn, rtx *destp,
+					     rtx *srcp));
+static int	pdp10_reorg_mem_addr PARAMS ((rtx x, enum machine_mode mode,
+					      rtx *addrp));
+static int	pdp10_reorg_unspec_code_p PARAMS ((rtx x, enum machine_mode mode,
+					         int code));
+static void	pdp10_reorg_install_blt PARAMS ((rtx first, rtx second,
+					    rtx *seq, int nseq,
+					    rtx ac, rtx src, rtx dest));
+static int	pdp10_reorg_word_repack_blt PARAMS ((rtx insn));
+static int	pdp10_reorg_word_repack_spill_blt PARAMS ((rtx insn));
+static int	pdp10_reorg_word_repack_dmove_direct PARAMS ((rtx insn));
+static int	pdp10_reorg_word_repack_dmove PARAMS ((rtx insn));
+static void	pdp10_reorg_word_repack_copies PARAMS ((rtx first));
 
 static void
 convert_voidp_callback (pfile)
@@ -3912,6 +3926,411 @@ pdp10_register_target_pragmas (ptr)
 		       string_bytesize_callback);
 }
 
+static int
+pdp10_reorg_set_parts (insn, destp, srcp)
+     rtx insn;
+     rtx *destp;
+     rtx *srcp;
+{
+  rtx pat;
+
+  if (insn == 0 || GET_CODE (insn) != INSN)
+    return 0;
+
+  pat = PATTERN (insn);
+  if (GET_CODE (pat) != SET)
+    return 0;
+
+  if (destp)
+    *destp = SET_DEST (pat);
+  if (srcp)
+    *srcp = SET_SRC (pat);
+  return 1;
+}
+
+static int
+pdp10_reorg_mem_addr (x, mode, addrp)
+     rtx x;
+     enum machine_mode mode;
+     rtx *addrp;
+{
+  if (x == 0 || GET_CODE (x) != MEM)
+    return 0;
+  if (mode != VOIDmode && GET_MODE (x) != mode)
+    return 0;
+  if (addrp)
+    *addrp = XEXP (x, 0);
+  return 1;
+}
+
+static int
+pdp10_reorg_unspec_code_p (x, mode, code)
+     rtx x;
+     enum machine_mode mode;
+     int code;
+{
+  return (x != 0
+          && GET_MODE (x) == mode
+          && GET_CODE (x) == UNSPEC
+          && XVECLEN (x, 0) >= 1
+          && XINT (x, 1) == code);
+}
+
+static void
+pdp10_reorg_install_blt (first, second, seq, nseq, ac, src, dest)
+     rtx first;
+     rtx second;
+     rtx *seq;
+     int nseq;
+     rtx ac;
+     rtx src;
+     rtx dest;
+{
+  rtx end;
+  int i;
+
+  end = plus_constant (dest, 1);
+  PATTERN (first) = gen_pdp10_blt_setup (ac, src, dest);
+  PATTERN (second) = gen_BLT (ac, gen_rtx_MEM (BLKmode, end));
+  INSN_CODE (first) = -1;
+  INSN_CODE (second) = -1;
+  REG_NOTES (first) = 0;
+  REG_NOTES (second) = 0;
+
+  for (i = 2; i < nseq; i++)
+    if (seq[i] != 0 && !INSN_DELETED_P (seq[i]))
+      delete_insn (seq[i]);
+}
+
+static int
+pdp10_reorg_word_repack_blt (insn)
+     rtx insn;
+{
+  rtx seq[11];
+  rtx dest;
+  rtx src;
+  rtx src1;
+  rtx src2;
+  rtx temp1;
+  rtx temp2;
+  rtx blt_src;
+  rtx blt_dst;
+  rtx blt_end;
+  rtx ac;
+  rtx x;
+  int i;
+
+  seq[0] = insn;
+  for (i = 1; i < 11; i++)
+    {
+      seq[i] = next_real_insn (seq[i - 1]);
+      if (seq[i] == 0)
+        return 0;
+    }
+
+  if (!pdp10_reorg_set_parts (seq[0], &dest, &src)
+      || !REG_P (dest)
+      || !pdp10_reorg_mem_addr (src, SImode, &src2))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[1], &dest, &src)
+      || !REG_P (dest)
+      || !pdp10_reorg_mem_addr (src, SImode, &src1))
+    return 0;
+  if (!pdp10_word_address_plus_one_p (src1, src2))
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[2], &dest, &src)
+      || !pdp10_reorg_unspec_code_p (src, DImode, UNSPEC_LSHC))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[3], &dest, &src)
+      || GET_CODE (src) != LSHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[4], &dest, &src)
+      || GET_CODE (src) != ASHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[5], &dest, &src)
+      || GET_CODE (src) != ASHIFT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[6], &dest, &src)
+      || GET_CODE (src) != ASHIFTRT)
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[7], &dest, &src)
+      || !pdp10_reorg_mem_addr (dest, SImode, &temp1))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[8], &dest, &src)
+      || !pdp10_reorg_mem_addr (dest, SImode, &temp2))
+    return 0;
+  if (!pdp10_word_address_plus_one_p (temp1, temp2))
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[9], &ac, &src)
+      || !REG_P (ac)
+      || !pdp10_reorg_unspec_code_p (src, SImode, UNSPEC_BLT_SETUP)
+      || XVECLEN (src, 0) != 2)
+    return 0;
+  blt_src = XVECEXP (src, 0, 0);
+  blt_dst = XVECEXP (src, 0, 1);
+  if (!rtx_equal_p (blt_src, temp1))
+    return 0;
+
+  x = PATTERN (seq[10]);
+  if (GET_CODE (x) != PARALLEL || XVECLEN (x, 0) != 3)
+    return 0;
+  x = XVECEXP (PATTERN (seq[10]), 0, 2);
+  if (GET_CODE (x) != USE
+      || !pdp10_reorg_mem_addr (XEXP (x, 0), BLKmode, &blt_end))
+    return 0;
+  if (!pdp10_word_address_plus_one_p (blt_dst, blt_end))
+    return 0;
+
+  pdp10_reorg_install_blt (seq[0], seq[1], seq, 11, ac, src1, blt_dst);
+  return 1;
+}
+
+static int
+pdp10_reorg_word_repack_spill_blt (insn)
+     rtx insn;
+{
+  rtx seq[21];
+  rtx dest;
+  rtx src;
+  rtx src1;
+  rtx src2;
+  rtx temp1;
+  rtx temp2;
+  rtx blt_src;
+  rtx blt_dst;
+  rtx ac;
+  rtx x;
+  int i;
+
+  seq[0] = insn;
+  for (i = 1; i < 21; i++)
+    {
+      seq[i] = next_real_insn (seq[i - 1]);
+      if (seq[i] == 0)
+        return 0;
+    }
+
+  if (!pdp10_reorg_set_parts (seq[0], &dest, &src)
+      || !REG_P (dest)
+      || !pdp10_reorg_mem_addr (src, SImode, &src2))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[1], &dest, &src)
+      || GET_CODE (src) != LSHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[2], &dest, &src)
+      || !REG_P (dest) || !REG_P (src))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[3], &dest, &src)
+      || !REG_P (dest)
+      || !pdp10_reorg_mem_addr (src, SImode, &src1))
+    return 0;
+  if (!pdp10_word_address_plus_one_p (src1, src2))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[4], &dest, &src)
+      || GET_CODE (src) != LSHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[5], &dest, &src)
+      || !REG_P (dest) || !REG_P (src))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[6], &dest, &src)
+      || !pdp10_reorg_unspec_code_p (src, DImode, UNSPEC_LSHC))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[7], &dest, &src)
+      || GET_CODE (src) != LSHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[8], &dest, &src)
+      || GET_CODE (src) != ASHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[9], &dest, &src)
+      || GET_CODE (src) != ASHIFT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[10], &dest, &src)
+      || GET_CODE (src) != ASHIFTRT)
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[11], &dest, &src)
+      || !pdp10_reorg_mem_addr (dest, SImode, &temp1))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[12], &dest, &src)
+      || !pdp10_reorg_mem_addr (dest, SImode, &temp2))
+    return 0;
+  if (!pdp10_word_address_plus_one_p (temp1, temp2))
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[13], &ac, &src)
+      || !REG_P (ac)
+      || !pdp10_reorg_unspec_code_p (src, SImode, UNSPEC_BLT_SETUP)
+      || XVECLEN (src, 0) != 2)
+    return 0;
+  blt_src = XVECEXP (src, 0, 0);
+  blt_dst = XVECEXP (src, 0, 1);
+  if (!rtx_equal_p (blt_src, temp1))
+    return 0;
+
+  x = PATTERN (seq[20]);
+  if (GET_CODE (x) != PARALLEL || XVECLEN (x, 0) != 3)
+    return 0;
+
+  pdp10_reorg_install_blt (seq[0], seq[1], seq, 21, ac, src1, blt_dst);
+  return 1;
+}
+
+static int
+pdp10_reorg_word_repack_dmove_direct (insn)
+     rtx insn;
+{
+  rtx seq[9];
+  rtx dest;
+  rtx src;
+  rtx src1;
+  rtx src2;
+  rtx final_dest;
+  rtx ac;
+  int i;
+
+  seq[0] = insn;
+  for (i = 1; i < 9; i++)
+    {
+      seq[i] = next_real_insn (seq[i - 1]);
+      if (seq[i] == 0)
+        return 0;
+    }
+
+  if (!pdp10_reorg_set_parts (seq[0], &dest, &src)
+      || !REG_P (dest)
+      || !pdp10_reorg_mem_addr (src, SImode, &src2))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[1], &ac, &src)
+      || !REG_P (ac)
+      || !pdp10_reorg_mem_addr (src, SImode, &src1))
+    return 0;
+  if (!pdp10_word_address_plus_one_p (src1, src2))
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[2], &dest, &src)
+      || !pdp10_reorg_unspec_code_p (src, DImode, UNSPEC_LSHC))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[3], &dest, &src)
+      || GET_CODE (src) != LSHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[4], &dest, &src)
+      || GET_CODE (src) != ASHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[5], &dest, &src)
+      || GET_CODE (src) != ASHIFT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[6], &dest, &src)
+      || GET_CODE (src) != ASHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[7], &dest, &src)
+      || !pdp10_reorg_mem_addr (dest, DImode, 0))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[8], &dest, &src)
+      || !pdp10_reorg_mem_addr (dest, DImode, &final_dest)
+      || !REG_P (src))
+    return 0;
+
+  pdp10_reorg_install_blt (seq[0], seq[1], seq, 9, ac, src1, final_dest);
+  return 1;
+}
+
+static int
+pdp10_reorg_word_repack_dmove (insn)
+     rtx insn;
+{
+  rtx seq[14];
+  rtx dest;
+  rtx src;
+  rtx src1;
+  rtx src2;
+  rtx final_dest;
+  rtx ac;
+  int i;
+
+  seq[0] = insn;
+  for (i = 1; i < 14; i++)
+    {
+      seq[i] = next_real_insn (seq[i - 1]);
+      if (seq[i] == 0)
+        return 0;
+    }
+
+  if (!pdp10_reorg_set_parts (seq[0], &ac, &src)
+      || !REG_P (ac)
+      || !pdp10_reorg_mem_addr (src, SImode, &src2))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[1], &dest, &src)
+      || GET_CODE (src) != LSHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[2], &dest, &src)
+      || !REG_P (dest) || !REG_P (src))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[3], &dest, &src)
+      || !REG_P (dest)
+      || !pdp10_reorg_mem_addr (src, SImode, &src1))
+    return 0;
+  if (!pdp10_word_address_plus_one_p (src1, src2))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[4], &dest, &src)
+      || GET_CODE (src) != LSHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[5], &dest, &src)
+      || !REG_P (dest) || !REG_P (src))
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[6], &dest, &src)
+      || !pdp10_reorg_unspec_code_p (src, DImode, UNSPEC_LSHC))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[7], &dest, &src)
+      || GET_CODE (src) != LSHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[8], &dest, &src)
+      || GET_CODE (src) != ASHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[9], &dest, &src)
+      || GET_CODE (src) != ASHIFT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[10], &dest, &src)
+      || GET_CODE (src) != ASHIFTRT)
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[11], &dest, &src)
+      || !pdp10_reorg_mem_addr (dest, DImode, 0))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[12], &dest, &src)
+      || !REG_P (dest)
+      || !pdp10_reorg_mem_addr (src, DImode, 0))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[13], &dest, &src)
+      || !pdp10_reorg_mem_addr (dest, DImode, &final_dest)
+      || !REG_P (src))
+    return 0;
+
+  pdp10_reorg_install_blt (seq[0], seq[1], seq, 14, ac, src1, final_dest);
+  return 1;
+}
+
+static void
+pdp10_reorg_word_repack_copies (first)
+     rtx first;
+{
+  rtx insn;
+
+  for (insn = next_real_insn (first); insn; insn = next_real_insn (insn))
+    {
+      if (INSN_DELETED_P (insn))
+        continue;
+      if (pdp10_reorg_word_repack_blt (insn)
+          || pdp10_reorg_word_repack_spill_blt (insn)
+          || pdp10_reorg_word_repack_dmove_direct (insn)
+          || pdp10_reorg_word_repack_dmove (insn))
+        continue;
+    }
+}
+
 /* Called by the MACHINE_DEPENDENT_REORG macro.
 
    This is ran as the last optimization pass.  (If there was a delayed
@@ -3922,6 +4341,8 @@ pdp10_machine_dependent_reorg (first)
      rtx first;
 {
   rtx insn;
+
+  pdp10_reorg_word_repack_copies (first);
 
   if (!optimize)
     return;
@@ -9520,6 +9941,9 @@ pdp10_address_base_offset (x, basep, offp)
      rtx *basep;
      HOST_WIDE_INT *offp;
 {
+  if (GET_CODE (x) == CONST)
+    x = XEXP (x, 0);
+
   if (GET_CODE (x) == PLUS && GET_CODE (XEXP (x, 1)) == CONST_INT)
     {
       *basep = XEXP (x, 0);
@@ -9530,6 +9954,24 @@ pdp10_address_base_offset (x, basep, offp)
   *basep = x;
   *offp = 0;
   return 1;
+}
+
+int
+pdp10_word_address_plus_one_p (first, second)
+     rtx first;
+     rtx second;
+{
+  rtx first_base;
+  rtx second_base;
+  HOST_WIDE_INT first_off;
+  HOST_WIDE_INT second_off;
+
+  if (!pdp10_address_base_offset (first, &first_base, &first_off)
+      || !pdp10_address_base_offset (second, &second_base, &second_off))
+    return 0;
+
+  return (rtx_equal_p (first_base, second_base)
+          && second_off == first_off + 1);
 }
 
 int

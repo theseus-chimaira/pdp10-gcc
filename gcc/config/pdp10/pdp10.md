@@ -5486,7 +5486,7 @@
   "@
    push 17,0\;push 17,%0\;push 17,0\;subi %0,1\;movem %0,(17)\;ibp %0\;came %0,-1(17)\;jrst .-3\;move %0,(17)\;pop 17,0\;pop 17,0\;pop 17,0
    move %0,%1\;push 17,0\;push 17,%0\;push 17,0\;subi %0,1\;movem %0,(17)\;ibp %0\;came %0,-1(17)\;jrst .-3\;move %0,(17)\;pop 17,0\;pop 17,0\;pop 17,0
-   push 17,0\;move 0,%0\;push 17,0\;push 17,0\;subi 0,1\;movem 0,(17)\;ibp 0\;came 0,-1(17)\;jrst .-3\;movem 0,%0\;pop 17,0\;pop 17,0\;pop 17,0"
+   push 17,0\;move 0,%0\;push 17,0\;push 17,0\;subi 0,1\;movem 0,(17)\;ibp 0\;came 0,-1(17)\;jrst .-3\;move 0,(17)\;movem 0,%0\;pop 17,0\;pop 17,0\;pop 17,0"
   [(set_attr "length" "12,13,13")
    ;; This is a multi-instruction ADJBP emulation, not a real IBP
    ;; candidate for machine-dependent LDB/DPB reorganization.
@@ -6972,9 +6972,9 @@
    (set (match_operand:DI 6 "register_operand" "")
         (ashiftrt:DI (match_dup 6) (neg:SI (const_int -1))))
    (set (match_operand:DI 7 "register_operand" "")
-        (ashift:DI (match_dup 7) (const_int -1)))
+        (ashift:DI (match_dup 6) (const_int -1)))
    (set (match_operand:DI 8 "register_operand" "")
-        (ashiftrt:DI (match_dup 8) (neg:SI (const_int 1))))
+        (ashiftrt:DI (match_dup 7) (neg:SI (const_int 1))))
    (set (match_operand:SI 9 "memory_operand" "")
         (match_operand:SI 10 "register_operand" ""))
    (set (match_operand:SI 11 "memory_operand" "")
@@ -6986,12 +6986,12 @@
    (parallel [(unspec_volatile:BLK [(match_dup 13)] VUNSPEC_BLT)
               (clobber (match_dup 13))
               (use (match_operand:BLK 16 "memory_operand" ""))])]
-  "rtx_equal_p (XEXP (operands[1], 0),
-                plus_constant (XEXP (operands[3], 0), 1))
-   && rtx_equal_p (XEXP (operands[11], 0),
-                   plus_constant (XEXP (operands[9], 0), 1))
+  "pdp10_word_address_plus_one_p (XEXP (operands[3], 0),
+                                  XEXP (operands[1], 0))
+   && pdp10_word_address_plus_one_p (XEXP (operands[9], 0),
+                                     XEXP (operands[11], 0))
    && rtx_equal_p (operands[14], XEXP (operands[9], 0))
-   && rtx_equal_p (XEXP (operands[16], 0), plus_constant (operands[15], 1))"
+   && pdp10_word_address_plus_one_p (operands[15], XEXP (operands[16], 0))"
   [(set (match_dup 13)
         (unspec:SI [(match_dup 17) (match_dup 15)] UNSPEC_BLT_SETUP))
    (parallel [(unspec_volatile:BLK [(match_dup 13)] VUNSPEC_BLT)
