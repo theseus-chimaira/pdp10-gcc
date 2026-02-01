@@ -988,7 +988,8 @@ enum reg_class
 /* A C expression that controls whether a function argument is passed
    in a register, and which register.  */
 #define FUNCTION_ARG(CUM, MODE, TYPE, NAMED) \
-  (((NAMED) && ((CUM) < pdp10_regparm)) ? gen_rtx_REG ((MODE), 1 + (CUM)) : 0)
+  (((NAMED) && (MODE) != BLKmode && ((CUM) < pdp10_regparm)) \
+   ? gen_rtx_REG ((MODE), 1 + (CUM)) : 0)
 
 /* A C expression for the number of words, at the beginning of an
    argument, must be put in registers.  The value must be zero for
@@ -996,6 +997,7 @@ enum reg_class
    entirely pushed on the stack.  */
 #define FUNCTION_ARG_PARTIAL_NREGS(CUM, MODE, TYPE, NAMED)                \
   ((NAMED)                                                              \
+   && (MODE) != BLKmode                                                 \
    && (CUM) < pdp10_regparm                                             \
    && pdp10_regparm < (CUM) + (((MODE) == BLKmode                       \
                                 ? int_size_in_bytes (TYPE)              \

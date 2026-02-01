@@ -9956,6 +9956,54 @@ pdp10_address_base_offset (x, basep, offp)
   return 1;
 }
 
+static rtx
+pdp10_normalize_block_word_address (addr, length, convert_units)
+     rtx addr;
+     HOST_WIDE_INT length;
+     int convert_units;
+{
+  rtx x;
+  rtx base;
+  HOST_WIDE_INT offset;
+  int was_const;
+
+  was_const = 0;
+  x = addr;
+  if (GET_CODE (x) == CONST)
+    {
+      was_const = 1;
+      x = XEXP (x, 0);
+    }
+
+  if (GET_CODE (x) != PLUS
+      || GET_CODE (XEXP (x, 1)) != CONST_INT)
+    return addr;
+
+  base = XEXP (x, 0);
+  offset = INTVAL (XEXP (x, 1));
+
+  /* BLKmode copy lengths are expressed in 9-bit C storage units, but
+     BLT source/destination addresses are 36-bit word addresses.  Generic
+     ARRAY_REF expansion can leave an element-boundary stack address in
+     storage-unit form as well as for symbolic globals, e.g. a four-word
+     struct array element can arrive as BASE+32 instead of BASE+8.
+
+     Normalize only exact positive element-boundary offsets.  Ordinary
+     stack temporaries and already-normalized word offsets, such as BASE+12
+     for a four-word scratch slot, are left unchanged.  */
+  if (convert_units
+      && length > 0
+      && offset >= length
+      && offset % length == 0
+      && offset % UNITS_PER_WORD == 0)
+    offset /= UNITS_PER_WORD;
+
+  if (was_const)
+    offset &= ADDRESS_MASK;
+
+  return plus_constant (base, offset);
+}
+
 int
 pdp10_word_address_plus_one_p (first, second)
      rtx first;
@@ -10221,40 +10269,15 @@ pdp10_expand_movstrsi (operands)
       && INTVAL (operands[2]) > 0
       && INTVAL (operands[2]) % UNITS_PER_WORD == 0)
     {
-      int i;
+      HOST_WIDE_INT length = INTVAL (operands[2]);
 
-      for (i = 0; i < 2; i++)
-        if (GET_CODE (operands[i]) == CONST
-            && GET_CODE (XEXP (operands[i], 0)) == PLUS
-            && GET_CODE (XEXP (XEXP (operands[i], 0), 1)) == CONST_INT)
-          {
-            rtx x = XEXP (operands[i], 0);
-            HOST_WIDE_INT offset = INTVAL (XEXP (x, 1));
-            HOST_WIDE_INT length = INTVAL (operands[2]);
-
-            /* BLKmode copies arrive with LENGTH in 9-bit C storage units,
-               while BLT addresses are 36-bit word addresses.  Some generic
-               ARRAY_REF addresses for full-word elements keep the same
-               storage-unit offset, e.g. &gp[1] of a 12-unit struct becomes
-               gp+12.  Normalize only exact element-boundary symbolic offsets;
-               already-correct word offsets such as gp+6 for a three-word
-               object are left alone.  */
-            if (offset >= length
-                && offset % length == 0
-                && offset % UNITS_PER_WORD == 0)
-              offset /= UNITS_PER_WORD;
-
-            operands[i] = plus_constant (XEXP (x, 0), offset & ADDRESS_MASK);
-          }
+      operands[0] = pdp10_normalize_block_word_address (operands[0],
+                                                        length, 1);
+      operands[1] = pdp10_normalize_block_word_address (operands[1],
+                                                        length, 1);
     }
-  else if (GET_CODE (operands[1]) == CONST
-           && GET_CODE (XEXP (operands[1], 0)) == PLUS
-           && GET_CODE (XEXP (XEXP (operands[1], 0), 1)) == CONST_INT)
-    {
-      rtx x = XEXP (operands[1], 0);
-      HOST_WIDE_INT offset = INTVAL (XEXP (x, 1));
-      operands[1] = plus_constant (XEXP (x, 0), offset & ADDRESS_MASK);
-    }
+  else
+    operands[1] = pdp10_normalize_block_word_address (operands[1], 0, 0);
 
   if (use_xblt (operands[0], operands[1], operands[2]))
     return expand_xblt (operands[0], operands[1], operands[2]);
