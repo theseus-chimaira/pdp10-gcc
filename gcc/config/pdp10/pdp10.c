@@ -4853,6 +4853,15 @@ pdp10_scalar_mem_p (op)
   if (GET_CODE (op) != MEM)
     return 0;
 
+  /* A local byte-pointer variable can have subword alignment in its MEM
+     attributes because it points at byte objects.  The storage slot itself
+     is still a full PDP-10 pointer word, not a scalar QI/HI object.  Do not
+     let halfword scalar-store patterns rewrite pointer-address updates as
+     HRLM; byte-pointer arithmetic needs to update the right-half address
+     field with HRRM.  */
+  if (MEM_EXPR (op) != 0 && POINTER_TYPE_P (TREE_TYPE (MEM_EXPR (op))))
+    return 0;
+
   if (MEM_SCALAR_P (op))
     return 1;
 
@@ -8566,6 +8575,65 @@ pdp10_output_lshiftrt_memory (insn, operands)
     }
 
   if (GET_CODE (mem) == MEM
+      && INTVAL (operands[2]) == 27)
+    {
+      HOST_WIDE_INT byteoff;
+      int unsignedp;
+
+      if (pdp10_qi_mem_logical_offset (mem, &byteoff, &unsignedp))
+        {
+          HOST_WIDE_INT wordoff = byteoff / UNITS_PER_WORD;
+          HOST_WIDE_INT inword = byteoff % UNITS_PER_WORD;
+          rtx outaddr = XEXP (mem, 0);
+          char buf[64];
+
+          if (inword < 0)
+            {
+              inword += UNITS_PER_WORD;
+              wordoff -= 1;
+            }
+
+          if (GET_CODE (outaddr) == PLUS
+              && GET_CODE (XEXP (outaddr, 1)) == CONST_INT)
+            {
+              HOST_WIDE_INT plusoff = INTVAL (XEXP (outaddr, 1));
+              HOST_WIDE_INT residual;
+
+              residual = (plusoff >= 0 && wordoff > plusoff)
+                ? (wordoff - plusoff) : 0;
+              if (MEM_OFFSET (mem) == 0
+                  || GET_CODE (MEM_OFFSET (mem)) != CONST_INT
+                  || INTVAL (MEM_OFFSET (mem)) < 0
+                  || INTVAL (MEM_OFFSET (mem)) >= UNITS_PER_WORD)
+                residual = 0;
+              if (residual != 0)
+                outaddr = plus_constant (outaddr, residual);
+            }
+          else if (!REG_P (outaddr) && wordoff != 0)
+            outaddr = pdp10_output_add_address_offset (outaddr, wordoff);
+
+          /* Only real byte-pointer registers need the historical one-byte
+             adjustment.  A plain register can also hold an ordinary word
+             pointer to an aggregate; treating every word-aligned register as
+             a byte pointer maps p[3] back to p[0].  */
+          if (REG_P (XEXP (mem, 0))
+              && MEM_ALIGN (mem) >= BITS_PER_WORD
+              && pdp10_reg_likely_byte_pointer_p (XEXP (mem, 0), insn))
+            inword = (inword + 1) % UNITS_PER_WORD;
+
+          ops[1] = outaddr;
+          if (REG_P (outaddr))
+            sprintf (buf, "ldb %%0,[POINT 9,(%%1),%d]",
+                     (int) inword * BITS_PER_UNIT + 8);
+          else
+            sprintf (buf, "ldb %%0,[POINT 9,%%1,%d]",
+                     (int) inword * BITS_PER_UNIT + 8);
+          output_asm_insn (buf, ops);
+          return "";
+        }
+    }
+
+  if (GET_CODE (mem) == MEM
       && MEM_ALIGN (mem) == BITS_PER_UNIT
       && GET_CODE (XEXP (mem, 0)) == PLUS
       && GET_CODE (XEXP (XEXP (mem, 0), 1)) == CONST_INT)
@@ -9430,7 +9498,9 @@ pdp10_output_addsi (insn, operands, which_alternative)
               }
             }
 
-          if (REG_P (addr) && MEM_ALIGN (src) >= BITS_PER_WORD)
+          if (REG_P (addr)
+              && MEM_ALIGN (src) >= BITS_PER_WORD
+              && pdp10_reg_likely_byte_pointer_p (addr, insn))
             inword = (inword + 1) % UNITS_PER_WORD;
 
           ops[0] = operands[0];
@@ -9688,7 +9758,9 @@ pdp10_output_movsi (insn, which_alternative)
                9-bit byte inside that halfword.  This maps grec.c9+1 from
                POINT 18/IBP plus byte 2 to POINT 9,...,35, and c9+2 to the
                first byte of the next word.  */
-            if (REG_P (addr) && MEM_ALIGN (src) >= BITS_PER_WORD)
+            if (REG_P (addr)
+                && MEM_ALIGN (src) >= BITS_PER_WORD
+                && pdp10_reg_likely_byte_pointer_p (addr, insn))
               inword = (inword + 1) % UNITS_PER_WORD;
 
             /* Reconstruct the byte position from MEM_EXPR/MEM_OFFSET.  The

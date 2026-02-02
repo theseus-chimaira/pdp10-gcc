@@ -5484,9 +5484,9 @@
 	 UNSPEC_ADJBP))]
   "!TARGET_KL10up"
   "@
-   push 17,0\;push 17,%0\;push 17,0\;subi %0,1\;movem %0,(17)\;ibp %0\;came %0,-1(17)\;jrst .-3\;move %0,(17)\;pop 17,0\;pop 17,0\;pop 17,0
-   move %0,%1\;push 17,0\;push 17,%0\;push 17,0\;subi %0,1\;movem %0,(17)\;ibp %0\;came %0,-1(17)\;jrst .-3\;move %0,(17)\;pop 17,0\;pop 17,0\;pop 17,0
-   push 17,0\;move 0,%0\;push 17,0\;push 17,0\;subi 0,1\;movem 0,(17)\;ibp 0\;came 0,-1(17)\;jrst .-3\;move 0,(17)\;movem 0,%0\;pop 17,0\;pop 17,0\;pop 17,0"
+   push 17,0\;push 17,%0\;subi %0,1\;move 0,%0\;ibp %0\;came %0,(17)\;jrst .-3\;move %0,0\;pop 17,0\;pop 17,0
+   move %0,%1\;push 17,0\;push 17,%0\;subi %0,1\;move 0,%0\;ibp %0\;came %0,(17)\;jrst .-3\;move %0,0\;pop 17,0\;pop 17,0
+   push 17,0\;move 0,%0\;push 17,0\;subi 0,1\;movem 0,%0\;ibp 0\;came 0,(17)\;jrst .-3\;pop 17,0\;pop 17,0"
   [(set_attr "length" "12,13,13")
    ;; This is a multi-instruction ADJBP emulation, not a real IBP
    ;; candidate for machine-dependent LDB/DPB reorganization.
