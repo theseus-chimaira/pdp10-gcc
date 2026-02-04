@@ -10154,6 +10154,99 @@ pdp10_normalize_blt_source_p (src, dest, end, outp)
   return 1;
 }
 
+int
+pdp10_normalize_blt_source_for_output (insn, src, dest, outp)
+     rtx insn;
+     rtx src;
+     rtx dest;
+     rtx *outp;
+{
+  rtx next;
+  rtx pat;
+  rtx use;
+  rtx end;
+  rtx scan;
+  int i;
+
+  next = next_nonnote_insn (insn);
+  if (next == 0
+      || GET_CODE (next) != INSN
+      || GET_CODE (PATTERN (next)) != PARALLEL)
+    return 0;
+
+  pat = PATTERN (next);
+  if (XVECLEN (pat, 0) < 3)
+    return 0;
+
+  use = XVECEXP (pat, 0, 2);
+  if (GET_CODE (use) != USE
+      || GET_CODE (XEXP (use, 0)) != MEM)
+    return 0;
+
+  end = XEXP (XEXP (use, 0), 0);
+
+  /* Some BLTs keep the end address in a register already computed before
+     the BLT setup.  Recover a nearby simple SET chain so source
+     normalization can use the real destination range instead of guessing
+     from the raw register.  The old reload output often computes this as
+     MOVE end,SP followed by ADD end,const.  */
+  if (REG_P (end))
+    {
+      rtx end_reg;
+      HOST_WIDE_INT end_offset;
+
+      end_reg = end;
+      end_offset = 0;
+      scan = prev_nonnote_insn (insn);
+      for (i = 0; scan != 0 && i < 20; scan = prev_nonnote_insn (scan), i++)
+        {
+          rtx set;
+          rtx rhs;
+
+          if (GET_CODE (scan) == JUMP_INSN
+              || GET_CODE (scan) == CALL_INSN
+              || GET_CODE (scan) == CODE_LABEL)
+            break;
+
+          if (GET_CODE (scan) != INSN
+              || GET_CODE (PATTERN (scan)) != SET
+              || !REG_P (SET_DEST (PATTERN (scan)))
+              || REGNO (SET_DEST (PATTERN (scan))) != REGNO (end_reg))
+            continue;
+
+          set = PATTERN (scan);
+          rhs = SET_SRC (set);
+          if (GET_CODE (rhs) == PLUS
+              && REG_P (XEXP (rhs, 0))
+              && REGNO (XEXP (rhs, 0)) == REGNO (end_reg)
+              && GET_CODE (XEXP (rhs, 1)) == CONST_INT)
+            {
+              end_offset += INTVAL (XEXP (rhs, 1));
+              continue;
+            }
+
+          if (GET_CODE (rhs) == PLUS
+              && GET_CODE (XEXP (rhs, 1)) == CONST_INT)
+            {
+              end = plus_constant (XEXP (rhs, 0),
+                                   INTVAL (XEXP (rhs, 1)) + end_offset);
+              break;
+            }
+
+          if (REG_P (rhs) || GET_CODE (rhs) == SYMBOL_REF)
+            {
+              end = plus_constant (rhs, end_offset);
+              break;
+            }
+
+          end = rhs;
+          break;
+        }
+    }
+
+  return pdp10_normalize_blt_source_p (src, dest, end, outp);
+}
+
 /* Try to emit instructions to BLT a memory block of LENGTH storage
    units from SOURCE to DESTINATION.  Return nonzero on success.  */
 static int
@@ -10324,6 +10417,8 @@ pdp10_expand_movstrsi (operands)
      operands[1] is the block source address
      operands[2] is the block length
      operands[3] is the known alignment.  */
+  rtx raw_destination;
+  rtx raw_source;
 
 #if TARGET_STRING
   if (HAVE_MOVSLJ && TARGET_STRING)
@@ -10332,6 +10427,8 @@ pdp10_expand_movstrsi (operands)
 
   operands[0] = XEXP (operands[0], 0);
   operands[1] = XEXP (operands[1], 0);
+  raw_destination = operands[0];
+  raw_source = operands[1];
 
   if (GET_CODE (operands[3]) != CONST_INT
       || INTVAL (operands[3]) != UNITS_PER_WORD)
@@ -10347,6 +10444,18 @@ pdp10_expand_movstrsi (operands)
                                                         length, 1);
       operands[1] = pdp10_normalize_block_word_address (operands[1],
                                                         length, 1);
+
+      /* Structure-return temporaries can be allocated at a real stack word
+	 offset equal to the C-storage-unit size of the destination object.
+	 The generic BLKmode copy then looks like SRC=fp+48, DST=fp+12,
+	 LEN=48 for a twelve-word record.  That source offset is already a
+	 word address; converting it would create a false self-copy from
+	 fp+12 to fp+12 and discard the returned aggregate.  If source
+	 normalization collapses a distinct raw stack source onto the
+	 destination, keep the raw source.  */
+      if (!rtx_equal_p (raw_source, raw_destination)
+	  && rtx_equal_p (operands[1], operands[0]))
+	operands[1] = raw_source;
     }
   else
     operands[1] = pdp10_normalize_block_word_address (operands[1], 0, 0);
@@ -14469,9 +14578,17 @@ void pdp10_md_array_offset (tree exp, tree index, tree unit_size,
 	 byte offset so subword fields inside the aggregate land in the
 	 proper PDP-10 word and byte position.  Scalar arrays, on the
 	 other hand, address whole PDP-10 words/halfwords directly.  */
-      if (TREE_CODE (elem_type) != RECORD_TYPE
-	  && TREE_CODE (elem_type) != UNION_TYPE
-	  && tree_low_cst (unit_size, 1) >= UNITS_PER_WORD)
+      if ((TREE_CODE (elem_type) == RECORD_TYPE
+	   || TREE_CODE (elem_type) == UNION_TYPE)
+	  && tree_low_cst (unit_size, 1) >= UNITS_PER_WORD
+	  && (tree_low_cst (unit_size, 1) % UNITS_PER_WORD) == 0)
+	unit_size = size_binop (TRUNC_DIV_EXPR,
+				unit_size,
+				convert (sizetype,
+					 build_int_2 (2, 0)));
+      else if (TREE_CODE (elem_type) != RECORD_TYPE
+	       && TREE_CODE (elem_type) != UNION_TYPE
+	       && tree_low_cst (unit_size, 1) >= UNITS_PER_WORD)
 	unit_size = size_binop (TRUNC_DIV_EXPR,
 				unit_size,
 				convert (sizetype,
