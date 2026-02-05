@@ -635,6 +635,8 @@ memset_done:
 	.globl	__fixdfsi
 	.globl	__floatsisf
 	.globl	__floatsidf
+	.globl	__floatunssisf
+	.globl	__cmpdf2
 
 __adddf3:
 	; Avoid KA10 SIMH double-float op hangs in the bare harness.
@@ -759,6 +761,64 @@ __fixdfsi:
 	; float high word and clear AC2.  Reuse the tested single-float
 	; decoder so negative fractional values truncate toward zero correctly.
 	jrst __fixsfsi
+
+; Convert unsigned 36-bit integer in AC1 to PDP-10 single float in AC1.
+; This mirrors __floatsisf but keeps the full 36-bit input as a positive
+; magnitude.  It is needed by compiler-emitted unsigned integer to float
+; conversions in the bare PDP-6/KA10 runtime.
+__floatunssisf:
+	jumpe 1,__floatunssisf_zero
+	move 2,1
+	movei 3,233
+__floatunssisf_rnorm:
+	caml 2,[1000000000]
+	 jrst __floatunssisf_rshift
+	jrst __floatunssisf_ltest
+__floatunssisf_rshift:
+	lsh 2,-1
+	addi 3,1
+	jrst __floatunssisf_rnorm
+__floatunssisf_ltest:
+	caml 2,[400000000]
+	 jrst __floatunssisf_pack
+	lsh 2,1
+	subi 3,1
+	jrst __floatunssisf_ltest
+__floatunssisf_pack:
+	lsh 3,33
+	move 1,2
+	ior 1,3
+	popj 17,
+__floatunssisf_zero:
+	movei 1,0
+	popj 17,
+
+; Compare PDP-10 double values in AC1:AC2 and AC3:AC4.
+; Return -1, 0, or +1 in AC1.  This is intentionally small for the
+; baseline PDP-6/KA10 runtime and matches the current double-float
+; approximation model, where the high word carries the tested value.
+__cmpdf2:
+	move 5,1
+	camn 5,3
+	 jrst __cmpdf2_high_equal
+	camg 5,3
+	 jrst __cmpdf2_less
+	movei 1,1
+	popj 17,
+__cmpdf2_less:
+	seto 1,
+	popj 17,
+__cmpdf2_high_equal:
+	move 5,2
+	camn 5,4
+	 jrst __cmpdf2_equal
+	camg 5,4
+	 jrst __cmpdf2_less
+	movei 1,1
+	popj 17,
+__cmpdf2_equal:
+	movei 1,0
+	popj 17,
 
 ; Unsigned SImode division/modulo helpers.
 ;

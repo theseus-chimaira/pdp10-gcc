@@ -3828,6 +3828,8 @@ static int	pdp10_reorg_word_repack_spill_blt PARAMS ((rtx insn));
 static int	pdp10_reorg_word_repack_dmove_direct PARAMS ((rtx insn));
 static int	pdp10_reorg_word_repack_dmove PARAMS ((rtx insn));
 static void	pdp10_reorg_word_repack_copies PARAMS ((rtx first));
+static int	pdp10_reorg_folded_subbp_sum PARAMS ((rtx insn));
+static void	pdp10_reorg_folded_subbp_sums PARAMS ((rtx first));
 
 static void
 convert_voidp_callback (pfile)
@@ -4331,6 +4333,108 @@ pdp10_reorg_word_repack_copies (first)
     }
 }
 
+static int
+pdp10_reorg_folded_subbp_sum (insn)
+     rtx insn;
+{
+  rtx seq[9];
+  rtx dest;
+  rtx src;
+  rtx sum;
+  rtx ptr;
+  rtx tmp;
+  rtx base;
+  rtx diff;
+  rtx x;
+  int i;
+
+  seq[0] = insn;
+  for (i = 1; i < 9; i++)
+    {
+      seq[i] = next_real_insn (seq[i - 1]);
+      if (seq[i] == 0)
+        return 0;
+    }
+
+  if (!pdp10_reorg_set_parts (seq[0], &dest, &src)
+      || !REG_P (dest)
+      || GET_CODE (src) != PLUS
+      || !rtx_equal_p (XEXP (src, 0), dest)
+      || !REG_P (XEXP (src, 1)))
+    return 0;
+  sum = dest;
+  ptr = XEXP (src, 1);
+
+  if (!pdp10_reorg_set_parts (seq[1], &tmp, &src)
+      || !REG_P (tmp)
+      || !rtx_equal_p (src, ptr))
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[2], &base, &src)
+      || !REG_P (base)
+      || !CONSTANT_P (src)
+      || !pdp10_const_byte_pointer_p (src))
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[3], &dest, &src)
+      || !rtx_equal_p (dest, tmp)
+      || GET_CODE (src) != MINUS
+      || !rtx_equal_p (XEXP (src, 0), tmp)
+      || !rtx_equal_p (XEXP (src, 1), base))
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[4], &dest, &src)
+      || GET_CODE (src) != UNSPEC
+      || XINT (src, 1) != 12)
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[5], &diff, &src)
+      || !REG_P (diff))
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[6], &dest, &src)
+      || !rtx_equal_p (dest, diff)
+      || GET_CODE (src) != ASHIFTRT)
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[7], &dest, &src)
+      || !rtx_equal_p (dest, diff)
+      || GET_CODE (src) != PLUS)
+    return 0;
+  x = XEXP (src, 1);
+  if (GET_CODE (x) != MEM)
+    return 0;
+  x = XEXP (x, 0);
+  if (GET_CODE (x) != PLUS
+      || GET_CODE (XEXP (x, 1)) != SYMBOL_REF
+      || strcmp (XSTR (XEXP (x, 1), 0), "%BADL9") != 0)
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[8], &dest, &src)
+      || !rtx_equal_p (dest, sum)
+      || GET_CODE (src) != PLUS
+      || !rtx_equal_p (XEXP (src, 0), sum)
+      || !rtx_equal_p (XEXP (src, 1), diff))
+    return 0;
+
+  delete_insn (seq[0]);
+  return 1;
+}
+
+static void
+pdp10_reorg_folded_subbp_sums (first)
+     rtx first;
+{
+  rtx insn;
+
+  for (insn = next_real_insn (first); insn; insn = next_real_insn (insn))
+    {
+      if (INSN_DELETED_P (insn))
+        continue;
+      pdp10_reorg_folded_subbp_sum (insn);
+    }
+}
+
 /* Called by the MACHINE_DEPENDENT_REORG macro.
 
    This is ran as the last optimization pass.  (If there was a delayed
@@ -4342,6 +4446,7 @@ pdp10_machine_dependent_reorg (first)
 {
   rtx insn;
 
+  pdp10_reorg_folded_subbp_sums (first);
   pdp10_reorg_word_repack_copies (first);
 
   if (!optimize)
@@ -12033,6 +12138,10 @@ static void	maybe_warn_about_pointer_conversion PARAMS ((tree, int, int));
 #endif
 static tree	strip_conversions PARAMS ((enum tree_code code, tree type,
 					   tree exp));
+static tree	pdp10_strip_all_conversions PARAMS ((tree exp));
+static rtx	pdp10_expand_int_plus_ptr_minus_const PARAMS ((enum machine_mode mode,
+							       rtx target,
+							       tree exp));
 static void	emit_cmp_and_jump_insn_1 PARAMS ((rtx x, rtx y,
 						  enum machine_mode mode,
 						  enum rtx_code comparison,
@@ -12111,6 +12220,93 @@ strip_conversions (code, type, exp)
   return exp;
 }
 
+static tree
+pdp10_strip_all_conversions (exp)
+     tree exp;
+{
+  while (TREE_CODE (exp) == NOP_EXPR || TREE_CODE (exp) == CONVERT_EXPR)
+    exp = TREE_OPERAND (exp, 0);
+  return exp;
+}
+
+/* Expand folded integer forms like
+
+     s + (PTR - CONST_BYTE_POINTER)
+
+   when the middle end has exposed them as
+
+     (s + (ptrdiff_t) PTR) + -CONST_BYTE_POINTER
+
+   A plain integer expansion would add the encoded byte-pointer word to S.
+   A pointer expansion is worse: it adjusts S as if S itself were a byte
+   pointer.  Rebuild the intended byte-pointer subtraction from the tree and
+   then add the resulting byte count to the integer term.  */
+static rtx
+pdp10_expand_int_plus_ptr_minus_const (mode, target, exp)
+     enum machine_mode mode;
+     rtx target;
+     tree exp;
+{
+  tree lhs;
+  tree rhs;
+  tree a;
+  tree b;
+  tree int_exp;
+  tree ptr_exp;
+  tree base_exp;
+  rtx int_rtx;
+  rtx ptr_rtx;
+  rtx base_rtx;
+  rtx diff;
+
+  if (TREE_CODE (exp) != PLUS_EXPR || POINTER_TYPE_P (TREE_TYPE (exp)))
+    return NULL_RTX;
+
+  lhs = pdp10_strip_all_conversions (TREE_OPERAND (exp, 0));
+  rhs = pdp10_strip_all_conversions (TREE_OPERAND (exp, 1));
+  if (TREE_CODE (lhs) != PLUS_EXPR || TREE_CODE (rhs) != NEGATE_EXPR)
+    return NULL_RTX;
+
+
+  a = pdp10_strip_all_conversions (TREE_OPERAND (lhs, 0));
+  b = pdp10_strip_all_conversions (TREE_OPERAND (lhs, 1));
+
+  if (POINTER_TYPE_P (TREE_TYPE (a)) && !POINTER_TYPE_P (TREE_TYPE (b)))
+    {
+      ptr_exp = a;
+      int_exp = TREE_OPERAND (lhs, 1);
+    }
+  else if (!POINTER_TYPE_P (TREE_TYPE (a)) && POINTER_TYPE_P (TREE_TYPE (b)))
+    {
+      int_exp = TREE_OPERAND (lhs, 0);
+      ptr_exp = b;
+    }
+  else
+    return NULL_RTX;
+
+
+  base_exp = TREE_OPERAND (rhs, 0);
+  base_rtx = expand_expr (base_exp, NULL_RTX, Pmode, EXPAND_CONST_ADDRESS);
+  if (!CONSTANT_P (base_rtx) || !pdp10_const_byte_pointer_p (base_rtx))
+    return NULL_RTX;
+
+  if (!target)
+    target = gen_reg_rtx (mode);
+
+  int_rtx = expand_expr (int_exp, NULL_RTX, mode, EXPAND_NORMAL);
+  ptr_rtx = expand_expr (ptr_exp, NULL_RTX, Pmode, EXPAND_NORMAL);
+  diff = expand_subtract_pointers (mode, gen_reg_rtx (Pmode), ptr_rtx,
+				       TREE_TYPE (ptr_exp), base_rtx,
+				       TREE_TYPE (ptr_exp));
+
+  if (!register_operand (int_rtx, mode))
+    int_rtx = force_reg (mode, int_rtx);
+  if (!register_operand (diff, mode))
+    diff = force_reg (mode, diff);
+  emit_insn (gen_addsi3 (target, int_rtx, diff));
+  return target;
+}
+
 /* Expand RTL instructions from a binary parse tree expression.  */
 rtx
 pdp10_expand_binop (mode, binoptab, op0, op1, target, unsignedp, methods, exp)
@@ -12143,7 +12339,19 @@ pdp10_expand_binop (mode, binoptab, op0, op1, target, unsignedp, methods, exp)
       exp1 = strip_conversions (code, TREE_TYPE (exp), TREE_OPERAND (exp, 1));
       type1 = TREE_TYPE (exp1);
       ptr1 = POINTER_TYPE_P (type1) && GET_CODE (op1) != CONST_INT;
-      if (!ptr1 && TREE_CODE (exp1) == MINUS_EXPR)
+
+      /* A pointer difference hidden under conversions may be used as an
+	 integer value, for example in
+
+	   s += (int)(p - global_byte_array)
+
+	 Do not classify the outer integer PLUS_EXPR as pointer arithmetic just
+	 because its right operand contains a pointer subtraction.  That makes
+	 expand_add_or_sub_pointer treat the integer accumulator as a byte
+	 pointer.  The hidden-pointer test is only useful when the outer
+	 expression itself produces a pointer value.  */
+      if (!ptr1 && POINTER_TYPE_P (TREE_TYPE (exp))
+	  && TREE_CODE (exp1) == MINUS_EXPR)
 	{
 	  if (POINTER_TYPE_P (TREE_TYPE (TREE_OPERAND (exp1, 0))))
 	    {
@@ -12162,6 +12370,12 @@ pdp10_expand_binop (mode, binoptab, op0, op1, target, unsignedp, methods, exp)
     {
     case PLUS_EXPR:
     case MINUS_EXPR:
+      if (code == PLUS_EXPR)
+	{
+	  rtx x = pdp10_expand_int_plus_ptr_minus_const (mode, target, exp);
+	  if (x != NULL_RTX)
+	    return x;
+	}
       add = (code == PLUS_EXPR);
       if (GET_CODE (op0) == NEG)
 	{
@@ -12175,6 +12389,54 @@ pdp10_expand_binop (mode, binoptab, op0, op1, target, unsignedp, methods, exp)
 	}
       if (!add && ptr0 && ptr1)
 	return expand_subtract_pointers (mode, target, op0, type0, op1, type1);
+
+      /* The middle end can also leave pointer subtraction against a
+	 constant byte pointer as a plain MINUS_EXPR whose result type is
+	 integer ptrdiff_t.  In that case PTR1 is false because the RTL
+	 operand is a constant, not a register-valued pointer.  Do not send
+	 this to expand_add_or_sub_pointer: that routine adjusts a byte
+	 pointer and returns a byte pointer, which corrupts integer forms such
+	 as
+
+	   s += p - global_byte_array;
+
+	 Use the byte-pointer subtraction path so the result is a byte count.  */
+      if (!add && ptr0 && !POINTER_TYPE_P (TREE_TYPE (exp))
+	  && CONSTANT_P (op1) && pdp10_const_byte_pointer_p (op1))
+	return expand_subtract_pointers (mode, target, op0, type0,
+					 op1, type0);
+
+      /* The middle end can fold pointer subtraction against a constant
+	 byte pointer into a PLUS_EXPR whose second RTL operand is the
+	 negated pointer constant, while the tree result is still an
+	 integer ptrdiff_t.  Do not treat that as pointer plus integer:
+	 expand_add_or_sub_pointer would use TARGET as the byte pointer
+	 being adjusted, which corrupts expressions such as
+
+	   s += p - global_byte_array;
+
+	 when TARGET already holds the running integer sum.  Recover the
+	 positive byte-pointer constant and use the byte-pointer subtraction
+	 path instead.  */
+      if (add && ptr0 && !POINTER_TYPE_P (TREE_TYPE (exp))
+	  && CONSTANT_P (op1))
+	{
+	  rtx rhs = negate_rtx (Pmode, op1);
+
+	  if (pdp10_const_byte_pointer_p (rhs))
+	    return expand_subtract_pointers (mode, target, op0, type0,
+					     rhs, type0);
+	}
+
+      /* Do not perform pointer adjustment for an outer integer expression
+	 whose only pointer operand came from stripping a ptrdiff_t conversion.
+	 Such forms are part of folded pointer-difference arithmetic.  Let the
+	 ordinary integer expander handle the already-expanded operands unless a
+	 more specific pointer-difference pattern above matched.  */
+      if (add && !POINTER_TYPE_P (TREE_TYPE (exp))
+	  && ((ptr0 && !ptr1) || (!ptr0 && ptr1)))
+	break;
+
       if (ptr0 || ptr1)
 	{
 	  if (POINTER_TYPE_P (TREE_TYPE (exp)))
