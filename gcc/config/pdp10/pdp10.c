@@ -7196,6 +7196,56 @@ pdp10_output_store_byte (insn, operands)
           HOST_WIDE_INT logicaloff;
           int unsignedp;
 
+          /* If reload leaves a register-held address for a byte-sized field,
+             it may be an ADJBP-built PDP-10 byte pointer rather than a plain
+             word address.  DPB through that register would then use the
+             register's byte size, e.g. 18 bits for a struct-record pointer,
+             and corrupt adjacent 9-bit char fields.  Rebuild an explicit
+             9-bit POINT using only the register's address half.  For scalar
+             COMPONENT_REFs, ignore negative MEM_OFFSET values that describe
+             how GCC formed the temporary address; the FIELD_DECL bit position
+             is the selected byte.  Array fields still need MEM_OFFSET because
+             it carries the element displacement relative to the field base. */
+          if (MEM_EXPR (operands[0]) != 0
+              && TREE_CODE (MEM_EXPR (operands[0])) == COMPONENT_REF)
+            {
+              tree field = TREE_OPERAND (MEM_EXPR (operands[0]), 1);
+
+              if (field != 0 && TREE_CODE (field) == FIELD_DECL)
+                {
+                  HOST_WIDE_INT fieldbit;
+                  HOST_WIDE_INT inword;
+                  int ps;
+                  rtx ops[3];
+                  char abuf[64];
+                  rtx scratch = gen_rtx_REG (SImode, 0);
+
+                  fieldbit = int_bit_position (field);
+                  if (TREE_CODE (TREE_TYPE (MEM_EXPR (operands[0])))
+                      == ARRAY_TYPE
+                      && MEM_OFFSET (operands[0]) != 0
+                      && GET_CODE (MEM_OFFSET (operands[0])) == CONST_INT)
+                    fieldbit += INTVAL (MEM_OFFSET (operands[0]))
+                      * BITS_PER_UNIT;
+                  inword = ((fieldbit + BITS_PER_UNIT - 1) / BITS_PER_UNIT)
+                    % UNITS_PER_WORD;
+                  if (inword < 0)
+                    inword += UNITS_PER_WORD;
+                  ps = ((BITS_PER_WORD
+                         - (int) inword * BITS_PER_UNIT
+                         - BITS_PER_UNIT) << 6) + BITS_PER_UNIT;
+
+                  ops[0] = scratch;
+                  ops[1] = XEXP (operands[0], 0);
+                  ops[2] = operands[1];
+                  output_asm_insn ("hrrz %0,%1", ops);
+                  sprintf (abuf, "tlo %%0,%o", ps << 6);
+                  output_asm_insn (abuf, ops);
+                  output_asm_insn ("dpb %2,%0", ops);
+                  return "";
+                }
+            }
+
           /* For nested local byte arrays, reload can leave a byte-pointer
              register whose right half already contains several folded word
              adjustments, while MEM_EXPR still describes the absolute C field
@@ -13501,6 +13551,9 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
 {
   tree object;
   tree base_tree = NULL_TREE;
+  tree dyn_index = NULL_TREE;
+  tree dyn_elem_type = NULL_TREE;
+  HOST_WIDE_INT dyn_index_scale = 1;
   rtx base_rtx;
   rtx base_addr;
   rtx addr;
@@ -13531,7 +13584,66 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
   if (!VALID_OWGBP_BYTE_SIZE_P (bytesize) || bytesize >= BITS_PER_WORD)
     return NULL_RTX;
 
-  if (!pdp10_dynamic_ref_base_bitpos (object, &base_tree, &bitpos))
+  if (TREE_CODE (object) == COMPONENT_REF
+      && TREE_CODE (TREE_OPERAND (object, 0)) == ARRAY_REF
+      && !host_integerp (TREE_OPERAND (TREE_OPERAND (object, 0), 1), 0))
+    {
+      tree array_ref = TREE_OPERAND (object, 0);
+      tree array = TREE_OPERAND (array_ref, 0);
+      tree index = TREE_OPERAND (array_ref, 1);
+      tree field = TREE_OPERAND (object, 1);
+      pdp10_word36 base_bits;
+      pdp10_word36 record_bits;
+
+      if (field == NULL_TREE || TREE_CODE (field) != FIELD_DECL)
+        return NULL_RTX;
+      if (!pdp10_dynamic_ref_base_bitpos (array, &base_tree, &base_bits))
+        return NULL_RTX;
+      if (!pdp10_initializer_type_bitsize (TREE_TYPE (array_ref),
+                                           &record_bits))
+        return NULL_RTX;
+      if ((record_bits % (pdp10_word36) bytesize) != 0)
+        return NULL_RTX;
+
+      /* Dynamic a[i].field must first build a byte pointer to a[0].field and
+         only then add i scaled by the record stride in field-sized bytes.
+         The generic path can add the stride to a record pointer and then DPB
+         through that pointer.  For subword fields this uses the record
+         pointer's byte size (often 18) instead of the selected field byte
+         size (usually 9), corrupting adjacent fields.  */
+      bitpos = base_bits + (pdp10_word36) int_bit_position (field);
+      dyn_index = index;
+      dyn_elem_type = TREE_TYPE (object);
+      dyn_index_scale = (HOST_WIDE_INT) (record_bits / (pdp10_word36) bytesize);
+    }
+  else if (TREE_CODE (object) == ARRAY_REF
+      && TREE_CODE (TREE_OPERAND (object, 0)) == COMPONENT_REF
+      && !host_integerp (TREE_OPERAND (object, 1), 0))
+    {
+      tree array = TREE_OPERAND (object, 0);
+      tree index = TREE_OPERAND (object, 1);
+      tree record_object = TREE_OPERAND (array, 0);
+      tree field = TREE_OPERAND (array, 1);
+      pdp10_word36 base_bits;
+
+      if (field == NULL_TREE || TREE_CODE (field) != FIELD_DECL)
+        return NULL_RTX;
+      if (!pdp10_dynamic_ref_base_bitpos (record_object, &base_tree,
+                                          &base_bits))
+        return NULL_RTX;
+
+      /* Dynamic p->field[i] must build a byte pointer to field[0] first,
+         then adjust that byte pointer by i elements.  The generic address
+         path may instead adjust the incoming struct pointer and only add the
+         field word offset later.  On PDP-6/KA10 this is wrong for a struct
+         pointer represented as a halfword byte pointer: IBP then walks
+         18-bit slots while the element index is a 9-bit char count.  */
+      bitpos = base_bits + (pdp10_word36) int_bit_position (field);
+      dyn_index = index;
+      dyn_elem_type = TREE_TYPE (object);
+      dyn_index_scale = 1;
+    }
+  else if (!pdp10_dynamic_ref_base_bitpos (object, &base_tree, &bitpos))
     return NULL_RTX;
 
   byte_pos = bitpos % BITS_PER_WORD;
@@ -13603,6 +13715,24 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
      which leaves IDPB/ILDB pointing at nonsense and misses packed struct
      fields. */
   emit_TLO (reg, reg, ps << 6);
+
+  if (dyn_index != NULL_TREE)
+    {
+      rtx index_rtx;
+
+      index_rtx = expand_expr (dyn_index, NULL_RTX, Pmode, EXPAND_NORMAL);
+      if (!register_operand (index_rtx, Pmode))
+        index_rtx = force_reg (Pmode, index_rtx);
+      if (dyn_index_scale != 1)
+        {
+          rtx scaled = gen_reg_rtx (Pmode);
+          emit_insn (gen_mulsi3 (scaled, index_rtx,
+                                 GEN_INT (dyn_index_scale)));
+          index_rtx = scaled;
+        }
+      return pdp10_expand_addbp3 (dyn_elem_type, reg, reg, index_rtx);
+    }
+
   return reg;
 }
 
