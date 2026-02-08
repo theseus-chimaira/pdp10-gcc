@@ -14999,8 +14999,9 @@ void pdp10_md_array_offset (tree exp, tree index, tree unit_size,
 	 byte offset so subword fields inside the aggregate land in the
 	 proper PDP-10 word and byte position.  Scalar arrays, on the
 	 other hand, address whole PDP-10 words/halfwords directly.  */
-      if ((TREE_CODE (elem_type) == RECORD_TYPE
-	   || TREE_CODE (elem_type) == UNION_TYPE)
+      if (0
+	  && (TREE_CODE (elem_type) == RECORD_TYPE
+	      || TREE_CODE (elem_type) == UNION_TYPE)
 	  && tree_low_cst (unit_size, 1) >= UNITS_PER_WORD
 	  && (tree_low_cst (unit_size, 1) % UNITS_PER_WORD) == 0)
 	unit_size = size_binop (TRUNC_DIV_EXPR,
