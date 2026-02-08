@@ -7224,7 +7224,8 @@ pdp10_output_store_byte (insn, operands)
                   if (TREE_CODE (TREE_TYPE (MEM_EXPR (operands[0])))
                       == ARRAY_TYPE
                       && MEM_OFFSET (operands[0]) != 0
-                      && GET_CODE (MEM_OFFSET (operands[0])) == CONST_INT)
+                      && GET_CODE (MEM_OFFSET (operands[0])) == CONST_INT
+                      && INTVAL (MEM_OFFSET (operands[0])) > 0)
                     fieldbit += INTVAL (MEM_OFFSET (operands[0]))
                       * BITS_PER_UNIT;
                   inword = ((fieldbit + BITS_PER_UNIT - 1) / BITS_PER_UNIT)
@@ -8400,6 +8401,34 @@ output_bitfield_move (stream, insn, store, sign, reg, x, len, pos)
 {
   int extend = sign || (GET_CODE (x) == MEM
 			&& GET_CODE (XEXP (x, 0)) == POST_INC);
+
+  if (GET_CODE (x) == MEM
+      && GET_CODE (XEXP (x, 0)) == MEM
+      && pos >= 0
+      && VALID_OWGBP_BYTE_SIZE_P (len)
+      && pos + len <= BITS_PER_WORD)
+    {
+      rtx ops[3];
+      rtx scratch = gen_rtx_REG (SImode, 0);
+      int ps;
+      char buf[64];
+
+      ps = ((BITS_PER_WORD - pos - len) << 6) + len;
+      ops[0] = reg;
+      ops[1] = XEXP (x, 0);
+      ops[2] = scratch;
+
+      output_asm_insn ("hrrz %2,%1", ops);
+      sprintf (buf, "tlo %%2,%o", ps << 6);
+      output_asm_insn (buf, ops);
+      output_asm_insn (store ? "dpb %0,%2" : "ldb %0,%2", ops);
+      if (!store && sign && len == 9)
+        {
+          output_asm_insn ("trne %0,400", ops);
+          output_asm_insn ("orcmi %0,777", ops);
+        }
+      return "";
+    }
 
   if (extend && !TARGET_XKL2)
     {
