@@ -7095,7 +7095,68 @@ pdp10_output_load_unsigned_byte (insn, operands)
           return "";
         }
 
-      if (MEM_ALIGN (operands[1]) >= BITS_PER_WORD
+      if (GET_MODE (operands[1]) == QImode
+          && REG_P (addr)
+          && MEM_EXPR (operands[1]) != 0
+          && TREE_CODE (MEM_EXPR (operands[1])) == COMPONENT_REF
+          && TREE_CODE (TREE_TYPE (MEM_EXPR (operands[1]))) != ARRAY_TYPE)
+        {
+          tree field = TREE_OPERAND (MEM_EXPR (operands[1]), 1);
+
+          if (field != 0 && TREE_CODE (field) == FIELD_DECL)
+            {
+              HOST_WIDE_INT fieldbit;
+              HOST_WIDE_INT inword;
+              int ps;
+              rtx ops[3];
+              char abuf[64];
+              rtx scratch = gen_rtx_REG (SImode, 0);
+
+              fieldbit = int_bit_position (field);
+              if (TREE_CODE (TREE_TYPE (MEM_EXPR (operands[1])))
+                  == ARRAY_TYPE
+                  && MEM_OFFSET (operands[1]) != 0
+                  && GET_CODE (MEM_OFFSET (operands[1])) == CONST_INT
+                  && INTVAL (MEM_OFFSET (operands[1])) > 0)
+                fieldbit += INTVAL (MEM_OFFSET (operands[1]))
+                  * BITS_PER_UNIT;
+              inword = ((fieldbit + BITS_PER_UNIT - 1) / BITS_PER_UNIT)
+                % UNITS_PER_WORD;
+              if (inword < 0)
+                inword += UNITS_PER_WORD;
+              ps = ((BITS_PER_WORD
+                     - (int) inword * BITS_PER_UNIT
+                     - BITS_PER_UNIT) << 6) + BITS_PER_UNIT;
+
+              ops[0] = operands[0];
+              ops[1] = scratch;
+              ops[2] = addr;
+              output_asm_insn ("hrrz %1,%2", ops);
+              sprintf (abuf, "tlo %%1,%o", ps << 6);
+              output_asm_insn (abuf, ops);
+              output_asm_insn ("ldb %0,%1", ops);
+              return "";
+            }
+        }
+
+      if (GET_MODE (operands[1]) == QImode
+          && MEM_EXPR (operands[1]) != 0
+          && TREE_CODE (MEM_EXPR (operands[1])) == COMPONENT_REF
+          && TREE_CODE (TREE_TYPE (MEM_EXPR (operands[1]))) != ARRAY_TYPE)
+        {
+          tree field = TREE_OPERAND (MEM_EXPR (operands[1]), 1);
+
+          if (field != 0 && TREE_CODE (field) == FIELD_DECL)
+            {
+              HOST_WIDE_INT bitpos = int_bit_position (field);
+              pos = (int) (bitpos % BITS_PER_WORD);
+              if (pos < 0)
+                pos += BITS_PER_WORD;
+            }
+        }
+
+      if (pos == -1
+          && MEM_ALIGN (operands[1]) >= BITS_PER_WORD
           && !MEM_SCALAR_P (operands[1]))
         pos = 0;
     }
@@ -7130,6 +7191,71 @@ pdp10_output_load_signed_byte (insn, operands)
           output_asm_insn ("trne %0,400", ops);
           output_asm_insn ("orcmi %0,777", ops);
           return "";
+        }
+
+      if (GET_MODE (operands[1]) == QImode
+          && REG_P (addr)
+          && MEM_EXPR (operands[1]) != 0
+          && TREE_CODE (MEM_EXPR (operands[1])) == COMPONENT_REF
+          && TREE_CODE (TREE_TYPE (MEM_EXPR (operands[1]))) != ARRAY_TYPE)
+        {
+          tree field = TREE_OPERAND (MEM_EXPR (operands[1]), 1);
+
+          if (field != 0 && TREE_CODE (field) == FIELD_DECL)
+            {
+              HOST_WIDE_INT fieldbit;
+              HOST_WIDE_INT inword;
+              int ps;
+              rtx ops[3];
+              char abuf[64];
+              rtx scratch = gen_rtx_REG (SImode, 0);
+
+              fieldbit = int_bit_position (field);
+              if (TREE_CODE (TREE_TYPE (MEM_EXPR (operands[1])))
+                  == ARRAY_TYPE
+                  && MEM_OFFSET (operands[1]) != 0
+                  && GET_CODE (MEM_OFFSET (operands[1])) == CONST_INT
+                  && INTVAL (MEM_OFFSET (operands[1])) > 0)
+                fieldbit += INTVAL (MEM_OFFSET (operands[1]))
+                  * BITS_PER_UNIT;
+              inword = ((fieldbit + BITS_PER_UNIT - 1) / BITS_PER_UNIT)
+                % UNITS_PER_WORD;
+              if (inword < 0)
+                inword += UNITS_PER_WORD;
+              ps = ((BITS_PER_WORD
+                     - (int) inword * BITS_PER_UNIT
+                     - BITS_PER_UNIT) << 6) + BITS_PER_UNIT;
+
+              ops[0] = operands[0];
+              ops[1] = scratch;
+              ops[2] = addr;
+              output_asm_insn ("hrrz %1,%2", ops);
+              sprintf (abuf, "tlo %%1,%o", ps << 6);
+              output_asm_insn (abuf, ops);
+              output_asm_insn ("ldb %0,%1", ops);
+              output_asm_insn ("trne %0,400", ops);
+              output_asm_insn ("orcmi %0,777", ops);
+              return "";
+            }
+        }
+    }
+
+  if (GET_CODE (operands[1]) == MEM
+      && GET_MODE (operands[1]) == QImode
+      && MEM_EXPR (operands[1]) != 0
+      && TREE_CODE (MEM_EXPR (operands[1])) == COMPONENT_REF
+      && TREE_CODE (TREE_TYPE (MEM_EXPR (operands[1]))) != ARRAY_TYPE)
+    {
+      tree field = TREE_OPERAND (MEM_EXPR (operands[1]), 1);
+
+      if (field != 0 && TREE_CODE (field) == FIELD_DECL)
+        {
+          HOST_WIDE_INT bitpos = int_bit_position (field);
+          int pos = (int) (bitpos % BITS_PER_WORD);
+          if (pos < 0)
+            pos += BITS_PER_WORD;
+          return output_bitfield_move (asm_out_file, insn, 0, 1,
+                                       operands[0], operands[1], 9, pos);
         }
     }
 
@@ -7207,7 +7333,8 @@ pdp10_output_store_byte (insn, operands)
              is the selected byte.  Array fields still need MEM_OFFSET because
              it carries the element displacement relative to the field base. */
           if (MEM_EXPR (operands[0]) != 0
-              && TREE_CODE (MEM_EXPR (operands[0])) == COMPONENT_REF)
+              && TREE_CODE (MEM_EXPR (operands[0])) == COMPONENT_REF
+              && TREE_CODE (TREE_TYPE (MEM_EXPR (operands[0]))) != ARRAY_TYPE)
             {
               tree field = TREE_OPERAND (MEM_EXPR (operands[0]), 1);
 
@@ -7253,7 +7380,9 @@ pdp10_output_store_byte (insn, operands)
              path.  Do not DPB through the adjusted pointer itself: recover the
              absolute bit position from MEM_EXPR and subtract the word offset
              already present in the byte-pointer register.  */
-          if (MEM_EXPR (operands[0]) != 0)
+          if (MEM_EXPR (operands[0]) != 0
+              && !(TREE_CODE (MEM_EXPR (operands[0])) == COMPONENT_REF
+                   && TREE_CODE (TREE_TYPE (MEM_EXPR (operands[0]))) == ARRAY_TYPE))
             {
               pdp10_word36 bitpos;
               HOST_WIDE_INT reg_wordoff;
@@ -8727,6 +8856,26 @@ pdp10_output_lshiftrt_memory (insn, operands)
 
   if (GET_CODE (mem) == MEM
       && INTVAL (operands[2]) == 27
+      && MEM_EXPR (mem) != 0
+      && TREE_CODE (MEM_EXPR (mem)) == COMPONENT_REF
+      && TREE_CODE (TREE_TYPE (MEM_EXPR (mem))) != ARRAY_TYPE)
+    {
+      tree field = TREE_OPERAND (MEM_EXPR (mem), 1);
+
+      if (field != 0 && TREE_CODE (field) == FIELD_DECL)
+        {
+          HOST_WIDE_INT fieldbit = int_bit_position (field);
+          int pos = (int) (fieldbit % BITS_PER_WORD);
+
+          if (pos < 0)
+            pos += BITS_PER_WORD;
+          return output_bitfield_move (asm_out_file, insn, 0, 0,
+                                       operands[0], mem, BITS_PER_UNIT, pos);
+        }
+    }
+
+  if (GET_CODE (mem) == MEM
+      && INTVAL (operands[2]) == 27
       && REG_P (XEXP (mem, 0))
       && (MEM_ALIGN (mem) <= BITS_PER_UNIT
           || pdp10_reg_likely_byte_pointer_p (XEXP (mem, 0), insn)))
@@ -8950,6 +9099,27 @@ pdp10_output_extzv (insn, operands)
      rtx insn;
      rtx *operands;
 {
+  if (INTVAL (operands[2]) == 9
+      && INTVAL (operands[3]) == 0
+      && GET_CODE (operands[1]) == MEM
+      && MEM_EXPR (operands[1]) != 0
+      && TREE_CODE (MEM_EXPR (operands[1])) == COMPONENT_REF
+      && TREE_CODE (TREE_TYPE (MEM_EXPR (operands[1]))) != ARRAY_TYPE)
+    {
+      tree field = TREE_OPERAND (MEM_EXPR (operands[1]), 1);
+
+      if (field != 0 && TREE_CODE (field) == FIELD_DECL)
+        {
+          HOST_WIDE_INT bitpos = int_bit_position (field);
+          int pos = (int) (bitpos % BITS_PER_WORD);
+
+          if (pos < 0)
+            pos += BITS_PER_WORD;
+          return output_bitfield_move (asm_out_file, insn, 0, 0,
+                                       operands[0], operands[1], 9, pos);
+        }
+    }
+
   if (INTVAL (operands[2]) == 9
       && INTVAL (operands[3]) == 0
       && GET_CODE (operands[1]) == MEM
@@ -13716,6 +13886,12 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
   if (GET_CODE (base_addr) == REG && !REGNO_PTR_FRAME_P (REGNO (base_addr)))
     {
       emit_move_insn (reg, base_addr);
+      /* BASE_ADDR may itself be a PDP-10 byte pointer, for example a
+         struct pointer used to form p->char_field[i].  Clear the old P,S
+         bits before installing this object's P,S selector; ORing the new
+         selector into an 18-bit record pointer leaves a corrupt byte
+         pointer for dynamic char array accesses.  */
+      emit_insn (gen_HRRZ (reg, reg));
       if (word_offset != 0)
         emit_insn (gen_addsi3 (reg, reg, GEN_INT ((HOST_WIDE_INT) word_offset)));
     }
@@ -13724,9 +13900,11 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
       /* BASE_ADDR is the run-time pointer value loaded from an object such as
          a pointer parameter's stack slot.  Do not wrap MEM+offset in
          UNSPEC_ADDRESS/MOVEI; that is an invalid address expression after
-         virtual register instantiation.  Load the pointer value first, then
-         add the word offset to its address half before installing P,S.  */
+         virtual register instantiation.  Load the pointer value first, clear
+         any old P,S byte-pointer selector, then add the word offset before
+         installing the selected field/element P,S.  */
       emit_move_insn (reg, base_addr);
+      emit_insn (gen_HRRZ (reg, reg));
       if (word_offset != 0)
         emit_insn (gen_addsi3 (reg, reg, GEN_INT ((HOST_WIDE_INT) word_offset)));
     }
