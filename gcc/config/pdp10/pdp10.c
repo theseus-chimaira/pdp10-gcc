@@ -9099,6 +9099,14 @@ pdp10_output_extzv (insn, operands)
      rtx insn;
      rtx *operands;
 {
+  if (INTVAL (operands[2]) == 18
+      && INTVAL (operands[3]) == 18
+      && GET_CODE (operands[1]) == MEM
+      && MEM_EXPR (operands[1]) != 0
+      && TREE_CODE (MEM_EXPR (operands[1])) == COMPONENT_REF
+      && POINTER_TYPE_P (TREE_TYPE (MEM_EXPR (operands[1]))))
+    return "hrrz %0,%W1";
+
   if (INTVAL (operands[2]) == 9
       && INTVAL (operands[3]) == 0
       && GET_CODE (operands[1]) == MEM
@@ -12478,6 +12486,151 @@ pdp10_strip_all_conversions (exp)
   return exp;
 }
 
+
+#define PDP10_MAX_FOLDED_PTR_TERMS 4
+
+struct pdp10_folded_ptr_terms
+{
+  tree int_terms[PDP10_MAX_FOLDED_PTR_TERMS * 2];
+  tree ptr_terms[PDP10_MAX_FOLDED_PTR_TERMS];
+  tree base_terms[PDP10_MAX_FOLDED_PTR_TERMS];
+  int n_int;
+  int n_ptr;
+  int n_base;
+  int failed;
+};
+
+static void pdp10_collect_folded_ptr_terms PARAMS ((tree,
+                                                    struct pdp10_folded_ptr_terms *,
+                                                    int));
+static rtx pdp10_expand_folded_ptr_sum PARAMS ((enum machine_mode, rtx, tree));
+
+static void
+pdp10_collect_folded_ptr_terms (exp, out, neg)
+     tree exp;
+     struct pdp10_folded_ptr_terms *out;
+     int neg;
+{
+  tree stripped;
+
+  if (out->failed)
+    return;
+
+  stripped = pdp10_strip_all_conversions (exp);
+
+  if (!neg && TREE_CODE (stripped) == PLUS_EXPR)
+    {
+      pdp10_collect_folded_ptr_terms (TREE_OPERAND (stripped, 0), out, 0);
+      pdp10_collect_folded_ptr_terms (TREE_OPERAND (stripped, 1), out, 0);
+      return;
+    }
+
+  if (!neg && TREE_CODE (stripped) == MINUS_EXPR)
+    {
+      pdp10_collect_folded_ptr_terms (TREE_OPERAND (stripped, 0), out, 0);
+      pdp10_collect_folded_ptr_terms (TREE_OPERAND (stripped, 1), out, 1);
+      return;
+    }
+
+  if (!neg && TREE_CODE (stripped) == NEGATE_EXPR)
+    {
+      pdp10_collect_folded_ptr_terms (TREE_OPERAND (stripped, 0), out, 1);
+      return;
+    }
+
+  if (!neg && POINTER_TYPE_P (TREE_TYPE (stripped)))
+    {
+      if (out->n_ptr >= PDP10_MAX_FOLDED_PTR_TERMS)
+        out->failed = 1;
+      else
+        out->ptr_terms[out->n_ptr++] = stripped;
+      return;
+    }
+
+  if (neg && POINTER_TYPE_P (TREE_TYPE (stripped)))
+    {
+      if (out->n_base >= PDP10_MAX_FOLDED_PTR_TERMS)
+        out->failed = 1;
+      else
+        out->base_terms[out->n_base++] = stripped;
+      return;
+    }
+
+  if (neg)
+    out->failed = 1;
+  else if (out->n_int >= PDP10_MAX_FOLDED_PTR_TERMS * 2)
+    out->failed = 1;
+  else
+    out->int_terms[out->n_int++] = exp;
+}
+
+
+
+static rtx
+pdp10_expand_folded_ptr_sum (mode, target, exp)
+     enum machine_mode mode;
+     rtx target;
+     tree exp;
+{
+  struct pdp10_folded_ptr_terms terms;
+  int i;
+  rtx acc;
+
+  if (POINTER_TYPE_P (TREE_TYPE (exp)))
+    return NULL_RTX;
+
+  memset ((char *) &terms, 0, sizeof terms);
+  pdp10_collect_folded_ptr_terms (exp, &terms, 0);
+
+  if (terms.failed || terms.n_ptr == 0 || terms.n_ptr != terms.n_base)
+    return NULL_RTX;
+
+  acc = gen_reg_rtx (SImode);
+  emit_move_insn (acc, const0_rtx);
+
+  for (i = 0; i < terms.n_int; i++)
+    {
+      rtx x = expand_expr (terms.int_terms[i], NULL_RTX, SImode,
+                           EXPAND_NORMAL);
+      if (GET_MODE (x) != SImode && GET_MODE (x) != VOIDmode)
+        x = convert_to_mode (SImode, x, 0);
+      if (!register_operand (x, SImode))
+        x = force_reg (SImode, x);
+      emit_insn (gen_addsi3 (acc, acc, x));
+    }
+
+  for (i = 0; i < terms.n_ptr; i++)
+    {
+      tree pexp = terms.ptr_terms[i];
+      tree bexp = terms.base_terms[i];
+      rtx p = expand_expr (pexp, NULL_RTX, Pmode, EXPAND_NORMAL);
+      rtx b = expand_expr (bexp, NULL_RTX, Pmode, EXPAND_CONST_ADDRESS);
+      rtx d;
+      if (GET_MODE (p) != Pmode && GET_MODE (p) != VOIDmode)
+        p = convert_to_mode (Pmode, p, 1);
+      if (optimize == 1
+          && terms.n_int == 1
+          && TREE_CODE (pdp10_strip_all_conversions (terms.int_terms[0]))
+             == VAR_DECL)
+        {
+          rtx rawp = p;
+          if (!register_operand (rawp, SImode))
+            rawp = force_reg (SImode, rawp);
+          emit_insn (gen_subsi3 (acc, acc, rawp));
+        }
+      d = expand_subtract_pointers (SImode, gen_reg_rtx (SImode),
+                                    p, TREE_TYPE (pexp), b,
+                                    TREE_TYPE (pexp));
+      if (GET_MODE (d) != SImode && GET_MODE (d) != VOIDmode)
+        d = convert_to_mode (SImode, d, 0);
+      if (!register_operand (d, SImode))
+        d = force_reg (SImode, d);
+      emit_insn (gen_addsi3 (acc, acc, d));
+    }
+
+  return acc;
+}
+
 /* Expand folded integer forms like
 
      s + (PTR - CONST_BYTE_POINTER)
@@ -12621,7 +12774,10 @@ pdp10_expand_binop (mode, binoptab, op0, op1, target, unsignedp, methods, exp)
     case MINUS_EXPR:
       if (code == PLUS_EXPR)
 	{
-	  rtx x = pdp10_expand_int_plus_ptr_minus_const (mode, target, exp);
+	  rtx x = pdp10_expand_folded_ptr_sum (mode, target, exp);
+	  if (x != NULL_RTX)
+	    return x;
+	  x = pdp10_expand_int_plus_ptr_minus_const (mode, target, exp);
 	  if (x != NULL_RTX)
 	    return x;
 	}
@@ -12637,7 +12793,20 @@ pdp10_expand_binop (mode, binoptab, op0, op1, target, unsignedp, methods, exp)
 	  add = !add;
 	}
       if (!add && ptr0 && ptr1)
-	return expand_subtract_pointers (mode, target, op0, type0, op1, type1);
+        {
+          /* If the requested result mode is narrower than a pointer,
+             expand_expr may already have truncated pointer operands to
+             their address halves before this target hook sees them.  PDP-10
+             byte pointers need the full P/S selector for subtraction, so
+             re-expand both tree operands in Pmode and let the subtract path
+             truncate only the final byte count.  */
+          if (mode != Pmode)
+            {
+              op0 = expand_expr (exp0, NULL_RTX, Pmode, EXPAND_NORMAL);
+              op1 = expand_expr (exp1, NULL_RTX, Pmode, EXPAND_NORMAL);
+            }
+          return expand_subtract_pointers (mode, target, op0, type0, op1, type1);
+        }
 
       /* The middle end can also leave pointer subtraction against a
 	 constant byte pointer as a plain MINUS_EXPR whose result type is
