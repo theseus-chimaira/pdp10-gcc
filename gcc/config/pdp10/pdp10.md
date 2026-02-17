@@ -2013,17 +2013,23 @@
 		   UNSPEC_BLT_SETUP))]
   ""
   {
-    rtx normalized_source;
-
     /* A BLT source encoded as SYMBOL+N can still be a C storage-unit
-       offset when copying an aggregate after CSE/reload.  BLT wants word
-       addresses.  Use the following BLT end address to distinguish C-unit
-       offsets such as GA+96 for a twelve-word object from already normalized
-       word offsets such as GA+36.  */
-    normalized_source = NULL_RTX;
-    if (pdp10_normalize_blt_source_for_output (insn, operands[1], operands[2],
-                                               &normalized_source))
-      operands[1] = normalized_source;
+       offset when copying an aggregate into a stack temporary after CSE.
+       BLT wants a word address.  Normalize only the final-output case that
+       exposed the struct_array_call failure: symbolic source, stack-like
+       destination, and a source offset divisible by the PDP-10 word size.  */
+    if ((which_alternative == 3 || which_alternative == 1)
+        && GET_CODE (operands[1]) == CONST
+        && GET_CODE (XEXP (operands[1], 0)) == PLUS
+        && GET_CODE (XEXP (XEXP (operands[1], 0), 1)) == CONST_INT
+        && GET_CODE (XEXP (XEXP (operands[1], 0), 0)) == SYMBOL_REF
+        && (GET_CODE (operands[2]) == PLUS || REG_P (operands[2])))
+      {
+        HOST_WIDE_INT off = INTVAL (XEXP (XEXP (operands[1], 0), 1));
+        if (off >= UNITS_PER_WORD && off % UNITS_PER_WORD == 0)
+          operands[1] = plus_constant (XEXP (XEXP (operands[1], 0), 0),
+                                       off / UNITS_PER_WORD);
+      }
 
     switch (which_alternative)
       {
@@ -5314,55 +5320,36 @@
   ""
   "if (!TARGET_XKL2)
      {
-       if (!TARGET_KI10up)
-	 {
-	   rtx sf = gen_reg_rtx (SFmode);
+       rtx temp = gen_rtx_SUBREG (DImode, operands[0], 0);
+       rtx temp0 = gen_rtx_SUBREG (SImode, operands[0], 0);
+       rtx temp1 = gen_rtx_SUBREG (SImode, operands[0], 4);
+       rtx exp;
 
-	   /* PDP-6/KA10 have no native unsigned SI-to-D-float
-	      conversion.  Match the baseline double runtime model used by
-	      __floatsidf: build the exact unsigned single-word float and
-	      extend it by zeroing the low D-float word.  The older inline
-	      D-float construction was off by one binary exponent for small
-	      unsigned values.  */
-	   emit_library_call_value
-	     (gen_rtx_SYMBOL_REF (Pmode, \"__floatunssisf\"),
-	      sf, LCT_NORMAL, SFmode, 1, operands[1], SImode);
-	   emit_insn (gen_extendsfdf2 (operands[0], sf));
-	   DONE;
-	 }
-       else
-	 {
-	   rtx temp = gen_rtx_SUBREG (DImode, operands[0], 0);
-	   rtx temp0 = gen_rtx_SUBREG (SImode, operands[0], 0);
-	   rtx temp1 = gen_rtx_SUBREG (SImode, operands[0], 4);
-	   rtx exp;
+       /* Sequence taken from KCC.  D-float and G-float use the same
+	  mantissa placement here, but not the same exponent/header word.
+	  Keep the two constants in separate statements: old GCC/MD output
+	  has proven too easy to audit incorrectly when the GEN_INT operands
+	  are hidden inside a conditional expression.  The visible assembly
+	  must be:
 
-	   /* Sequence taken from KCC.  D-float and G-float use the same
-	      mantissa placement here, but not the same exponent/header word.
-	      Keep the two constants in separate statements: old GCC/MD output
-	      has proven too easy to audit incorrectly when the GEN_INT operands
-	      are hidden inside a conditional expression.  The visible assembly
-	      must be:
+	      -mdfloat:  TLC ...,243000
+	      -mgfloat:  TLC ...,274300
+       */
+       exp = TARGET_GFLOAT
+	     ? GEN_INT ((HOST_WIDE_INT)02743 << 24)
+	     : GEN_INT ((HOST_WIDE_INT)0243 << 27);
 
-	          -mdfloat:  TLC ...,243000
-	          -mgfloat:  TLC ...,274300
-	   */
-	   exp = TARGET_GFLOAT
-		 ? GEN_INT ((HOST_WIDE_INT)02743 << 24)
-		 : GEN_INT ((HOST_WIDE_INT)0243 << 27);
-
-	   emit_move_insn (temp0, operands[1]);
-	   emit_move_insn (temp1, const0_rtx);
-	   emit_insn (gen_lshrdi3 (temp, temp, GEN_INT (9)));
-	   emit_insn (gen_lshrsi3 (temp1, temp1, GEN_INT (1)));
-	   emit_insn (gen_xorsi3 (temp0, temp0, exp));
-	   if (!flag_unsafe_math_optimizations
-	       && ((TARGET_KI10up && !TARGET_GFLOAT)
-		   || (TARGET_KL10up && TARGET_GFLOAT)))
-	     emit_insn (gen_adddf3 (operands[0], operands[0],
-				    CONST0_RTX (DFmode)));
-	   DONE;
-	 }
+       emit_move_insn (temp0, operands[1]);
+       emit_move_insn (temp1, const0_rtx);
+       emit_insn (gen_lshrdi3 (temp, temp, GEN_INT (9)));
+       emit_insn (gen_lshrsi3 (temp1, temp1, GEN_INT (1)));
+       emit_insn (gen_xorsi3 (temp0, temp0, exp));
+       if (!flag_unsafe_math_optimizations
+	   && ((TARGET_KI10up && !TARGET_GFLOAT)
+	       || (TARGET_KL10up && TARGET_GFLOAT)))
+	 emit_insn (gen_adddf3 (operands[0], operands[0],
+				CONST0_RTX (DFmode)));
+       DONE;
      }")
 
 (define_insn "*UDFLTR"
@@ -5497,9 +5484,9 @@
 	 UNSPEC_ADJBP))]
   "!TARGET_KL10up"
   "@
-   push 17,0\;push 17,%0\;subi %0,1\;move 0,%0\;ibp %0\;came %0,(17)\;jrst .-3\;move %0,0\;pop 17,0\;pop 17,0
-   move %0,%1\;push 17,0\;push 17,%0\;subi %0,1\;move 0,%0\;ibp %0\;came %0,(17)\;jrst .-3\;move %0,0\;pop 17,0\;pop 17,0
-   push 17,0\;move 0,%0\;push 17,0\;subi 0,1\;movem 0,%0\;ibp 0\;came 0,(17)\;jrst .-3\;pop 17,0\;pop 17,0"
+   push 17,0\;push 17,%0\;push 17,0\;subi %0,1\;movem %0,(17)\;ibp %0\;came %0,-1(17)\;jrst .-3\;move %0,(17)\;pop 17,0\;pop 17,0\;pop 17,0
+   move %0,%1\;push 17,0\;push 17,%0\;push 17,0\;subi %0,1\;movem %0,(17)\;ibp %0\;came %0,-1(17)\;jrst .-3\;move %0,(17)\;pop 17,0\;pop 17,0\;pop 17,0
+   push 17,0\;move 0,%0\;push 17,0\;push 17,0\;subi 0,1\;movem 0,(17)\;ibp 0\;came 0,-1(17)\;jrst .-3\;movem 0,%0\;pop 17,0\;pop 17,0\;pop 17,0"
   [(set_attr "length" "12,13,13")
    ;; This is a multi-instruction ADJBP emulation, not a real IBP
    ;; candidate for machine-dependent LDB/DPB reorganization.
@@ -6985,9 +6972,9 @@
    (set (match_operand:DI 6 "register_operand" "")
         (ashiftrt:DI (match_dup 6) (neg:SI (const_int -1))))
    (set (match_operand:DI 7 "register_operand" "")
-        (ashift:DI (match_dup 6) (const_int -1)))
+        (ashift:DI (match_dup 7) (const_int -1)))
    (set (match_operand:DI 8 "register_operand" "")
-        (ashiftrt:DI (match_dup 7) (neg:SI (const_int 1))))
+        (ashiftrt:DI (match_dup 8) (neg:SI (const_int 1))))
    (set (match_operand:SI 9 "memory_operand" "")
         (match_operand:SI 10 "register_operand" ""))
    (set (match_operand:SI 11 "memory_operand" "")
@@ -6999,12 +6986,12 @@
    (parallel [(unspec_volatile:BLK [(match_dup 13)] VUNSPEC_BLT)
               (clobber (match_dup 13))
               (use (match_operand:BLK 16 "memory_operand" ""))])]
-  "pdp10_word_address_plus_one_p (XEXP (operands[3], 0),
-                                  XEXP (operands[1], 0))
-   && pdp10_word_address_plus_one_p (XEXP (operands[9], 0),
-                                     XEXP (operands[11], 0))
+  "rtx_equal_p (XEXP (operands[1], 0),
+                plus_constant (XEXP (operands[3], 0), 1))
+   && rtx_equal_p (XEXP (operands[11], 0),
+                   plus_constant (XEXP (operands[9], 0), 1))
    && rtx_equal_p (operands[14], XEXP (operands[9], 0))
-   && pdp10_word_address_plus_one_p (operands[15], XEXP (operands[16], 0))"
+   && rtx_equal_p (XEXP (operands[16], 0), plus_constant (operands[15], 1))"
   [(set (match_dup 13)
         (unspec:SI [(match_dup 17) (match_dup 15)] UNSPEC_BLT_SETUP))
    (parallel [(unspec_volatile:BLK [(match_dup 13)] VUNSPEC_BLT)

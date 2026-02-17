@@ -47,10 +47,6 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 int		pdp10_pointer_alignment PARAMS ((rtx x));
 int		pdp10_pointer_offset PARAMS ((rtx x));
 int		pdp10_scalar_mem_p PARAMS ((rtx op));
-int		pdp10_const_double_0_operand PARAMS ((rtx op,
-						   enum machine_mode mode));
-int		pdp10_constaddr_memory_operand PARAMS ((rtx op,
-					       enum machine_mode mode));
 int		pdp10_qi_mem_expr_bitpos PARAMS ((rtx mem, int *bitposp));
 
 /* Run-time Target Specification.  */
@@ -198,10 +194,6 @@ extern int	pdp10_expand_move_4 PARAMS ((rtx destination, rtx source));
 extern int	pdp10_expand_movstrsi PARAMS ((rtx *operands));
 extern int	pdp10_normalize_blt_source_p PARAMS ((rtx src, rtx dest,
                                                      rtx end, rtx *outp));
-extern int	pdp10_normalize_blt_source_for_output PARAMS ((rtx insn, rtx src,
-                                                            rtx dest,
-                                                            rtx *outp));
-extern int	pdp10_word_address_plus_one_p PARAMS ((rtx first, rtx second));
 extern int	pdp10_expand_clrstrsi PARAMS ((rtx *operands));
 extern int	pdp10_expand_cmpstrsi PARAMS ((rtx *operands));
 
