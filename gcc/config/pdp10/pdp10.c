@@ -3814,6 +3814,22 @@ static void	no_long_long_callback PARAMS ((cpp_reader *pfile));
 static void	string_bytesize_callback PARAMS ((cpp_reader *pfile));
 static int	get_pragma_number PARAMS ((cpp_reader *pfile,
 					   const char *pragma));
+static int	pdp10_reorg_set_parts PARAMS ((rtx insn, rtx *destp,
+					     rtx *srcp));
+static int	pdp10_reorg_mem_addr PARAMS ((rtx x, enum machine_mode mode,
+					      rtx *addrp));
+static int	pdp10_reorg_unspec_code_p PARAMS ((rtx x, enum machine_mode mode,
+					         int code));
+static void	pdp10_reorg_install_blt PARAMS ((rtx first, rtx second,
+					    rtx *seq, int nseq,
+					    rtx ac, rtx src, rtx dest));
+static int	pdp10_reorg_word_repack_blt PARAMS ((rtx insn));
+static int	pdp10_reorg_word_repack_spill_blt PARAMS ((rtx insn));
+static int	pdp10_reorg_word_repack_dmove_direct PARAMS ((rtx insn));
+static int	pdp10_reorg_word_repack_dmove PARAMS ((rtx insn));
+static void	pdp10_reorg_word_repack_copies PARAMS ((rtx first));
+static int	pdp10_reorg_folded_subbp_sum PARAMS ((rtx insn));
+static void	pdp10_reorg_folded_subbp_sums PARAMS ((rtx first));
 
 static void
 convert_voidp_callback (pfile)
@@ -3912,6 +3928,513 @@ pdp10_register_target_pragmas (ptr)
 		       string_bytesize_callback);
 }
 
+static int
+pdp10_reorg_set_parts (insn, destp, srcp)
+     rtx insn;
+     rtx *destp;
+     rtx *srcp;
+{
+  rtx pat;
+
+  if (insn == 0 || GET_CODE (insn) != INSN)
+    return 0;
+
+  pat = PATTERN (insn);
+  if (GET_CODE (pat) != SET)
+    return 0;
+
+  if (destp)
+    *destp = SET_DEST (pat);
+  if (srcp)
+    *srcp = SET_SRC (pat);
+  return 1;
+}
+
+static int
+pdp10_reorg_mem_addr (x, mode, addrp)
+     rtx x;
+     enum machine_mode mode;
+     rtx *addrp;
+{
+  if (x == 0 || GET_CODE (x) != MEM)
+    return 0;
+  if (mode != VOIDmode && GET_MODE (x) != mode)
+    return 0;
+  if (addrp)
+    *addrp = XEXP (x, 0);
+  return 1;
+}
+
+static int
+pdp10_reorg_unspec_code_p (x, mode, code)
+     rtx x;
+     enum machine_mode mode;
+     int code;
+{
+  return (x != 0
+          && GET_MODE (x) == mode
+          && GET_CODE (x) == UNSPEC
+          && XVECLEN (x, 0) >= 1
+          && XINT (x, 1) == code);
+}
+
+static void
+pdp10_reorg_install_blt (first, second, seq, nseq, ac, src, dest)
+     rtx first;
+     rtx second;
+     rtx *seq;
+     int nseq;
+     rtx ac;
+     rtx src;
+     rtx dest;
+{
+  rtx end;
+  int i;
+
+  end = plus_constant (dest, 1);
+  PATTERN (first) = gen_pdp10_blt_setup (ac, src, dest);
+  PATTERN (second) = gen_BLT (ac, gen_rtx_MEM (BLKmode, end));
+  INSN_CODE (first) = -1;
+  INSN_CODE (second) = -1;
+  REG_NOTES (first) = 0;
+  REG_NOTES (second) = 0;
+
+  for (i = 2; i < nseq; i++)
+    if (seq[i] != 0 && !INSN_DELETED_P (seq[i]))
+      delete_insn (seq[i]);
+}
+
+static int
+pdp10_reorg_word_repack_blt (insn)
+     rtx insn;
+{
+  rtx seq[11];
+  rtx dest;
+  rtx src;
+  rtx src1;
+  rtx src2;
+  rtx temp1;
+  rtx temp2;
+  rtx blt_src;
+  rtx blt_dst;
+  rtx blt_end;
+  rtx ac;
+  rtx x;
+  int i;
+
+  seq[0] = insn;
+  for (i = 1; i < 11; i++)
+    {
+      seq[i] = next_real_insn (seq[i - 1]);
+      if (seq[i] == 0)
+        return 0;
+    }
+
+  if (!pdp10_reorg_set_parts (seq[0], &dest, &src)
+      || !REG_P (dest)
+      || !pdp10_reorg_mem_addr (src, SImode, &src2))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[1], &dest, &src)
+      || !REG_P (dest)
+      || !pdp10_reorg_mem_addr (src, SImode, &src1))
+    return 0;
+  if (!pdp10_word_address_plus_one_p (src1, src2))
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[2], &dest, &src)
+      || !pdp10_reorg_unspec_code_p (src, DImode, UNSPEC_LSHC))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[3], &dest, &src)
+      || GET_CODE (src) != LSHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[4], &dest, &src)
+      || GET_CODE (src) != ASHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[5], &dest, &src)
+      || GET_CODE (src) != ASHIFT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[6], &dest, &src)
+      || GET_CODE (src) != ASHIFTRT)
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[7], &dest, &src)
+      || !pdp10_reorg_mem_addr (dest, SImode, &temp1))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[8], &dest, &src)
+      || !pdp10_reorg_mem_addr (dest, SImode, &temp2))
+    return 0;
+  if (!pdp10_word_address_plus_one_p (temp1, temp2))
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[9], &ac, &src)
+      || !REG_P (ac)
+      || !pdp10_reorg_unspec_code_p (src, SImode, UNSPEC_BLT_SETUP)
+      || XVECLEN (src, 0) != 2)
+    return 0;
+  blt_src = XVECEXP (src, 0, 0);
+  blt_dst = XVECEXP (src, 0, 1);
+  if (!rtx_equal_p (blt_src, temp1))
+    return 0;
+
+  x = PATTERN (seq[10]);
+  if (GET_CODE (x) != PARALLEL || XVECLEN (x, 0) != 3)
+    return 0;
+  x = XVECEXP (PATTERN (seq[10]), 0, 2);
+  if (GET_CODE (x) != USE
+      || !pdp10_reorg_mem_addr (XEXP (x, 0), BLKmode, &blt_end))
+    return 0;
+  if (!pdp10_word_address_plus_one_p (blt_dst, blt_end))
+    return 0;
+
+  pdp10_reorg_install_blt (seq[0], seq[1], seq, 11, ac, src1, blt_dst);
+  return 1;
+}
+
+static int
+pdp10_reorg_word_repack_spill_blt (insn)
+     rtx insn;
+{
+  rtx seq[21];
+  rtx dest;
+  rtx src;
+  rtx src1;
+  rtx src2;
+  rtx temp1;
+  rtx temp2;
+  rtx blt_src;
+  rtx blt_dst;
+  rtx ac;
+  rtx x;
+  int i;
+
+  seq[0] = insn;
+  for (i = 1; i < 21; i++)
+    {
+      seq[i] = next_real_insn (seq[i - 1]);
+      if (seq[i] == 0)
+        return 0;
+    }
+
+  if (!pdp10_reorg_set_parts (seq[0], &dest, &src)
+      || !REG_P (dest)
+      || !pdp10_reorg_mem_addr (src, SImode, &src2))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[1], &dest, &src)
+      || GET_CODE (src) != LSHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[2], &dest, &src)
+      || !REG_P (dest) || !REG_P (src))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[3], &dest, &src)
+      || !REG_P (dest)
+      || !pdp10_reorg_mem_addr (src, SImode, &src1))
+    return 0;
+  if (!pdp10_word_address_plus_one_p (src1, src2))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[4], &dest, &src)
+      || GET_CODE (src) != LSHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[5], &dest, &src)
+      || !REG_P (dest) || !REG_P (src))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[6], &dest, &src)
+      || !pdp10_reorg_unspec_code_p (src, DImode, UNSPEC_LSHC))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[7], &dest, &src)
+      || GET_CODE (src) != LSHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[8], &dest, &src)
+      || GET_CODE (src) != ASHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[9], &dest, &src)
+      || GET_CODE (src) != ASHIFT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[10], &dest, &src)
+      || GET_CODE (src) != ASHIFTRT)
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[11], &dest, &src)
+      || !pdp10_reorg_mem_addr (dest, SImode, &temp1))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[12], &dest, &src)
+      || !pdp10_reorg_mem_addr (dest, SImode, &temp2))
+    return 0;
+  if (!pdp10_word_address_plus_one_p (temp1, temp2))
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[13], &ac, &src)
+      || !REG_P (ac)
+      || !pdp10_reorg_unspec_code_p (src, SImode, UNSPEC_BLT_SETUP)
+      || XVECLEN (src, 0) != 2)
+    return 0;
+  blt_src = XVECEXP (src, 0, 0);
+  blt_dst = XVECEXP (src, 0, 1);
+  if (!rtx_equal_p (blt_src, temp1))
+    return 0;
+
+  x = PATTERN (seq[20]);
+  if (GET_CODE (x) != PARALLEL || XVECLEN (x, 0) != 3)
+    return 0;
+
+  pdp10_reorg_install_blt (seq[0], seq[1], seq, 21, ac, src1, blt_dst);
+  return 1;
+}
+
+static int
+pdp10_reorg_word_repack_dmove_direct (insn)
+     rtx insn;
+{
+  rtx seq[9];
+  rtx dest;
+  rtx src;
+  rtx src1;
+  rtx src2;
+  rtx final_dest;
+  rtx ac;
+  int i;
+
+  seq[0] = insn;
+  for (i = 1; i < 9; i++)
+    {
+      seq[i] = next_real_insn (seq[i - 1]);
+      if (seq[i] == 0)
+        return 0;
+    }
+
+  if (!pdp10_reorg_set_parts (seq[0], &dest, &src)
+      || !REG_P (dest)
+      || !pdp10_reorg_mem_addr (src, SImode, &src2))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[1], &ac, &src)
+      || !REG_P (ac)
+      || !pdp10_reorg_mem_addr (src, SImode, &src1))
+    return 0;
+  if (!pdp10_word_address_plus_one_p (src1, src2))
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[2], &dest, &src)
+      || !pdp10_reorg_unspec_code_p (src, DImode, UNSPEC_LSHC))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[3], &dest, &src)
+      || GET_CODE (src) != LSHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[4], &dest, &src)
+      || GET_CODE (src) != ASHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[5], &dest, &src)
+      || GET_CODE (src) != ASHIFT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[6], &dest, &src)
+      || GET_CODE (src) != ASHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[7], &dest, &src)
+      || !pdp10_reorg_mem_addr (dest, DImode, 0))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[8], &dest, &src)
+      || !pdp10_reorg_mem_addr (dest, DImode, &final_dest)
+      || !REG_P (src))
+    return 0;
+
+  pdp10_reorg_install_blt (seq[0], seq[1], seq, 9, ac, src1, final_dest);
+  return 1;
+}
+
+static int
+pdp10_reorg_word_repack_dmove (insn)
+     rtx insn;
+{
+  rtx seq[14];
+  rtx dest;
+  rtx src;
+  rtx src1;
+  rtx src2;
+  rtx final_dest;
+  rtx ac;
+  int i;
+
+  seq[0] = insn;
+  for (i = 1; i < 14; i++)
+    {
+      seq[i] = next_real_insn (seq[i - 1]);
+      if (seq[i] == 0)
+        return 0;
+    }
+
+  if (!pdp10_reorg_set_parts (seq[0], &ac, &src)
+      || !REG_P (ac)
+      || !pdp10_reorg_mem_addr (src, SImode, &src2))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[1], &dest, &src)
+      || GET_CODE (src) != LSHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[2], &dest, &src)
+      || !REG_P (dest) || !REG_P (src))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[3], &dest, &src)
+      || !REG_P (dest)
+      || !pdp10_reorg_mem_addr (src, SImode, &src1))
+    return 0;
+  if (!pdp10_word_address_plus_one_p (src1, src2))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[4], &dest, &src)
+      || GET_CODE (src) != LSHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[5], &dest, &src)
+      || !REG_P (dest) || !REG_P (src))
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[6], &dest, &src)
+      || !pdp10_reorg_unspec_code_p (src, DImode, UNSPEC_LSHC))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[7], &dest, &src)
+      || GET_CODE (src) != LSHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[8], &dest, &src)
+      || GET_CODE (src) != ASHIFTRT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[9], &dest, &src)
+      || GET_CODE (src) != ASHIFT)
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[10], &dest, &src)
+      || GET_CODE (src) != ASHIFTRT)
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[11], &dest, &src)
+      || !pdp10_reorg_mem_addr (dest, DImode, 0))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[12], &dest, &src)
+      || !REG_P (dest)
+      || !pdp10_reorg_mem_addr (src, DImode, 0))
+    return 0;
+  if (!pdp10_reorg_set_parts (seq[13], &dest, &src)
+      || !pdp10_reorg_mem_addr (dest, DImode, &final_dest)
+      || !REG_P (src))
+    return 0;
+
+  pdp10_reorg_install_blt (seq[0], seq[1], seq, 14, ac, src1, final_dest);
+  return 1;
+}
+
+static void
+pdp10_reorg_word_repack_copies (first)
+     rtx first;
+{
+  rtx insn;
+
+  for (insn = next_real_insn (first); insn; insn = next_real_insn (insn))
+    {
+      if (INSN_DELETED_P (insn))
+        continue;
+      if (pdp10_reorg_word_repack_blt (insn)
+          || pdp10_reorg_word_repack_spill_blt (insn)
+          || pdp10_reorg_word_repack_dmove_direct (insn)
+          || pdp10_reorg_word_repack_dmove (insn))
+        continue;
+    }
+}
+
+static int
+pdp10_reorg_folded_subbp_sum (insn)
+     rtx insn;
+{
+  rtx seq[9];
+  rtx dest;
+  rtx src;
+  rtx sum;
+  rtx ptr;
+  rtx tmp;
+  rtx base;
+  rtx diff;
+  rtx x;
+  int i;
+
+  seq[0] = insn;
+  for (i = 1; i < 9; i++)
+    {
+      seq[i] = next_real_insn (seq[i - 1]);
+      if (seq[i] == 0)
+        return 0;
+    }
+
+  if (!pdp10_reorg_set_parts (seq[0], &dest, &src)
+      || !REG_P (dest)
+      || GET_CODE (src) != PLUS
+      || !rtx_equal_p (XEXP (src, 0), dest)
+      || !REG_P (XEXP (src, 1)))
+    return 0;
+  sum = dest;
+  ptr = XEXP (src, 1);
+
+  if (!pdp10_reorg_set_parts (seq[1], &tmp, &src)
+      || !REG_P (tmp)
+      || !rtx_equal_p (src, ptr))
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[2], &base, &src)
+      || !REG_P (base)
+      || !CONSTANT_P (src)
+      || !pdp10_const_byte_pointer_p (src))
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[3], &dest, &src)
+      || !rtx_equal_p (dest, tmp)
+      || GET_CODE (src) != MINUS
+      || !rtx_equal_p (XEXP (src, 0), tmp)
+      || !rtx_equal_p (XEXP (src, 1), base))
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[4], &dest, &src)
+      || GET_CODE (src) != UNSPEC
+      || XINT (src, 1) != 12)
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[5], &diff, &src)
+      || !REG_P (diff))
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[6], &dest, &src)
+      || !rtx_equal_p (dest, diff)
+      || GET_CODE (src) != ASHIFTRT)
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[7], &dest, &src)
+      || !rtx_equal_p (dest, diff)
+      || GET_CODE (src) != PLUS)
+    return 0;
+  x = XEXP (src, 1);
+  if (GET_CODE (x) != MEM)
+    return 0;
+  x = XEXP (x, 0);
+  if (GET_CODE (x) != PLUS
+      || GET_CODE (XEXP (x, 1)) != SYMBOL_REF
+      || strcmp (XSTR (XEXP (x, 1), 0), "%BADL9") != 0)
+    return 0;
+
+  if (!pdp10_reorg_set_parts (seq[8], &dest, &src)
+      || !rtx_equal_p (dest, sum)
+      || GET_CODE (src) != PLUS
+      || !rtx_equal_p (XEXP (src, 0), sum)
+      || !rtx_equal_p (XEXP (src, 1), diff))
+    return 0;
+
+  delete_insn (seq[0]);
+  return 1;
+}
+
+static void
+pdp10_reorg_folded_subbp_sums (first)
+     rtx first;
+{
+  rtx insn;
+
+  for (insn = next_real_insn (first); insn; insn = next_real_insn (insn))
+    {
+      if (INSN_DELETED_P (insn))
+        continue;
+      pdp10_reorg_folded_subbp_sum (insn);
+    }
+}
+
 /* Called by the MACHINE_DEPENDENT_REORG macro.
 
    This is ran as the last optimization pass.  (If there was a delayed
@@ -3922,6 +4445,9 @@ pdp10_machine_dependent_reorg (first)
      rtx first;
 {
   rtx insn;
+
+  pdp10_reorg_folded_subbp_sums (first);
+  pdp10_reorg_word_repack_copies (first);
 
   if (!optimize)
     return;
@@ -4430,6 +4956,15 @@ pdp10_scalar_mem_p (op)
      rtx op;
 {
   if (GET_CODE (op) != MEM)
+    return 0;
+
+  /* A local byte-pointer variable can have subword alignment in its MEM
+     attributes because it points at byte objects.  The storage slot itself
+     is still a full PDP-10 pointer word, not a scalar QI/HI object.  Do not
+     let halfword scalar-store patterns rewrite pointer-address updates as
+     HRLM; byte-pointer arithmetic needs to update the right-half address
+     field with HRRM.  */
+  if (MEM_EXPR (op) != 0 && POINTER_TYPE_P (TREE_TYPE (MEM_EXPR (op))))
     return 0;
 
   if (MEM_SCALAR_P (op))
@@ -6560,7 +7095,68 @@ pdp10_output_load_unsigned_byte (insn, operands)
           return "";
         }
 
-      if (MEM_ALIGN (operands[1]) >= BITS_PER_WORD
+      if (GET_MODE (operands[1]) == QImode
+          && REG_P (addr)
+          && MEM_EXPR (operands[1]) != 0
+          && TREE_CODE (MEM_EXPR (operands[1])) == COMPONENT_REF
+          && TREE_CODE (TREE_TYPE (MEM_EXPR (operands[1]))) != ARRAY_TYPE)
+        {
+          tree field = TREE_OPERAND (MEM_EXPR (operands[1]), 1);
+
+          if (field != 0 && TREE_CODE (field) == FIELD_DECL)
+            {
+              HOST_WIDE_INT fieldbit;
+              HOST_WIDE_INT inword;
+              int ps;
+              rtx ops[3];
+              char abuf[64];
+              rtx scratch = gen_rtx_REG (SImode, 0);
+
+              fieldbit = int_bit_position (field);
+              if (TREE_CODE (TREE_TYPE (MEM_EXPR (operands[1])))
+                  == ARRAY_TYPE
+                  && MEM_OFFSET (operands[1]) != 0
+                  && GET_CODE (MEM_OFFSET (operands[1])) == CONST_INT
+                  && INTVAL (MEM_OFFSET (operands[1])) > 0)
+                fieldbit += INTVAL (MEM_OFFSET (operands[1]))
+                  * BITS_PER_UNIT;
+              inword = ((fieldbit + BITS_PER_UNIT - 1) / BITS_PER_UNIT)
+                % UNITS_PER_WORD;
+              if (inword < 0)
+                inword += UNITS_PER_WORD;
+              ps = ((BITS_PER_WORD
+                     - (int) inword * BITS_PER_UNIT
+                     - BITS_PER_UNIT) << 6) + BITS_PER_UNIT;
+
+              ops[0] = operands[0];
+              ops[1] = scratch;
+              ops[2] = addr;
+              output_asm_insn ("hrrz %1,%2", ops);
+              sprintf (abuf, "tlo %%1,%o", ps << 6);
+              output_asm_insn (abuf, ops);
+              output_asm_insn ("ldb %0,%1", ops);
+              return "";
+            }
+        }
+
+      if (GET_MODE (operands[1]) == QImode
+          && MEM_EXPR (operands[1]) != 0
+          && TREE_CODE (MEM_EXPR (operands[1])) == COMPONENT_REF
+          && TREE_CODE (TREE_TYPE (MEM_EXPR (operands[1]))) != ARRAY_TYPE)
+        {
+          tree field = TREE_OPERAND (MEM_EXPR (operands[1]), 1);
+
+          if (field != 0 && TREE_CODE (field) == FIELD_DECL)
+            {
+              HOST_WIDE_INT bitpos = int_bit_position (field);
+              pos = (int) (bitpos % BITS_PER_WORD);
+              if (pos < 0)
+                pos += BITS_PER_WORD;
+            }
+        }
+
+      if (pos == -1
+          && MEM_ALIGN (operands[1]) >= BITS_PER_WORD
           && !MEM_SCALAR_P (operands[1]))
         pos = 0;
     }
@@ -6595,6 +7191,71 @@ pdp10_output_load_signed_byte (insn, operands)
           output_asm_insn ("trne %0,400", ops);
           output_asm_insn ("orcmi %0,777", ops);
           return "";
+        }
+
+      if (GET_MODE (operands[1]) == QImode
+          && REG_P (addr)
+          && MEM_EXPR (operands[1]) != 0
+          && TREE_CODE (MEM_EXPR (operands[1])) == COMPONENT_REF
+          && TREE_CODE (TREE_TYPE (MEM_EXPR (operands[1]))) != ARRAY_TYPE)
+        {
+          tree field = TREE_OPERAND (MEM_EXPR (operands[1]), 1);
+
+          if (field != 0 && TREE_CODE (field) == FIELD_DECL)
+            {
+              HOST_WIDE_INT fieldbit;
+              HOST_WIDE_INT inword;
+              int ps;
+              rtx ops[3];
+              char abuf[64];
+              rtx scratch = gen_rtx_REG (SImode, 0);
+
+              fieldbit = int_bit_position (field);
+              if (TREE_CODE (TREE_TYPE (MEM_EXPR (operands[1])))
+                  == ARRAY_TYPE
+                  && MEM_OFFSET (operands[1]) != 0
+                  && GET_CODE (MEM_OFFSET (operands[1])) == CONST_INT
+                  && INTVAL (MEM_OFFSET (operands[1])) > 0)
+                fieldbit += INTVAL (MEM_OFFSET (operands[1]))
+                  * BITS_PER_UNIT;
+              inword = ((fieldbit + BITS_PER_UNIT - 1) / BITS_PER_UNIT)
+                % UNITS_PER_WORD;
+              if (inword < 0)
+                inword += UNITS_PER_WORD;
+              ps = ((BITS_PER_WORD
+                     - (int) inword * BITS_PER_UNIT
+                     - BITS_PER_UNIT) << 6) + BITS_PER_UNIT;
+
+              ops[0] = operands[0];
+              ops[1] = scratch;
+              ops[2] = addr;
+              output_asm_insn ("hrrz %1,%2", ops);
+              sprintf (abuf, "tlo %%1,%o", ps << 6);
+              output_asm_insn (abuf, ops);
+              output_asm_insn ("ldb %0,%1", ops);
+              output_asm_insn ("trne %0,400", ops);
+              output_asm_insn ("orcmi %0,777", ops);
+              return "";
+            }
+        }
+    }
+
+  if (GET_CODE (operands[1]) == MEM
+      && GET_MODE (operands[1]) == QImode
+      && MEM_EXPR (operands[1]) != 0
+      && TREE_CODE (MEM_EXPR (operands[1])) == COMPONENT_REF
+      && TREE_CODE (TREE_TYPE (MEM_EXPR (operands[1]))) != ARRAY_TYPE)
+    {
+      tree field = TREE_OPERAND (MEM_EXPR (operands[1]), 1);
+
+      if (field != 0 && TREE_CODE (field) == FIELD_DECL)
+        {
+          HOST_WIDE_INT bitpos = int_bit_position (field);
+          int pos = (int) (bitpos % BITS_PER_WORD);
+          if (pos < 0)
+            pos += BITS_PER_WORD;
+          return output_bitfield_move (asm_out_file, insn, 0, 1,
+                                       operands[0], operands[1], 9, pos);
         }
     }
 
@@ -6661,13 +7322,67 @@ pdp10_output_store_byte (insn, operands)
           HOST_WIDE_INT logicaloff;
           int unsignedp;
 
+          /* If reload leaves a register-held address for a byte-sized field,
+             it may be an ADJBP-built PDP-10 byte pointer rather than a plain
+             word address.  DPB through that register would then use the
+             register's byte size, e.g. 18 bits for a struct-record pointer,
+             and corrupt adjacent 9-bit char fields.  Rebuild an explicit
+             9-bit POINT using only the register's address half.  For scalar
+             COMPONENT_REFs, ignore negative MEM_OFFSET values that describe
+             how GCC formed the temporary address; the FIELD_DECL bit position
+             is the selected byte.  Array fields still need MEM_OFFSET because
+             it carries the element displacement relative to the field base. */
+          if (MEM_EXPR (operands[0]) != 0
+              && TREE_CODE (MEM_EXPR (operands[0])) == COMPONENT_REF
+              && TREE_CODE (TREE_TYPE (MEM_EXPR (operands[0]))) != ARRAY_TYPE)
+            {
+              tree field = TREE_OPERAND (MEM_EXPR (operands[0]), 1);
+
+              if (field != 0 && TREE_CODE (field) == FIELD_DECL)
+                {
+                  HOST_WIDE_INT fieldbit;
+                  HOST_WIDE_INT inword;
+                  int ps;
+                  rtx ops[3];
+                  char abuf[64];
+                  rtx scratch = gen_rtx_REG (SImode, 0);
+
+                  fieldbit = int_bit_position (field);
+                  if (TREE_CODE (TREE_TYPE (MEM_EXPR (operands[0])))
+                      == ARRAY_TYPE
+                      && MEM_OFFSET (operands[0]) != 0
+                      && GET_CODE (MEM_OFFSET (operands[0])) == CONST_INT
+                      && INTVAL (MEM_OFFSET (operands[0])) > 0)
+                    fieldbit += INTVAL (MEM_OFFSET (operands[0]))
+                      * BITS_PER_UNIT;
+                  inword = ((fieldbit + BITS_PER_UNIT - 1) / BITS_PER_UNIT)
+                    % UNITS_PER_WORD;
+                  if (inword < 0)
+                    inword += UNITS_PER_WORD;
+                  ps = ((BITS_PER_WORD
+                         - (int) inword * BITS_PER_UNIT
+                         - BITS_PER_UNIT) << 6) + BITS_PER_UNIT;
+
+                  ops[0] = scratch;
+                  ops[1] = XEXP (operands[0], 0);
+                  ops[2] = operands[1];
+                  output_asm_insn ("hrrz %0,%1", ops);
+                  sprintf (abuf, "tlo %%0,%o", ps << 6);
+                  output_asm_insn (abuf, ops);
+                  output_asm_insn ("dpb %2,%0", ops);
+                  return "";
+                }
+            }
+
           /* For nested local byte arrays, reload can leave a byte-pointer
              register whose right half already contains several folded word
              adjustments, while MEM_EXPR still describes the absolute C field
              path.  Do not DPB through the adjusted pointer itself: recover the
              absolute bit position from MEM_EXPR and subtract the word offset
              already present in the byte-pointer register.  */
-          if (MEM_EXPR (operands[0]) != 0)
+          if (MEM_EXPR (operands[0]) != 0
+              && !(TREE_CODE (MEM_EXPR (operands[0])) == COMPONENT_REF
+                   && TREE_CODE (TREE_TYPE (MEM_EXPR (operands[0]))) == ARRAY_TYPE))
             {
               pdp10_word36 bitpos;
               HOST_WIDE_INT reg_wordoff;
@@ -6755,6 +7470,17 @@ pdp10_output_store_byte (insn, operands)
                   byteoff += UNITS_PER_WORD;
                   wordoff -= 1;
                 }
+
+              /* Dynamic stores to a local 9-bit array field can reach final
+                 with MEM_EXPR naming only the array FIELD_DECL while the REG
+                 address was already built by the expander as the exact
+                 element byte pointer.  In that shape an additional in-word
+                 correction stores field[i] into field[i + byteoff].  */
+              if (MEM_EXPR (operands[0]) != 0
+                  && MEM_OFFSET (operands[0]) == 0
+                  && TREE_CODE (MEM_EXPR (operands[0])) == COMPONENT_REF
+                  && TREE_CODE (TREE_TYPE (MEM_EXPR (operands[0]))) == ARRAY_TYPE)
+                byteoff = 0;
 
               /* Late reload can leave stores into a 9-bit array field
                  whose field starts exactly on a PDP-10 word boundary with a
@@ -7152,10 +7878,12 @@ pdp10_output_movhi (operands, sign_extend)
 	}
 
       mem_right = 0;
-      if (GET_CODE (x) == MEM
-	  && GET_CODE (XEXP (x, 0)) == CONST
-	  && GET_CODE (XEXP (XEXP (x, 0), 0)) == PLUS
-	  && GET_CODE (XEXP (XEXP (XEXP (x, 0), 0), 1)) == CONST_INT)
+      if (GET_CODE (x) == MEM && pdp10_scalar_mem_p (x))
+        mem_right = 1;
+      else if (GET_CODE (x) == MEM
+	       && GET_CODE (XEXP (x, 0)) == CONST
+	       && GET_CODE (XEXP (XEXP (x, 0), 0)) == PLUS
+	       && GET_CODE (XEXP (XEXP (XEXP (x, 0), 0), 1)) == CONST_INT)
 	{
 	  int ps = (INTVAL (XEXP (XEXP (XEXP (x, 0), 0), 1)) >> 30) & 077;
 	  mem_right = ps == 076;
@@ -7816,6 +8544,34 @@ output_bitfield_move (stream, insn, store, sign, reg, x, len, pos)
   int extend = sign || (GET_CODE (x) == MEM
 			&& GET_CODE (XEXP (x, 0)) == POST_INC);
 
+  if (GET_CODE (x) == MEM
+      && GET_CODE (XEXP (x, 0)) == MEM
+      && pos >= 0
+      && VALID_OWGBP_BYTE_SIZE_P (len)
+      && pos + len <= BITS_PER_WORD)
+    {
+      rtx ops[3];
+      rtx scratch = gen_rtx_REG (SImode, 0);
+      int ps;
+      char buf[64];
+
+      ps = ((BITS_PER_WORD - pos - len) << 6) + len;
+      ops[0] = reg;
+      ops[1] = XEXP (x, 0);
+      ops[2] = scratch;
+
+      output_asm_insn ("hrrz %2,%1", ops);
+      sprintf (buf, "tlo %%2,%o", ps << 6);
+      output_asm_insn (buf, ops);
+      output_asm_insn (store ? "dpb %0,%2" : "ldb %0,%2", ops);
+      if (!store && sign && len == 9)
+        {
+          output_asm_insn ("trne %0,400", ops);
+          output_asm_insn ("orcmi %0,777", ops);
+        }
+      return "";
+    }
+
   if (extend && !TARGET_XKL2)
     {
       debug_rtx (insn);
@@ -8113,6 +8869,32 @@ pdp10_output_lshiftrt_memory (insn, operands)
 
   if (GET_CODE (mem) == MEM
       && INTVAL (operands[2]) == 27
+      && MEM_EXPR (mem) != 0
+      && TREE_CODE (MEM_EXPR (mem)) == COMPONENT_REF)
+    {
+      tree field = TREE_OPERAND (MEM_EXPR (mem), 1);
+
+      if (field != 0 && TREE_CODE (field) == FIELD_DECL)
+        {
+          HOST_WIDE_INT fieldbit = int_bit_position (field);
+          int pos;
+
+          if (TREE_CODE (TREE_TYPE (MEM_EXPR (mem))) == ARRAY_TYPE
+              && MEM_OFFSET (mem) != 0
+              && GET_CODE (MEM_OFFSET (mem)) == CONST_INT
+              && INTVAL (MEM_OFFSET (mem)) > 0)
+            fieldbit += INTVAL (MEM_OFFSET (mem)) * BITS_PER_UNIT;
+          pos = (int) (fieldbit % BITS_PER_WORD);
+
+          if (pos < 0)
+            pos += BITS_PER_WORD;
+          return output_bitfield_move (asm_out_file, insn, 0, 0,
+                                       operands[0], mem, BITS_PER_UNIT, pos);
+        }
+    }
+
+  if (GET_CODE (mem) == MEM
+      && INTVAL (operands[2]) == 27
       && REG_P (XEXP (mem, 0))
       && (MEM_ALIGN (mem) <= BITS_PER_UNIT
           || pdp10_reg_likely_byte_pointer_p (XEXP (mem, 0), insn)))
@@ -8142,6 +8924,65 @@ pdp10_output_lshiftrt_memory (insn, operands)
       ops[2] = XEXP (XEXP (mem, 0), 1);
       output_asm_insn ("ldb %0,[POINT 9,%2(%1),8]", ops);
       return "";
+    }
+
+  if (GET_CODE (mem) == MEM
+      && INTVAL (operands[2]) == 27)
+    {
+      HOST_WIDE_INT byteoff;
+      int unsignedp;
+
+      if (pdp10_qi_mem_logical_offset (mem, &byteoff, &unsignedp))
+        {
+          HOST_WIDE_INT wordoff = byteoff / UNITS_PER_WORD;
+          HOST_WIDE_INT inword = byteoff % UNITS_PER_WORD;
+          rtx outaddr = XEXP (mem, 0);
+          char buf[64];
+
+          if (inword < 0)
+            {
+              inword += UNITS_PER_WORD;
+              wordoff -= 1;
+            }
+
+          if (GET_CODE (outaddr) == PLUS
+              && GET_CODE (XEXP (outaddr, 1)) == CONST_INT)
+            {
+              HOST_WIDE_INT plusoff = INTVAL (XEXP (outaddr, 1));
+              HOST_WIDE_INT residual;
+
+              residual = (plusoff >= 0 && wordoff > plusoff)
+                ? (wordoff - plusoff) : 0;
+              if (MEM_OFFSET (mem) == 0
+                  || GET_CODE (MEM_OFFSET (mem)) != CONST_INT
+                  || INTVAL (MEM_OFFSET (mem)) < 0
+                  || INTVAL (MEM_OFFSET (mem)) >= UNITS_PER_WORD)
+                residual = 0;
+              if (residual != 0)
+                outaddr = plus_constant (outaddr, residual);
+            }
+          else if (!REG_P (outaddr) && wordoff != 0)
+            outaddr = pdp10_output_add_address_offset (outaddr, wordoff);
+
+          /* Only real byte-pointer registers need the historical one-byte
+             adjustment.  A plain register can also hold an ordinary word
+             pointer to an aggregate; treating every word-aligned register as
+             a byte pointer maps p[3] back to p[0].  */
+          if (REG_P (XEXP (mem, 0))
+              && MEM_ALIGN (mem) >= BITS_PER_WORD
+              && pdp10_reg_likely_byte_pointer_p (XEXP (mem, 0), insn))
+            inword = (inword + 1) % UNITS_PER_WORD;
+
+          ops[1] = outaddr;
+          if (REG_P (outaddr))
+            sprintf (buf, "ldb %%0,[POINT 9,(%%1),%d]",
+                     (int) inword * BITS_PER_UNIT + 8);
+          else
+            sprintf (buf, "ldb %%0,[POINT 9,%%1,%d]",
+                     (int) inword * BITS_PER_UNIT + 8);
+          output_asm_insn (buf, ops);
+          return "";
+        }
     }
 
   if (GET_CODE (mem) == MEM
@@ -8277,6 +9118,35 @@ pdp10_output_extzv (insn, operands)
      rtx insn;
      rtx *operands;
 {
+  if (INTVAL (operands[2]) == 18
+      && INTVAL (operands[3]) == 18
+      && GET_CODE (operands[1]) == MEM
+      && MEM_EXPR (operands[1]) != 0
+      && TREE_CODE (MEM_EXPR (operands[1])) == COMPONENT_REF
+      && POINTER_TYPE_P (TREE_TYPE (MEM_EXPR (operands[1]))))
+    return "hrrz %0,%W1";
+
+  if (INTVAL (operands[2]) == 9
+      && INTVAL (operands[3]) == 0
+      && GET_CODE (operands[1]) == MEM
+      && MEM_EXPR (operands[1]) != 0
+      && TREE_CODE (MEM_EXPR (operands[1])) == COMPONENT_REF
+      && TREE_CODE (TREE_TYPE (MEM_EXPR (operands[1]))) != ARRAY_TYPE)
+    {
+      tree field = TREE_OPERAND (MEM_EXPR (operands[1]), 1);
+
+      if (field != 0 && TREE_CODE (field) == FIELD_DECL)
+        {
+          HOST_WIDE_INT bitpos = int_bit_position (field);
+          int pos = (int) (bitpos % BITS_PER_WORD);
+
+          if (pos < 0)
+            pos += BITS_PER_WORD;
+          return output_bitfield_move (asm_out_file, insn, 0, 0,
+                                       operands[0], operands[1], 9, pos);
+        }
+    }
+
   if (INTVAL (operands[2]) == 9
       && INTVAL (operands[3]) == 0
       && GET_CODE (operands[1]) == MEM
@@ -9009,7 +9879,9 @@ pdp10_output_addsi (insn, operands, which_alternative)
               }
             }
 
-          if (REG_P (addr) && MEM_ALIGN (src) >= BITS_PER_WORD)
+          if (REG_P (addr)
+              && MEM_ALIGN (src) >= BITS_PER_WORD
+              && pdp10_reg_likely_byte_pointer_p (addr, insn))
             inword = (inword + 1) % UNITS_PER_WORD;
 
           ops[0] = operands[0];
@@ -9267,7 +10139,9 @@ pdp10_output_movsi (insn, which_alternative)
                9-bit byte inside that halfword.  This maps grec.c9+1 from
                POINT 18/IBP plus byte 2 to POINT 9,...,35, and c9+2 to the
                first byte of the next word.  */
-            if (REG_P (addr) && MEM_ALIGN (src) >= BITS_PER_WORD)
+            if (REG_P (addr)
+                && MEM_ALIGN (src) >= BITS_PER_WORD
+                && pdp10_reg_likely_byte_pointer_p (addr, insn))
               inword = (inword + 1) % UNITS_PER_WORD;
 
             /* Reconstruct the byte position from MEM_EXPR/MEM_OFFSET.  The
@@ -9520,6 +10394,9 @@ pdp10_address_base_offset (x, basep, offp)
      rtx *basep;
      HOST_WIDE_INT *offp;
 {
+  if (GET_CODE (x) == CONST)
+    x = XEXP (x, 0);
+
   if (GET_CODE (x) == PLUS && GET_CODE (XEXP (x, 1)) == CONST_INT)
     {
       *basep = XEXP (x, 0);
@@ -9530,6 +10407,72 @@ pdp10_address_base_offset (x, basep, offp)
   *basep = x;
   *offp = 0;
   return 1;
+}
+
+static rtx
+pdp10_normalize_block_word_address (addr, length, convert_units)
+     rtx addr;
+     HOST_WIDE_INT length;
+     int convert_units;
+{
+  rtx x;
+  rtx base;
+  HOST_WIDE_INT offset;
+  int was_const;
+
+  was_const = 0;
+  x = addr;
+  if (GET_CODE (x) == CONST)
+    {
+      was_const = 1;
+      x = XEXP (x, 0);
+    }
+
+  if (GET_CODE (x) != PLUS
+      || GET_CODE (XEXP (x, 1)) != CONST_INT)
+    return addr;
+
+  base = XEXP (x, 0);
+  offset = INTVAL (XEXP (x, 1));
+
+  /* BLKmode copy lengths are expressed in 9-bit C storage units, but
+     BLT source/destination addresses are 36-bit word addresses.  Generic
+     ARRAY_REF expansion can leave an element-boundary stack address in
+     storage-unit form as well as for symbolic globals, e.g. a four-word
+     struct array element can arrive as BASE+32 instead of BASE+8.
+
+     Normalize only exact positive element-boundary offsets.  Ordinary
+     stack temporaries and already-normalized word offsets, such as BASE+12
+     for a four-word scratch slot, are left unchanged.  */
+  if (convert_units
+      && length > 0
+      && offset >= length
+      && offset % length == 0
+      && offset % UNITS_PER_WORD == 0)
+    offset /= UNITS_PER_WORD;
+
+  if (was_const)
+    offset &= ADDRESS_MASK;
+
+  return plus_constant (base, offset);
+}
+
+int
+pdp10_word_address_plus_one_p (first, second)
+     rtx first;
+     rtx second;
+{
+  rtx first_base;
+  rtx second_base;
+  HOST_WIDE_INT first_off;
+  HOST_WIDE_INT second_off;
+
+  if (!pdp10_address_base_offset (first, &first_base, &first_off)
+      || !pdp10_address_base_offset (second, &second_base, &second_off))
+    return 0;
+
+  return (rtx_equal_p (first_base, second_base)
+          && second_off == first_off + 1);
 }
 
 int
@@ -9590,6 +10533,99 @@ pdp10_normalize_blt_source_p (src, dest, end, outp)
   if (outp)
     *outp = out;
   return 1;
+}
+
+int
+pdp10_normalize_blt_source_for_output (insn, src, dest, outp)
+     rtx insn;
+     rtx src;
+     rtx dest;
+     rtx *outp;
+{
+  rtx next;
+  rtx pat;
+  rtx use;
+  rtx end;
+  rtx scan;
+  int i;
+
+  next = next_nonnote_insn (insn);
+  if (next == 0
+      || GET_CODE (next) != INSN
+      || GET_CODE (PATTERN (next)) != PARALLEL)
+    return 0;
+
+  pat = PATTERN (next);
+  if (XVECLEN (pat, 0) < 3)
+    return 0;
+
+  use = XVECEXP (pat, 0, 2);
+  if (GET_CODE (use) != USE
+      || GET_CODE (XEXP (use, 0)) != MEM)
+    return 0;
+
+  end = XEXP (XEXP (use, 0), 0);
+
+  /* Some BLTs keep the end address in a register already computed before
+     the BLT setup.  Recover a nearby simple SET chain so source
+     normalization can use the real destination range instead of guessing
+     from the raw register.  The old reload output often computes this as
+     MOVE end,SP followed by ADD end,const.  */
+  if (REG_P (end))
+    {
+      rtx end_reg;
+      HOST_WIDE_INT end_offset;
+
+      end_reg = end;
+      end_offset = 0;
+      scan = prev_nonnote_insn (insn);
+      for (i = 0; scan != 0 && i < 20; scan = prev_nonnote_insn (scan), i++)
+        {
+          rtx set;
+          rtx rhs;
+
+          if (GET_CODE (scan) == JUMP_INSN
+              || GET_CODE (scan) == CALL_INSN
+              || GET_CODE (scan) == CODE_LABEL)
+            break;
+
+          if (GET_CODE (scan) != INSN
+              || GET_CODE (PATTERN (scan)) != SET
+              || !REG_P (SET_DEST (PATTERN (scan)))
+              || REGNO (SET_DEST (PATTERN (scan))) != REGNO (end_reg))
+            continue;
+
+          set = PATTERN (scan);
+          rhs = SET_SRC (set);
+          if (GET_CODE (rhs) == PLUS
+              && REG_P (XEXP (rhs, 0))
+              && REGNO (XEXP (rhs, 0)) == REGNO (end_reg)
+              && GET_CODE (XEXP (rhs, 1)) == CONST_INT)
+            {
+              end_offset += INTVAL (XEXP (rhs, 1));
+              continue;
+            }
+
+          if (GET_CODE (rhs) == PLUS
+              && GET_CODE (XEXP (rhs, 1)) == CONST_INT)
+            {
+              end = plus_constant (XEXP (rhs, 0),
+                                   INTVAL (XEXP (rhs, 1)) + end_offset);
+              break;
+            }
+
+          if (REG_P (rhs) || GET_CODE (rhs) == SYMBOL_REF)
+            {
+              end = plus_constant (rhs, end_offset);
+              break;
+            }
+
+          end = rhs;
+          break;
+        }
+    }
+
+  return pdp10_normalize_blt_source_p (src, dest, end, outp);
 }
 
 /* Try to emit instructions to BLT a memory block of LENGTH storage
@@ -9762,6 +10798,8 @@ pdp10_expand_movstrsi (operands)
      operands[1] is the block source address
      operands[2] is the block length
      operands[3] is the known alignment.  */
+  rtx raw_destination;
+  rtx raw_source;
 
 #if TARGET_STRING
   if (HAVE_MOVSLJ && TARGET_STRING)
@@ -9770,6 +10808,8 @@ pdp10_expand_movstrsi (operands)
 
   operands[0] = XEXP (operands[0], 0);
   operands[1] = XEXP (operands[1], 0);
+  raw_destination = operands[0];
+  raw_source = operands[1];
 
   if (GET_CODE (operands[3]) != CONST_INT
       || INTVAL (operands[3]) != UNITS_PER_WORD)
@@ -9779,40 +10819,27 @@ pdp10_expand_movstrsi (operands)
       && INTVAL (operands[2]) > 0
       && INTVAL (operands[2]) % UNITS_PER_WORD == 0)
     {
-      int i;
+      HOST_WIDE_INT length = INTVAL (operands[2]);
 
-      for (i = 0; i < 2; i++)
-        if (GET_CODE (operands[i]) == CONST
-            && GET_CODE (XEXP (operands[i], 0)) == PLUS
-            && GET_CODE (XEXP (XEXP (operands[i], 0), 1)) == CONST_INT)
-          {
-            rtx x = XEXP (operands[i], 0);
-            HOST_WIDE_INT offset = INTVAL (XEXP (x, 1));
-            HOST_WIDE_INT length = INTVAL (operands[2]);
+      operands[0] = pdp10_normalize_block_word_address (operands[0],
+                                                        length, 1);
+      operands[1] = pdp10_normalize_block_word_address (operands[1],
+                                                        length, 1);
 
-            /* BLKmode copies arrive with LENGTH in 9-bit C storage units,
-               while BLT addresses are 36-bit word addresses.  Some generic
-               ARRAY_REF addresses for full-word elements keep the same
-               storage-unit offset, e.g. &gp[1] of a 12-unit struct becomes
-               gp+12.  Normalize only exact element-boundary symbolic offsets;
-               already-correct word offsets such as gp+6 for a three-word
-               object are left alone.  */
-            if (offset >= length
-                && offset % length == 0
-                && offset % UNITS_PER_WORD == 0)
-              offset /= UNITS_PER_WORD;
-
-            operands[i] = plus_constant (XEXP (x, 0), offset & ADDRESS_MASK);
-          }
+      /* Structure-return temporaries can be allocated at a real stack word
+	 offset equal to the C-storage-unit size of the destination object.
+	 The generic BLKmode copy then looks like SRC=fp+48, DST=fp+12,
+	 LEN=48 for a twelve-word record.  That source offset is already a
+	 word address; converting it would create a false self-copy from
+	 fp+12 to fp+12 and discard the returned aggregate.  If source
+	 normalization collapses a distinct raw stack source onto the
+	 destination, keep the raw source.  */
+      if (!rtx_equal_p (raw_source, raw_destination)
+	  && rtx_equal_p (operands[1], operands[0]))
+	operands[1] = raw_source;
     }
-  else if (GET_CODE (operands[1]) == CONST
-           && GET_CODE (XEXP (operands[1], 0)) == PLUS
-           && GET_CODE (XEXP (XEXP (operands[1], 0), 1)) == CONST_INT)
-    {
-      rtx x = XEXP (operands[1], 0);
-      HOST_WIDE_INT offset = INTVAL (XEXP (x, 1));
-      operands[1] = plus_constant (XEXP (x, 0), offset & ADDRESS_MASK);
-    }
+  else
+    operands[1] = pdp10_normalize_block_word_address (operands[1], 0, 0);
 
   if (use_xblt (operands[0], operands[1], operands[2]))
     return expand_xblt (operands[0], operands[1], operands[2]);
@@ -11387,6 +12414,10 @@ static void	maybe_warn_about_pointer_conversion PARAMS ((tree, int, int));
 #endif
 static tree	strip_conversions PARAMS ((enum tree_code code, tree type,
 					   tree exp));
+static tree	pdp10_strip_all_conversions PARAMS ((tree exp));
+static rtx	pdp10_expand_int_plus_ptr_minus_const PARAMS ((enum machine_mode mode,
+							       rtx target,
+							       tree exp));
 static void	emit_cmp_and_jump_insn_1 PARAMS ((rtx x, rtx y,
 						  enum machine_mode mode,
 						  enum rtx_code comparison,
@@ -11465,6 +12496,238 @@ strip_conversions (code, type, exp)
   return exp;
 }
 
+static tree
+pdp10_strip_all_conversions (exp)
+     tree exp;
+{
+  while (TREE_CODE (exp) == NOP_EXPR || TREE_CODE (exp) == CONVERT_EXPR)
+    exp = TREE_OPERAND (exp, 0);
+  return exp;
+}
+
+
+#define PDP10_MAX_FOLDED_PTR_TERMS 4
+
+struct pdp10_folded_ptr_terms
+{
+  tree int_terms[PDP10_MAX_FOLDED_PTR_TERMS * 2];
+  tree ptr_terms[PDP10_MAX_FOLDED_PTR_TERMS];
+  tree base_terms[PDP10_MAX_FOLDED_PTR_TERMS];
+  int n_int;
+  int n_ptr;
+  int n_base;
+  int failed;
+};
+
+static void pdp10_collect_folded_ptr_terms PARAMS ((tree,
+                                                    struct pdp10_folded_ptr_terms *,
+                                                    int));
+static rtx pdp10_expand_folded_ptr_sum PARAMS ((enum machine_mode, rtx, tree));
+
+static void
+pdp10_collect_folded_ptr_terms (exp, out, neg)
+     tree exp;
+     struct pdp10_folded_ptr_terms *out;
+     int neg;
+{
+  tree stripped;
+
+  if (out->failed)
+    return;
+
+  stripped = pdp10_strip_all_conversions (exp);
+
+  if (!neg && TREE_CODE (stripped) == PLUS_EXPR)
+    {
+      pdp10_collect_folded_ptr_terms (TREE_OPERAND (stripped, 0), out, 0);
+      pdp10_collect_folded_ptr_terms (TREE_OPERAND (stripped, 1), out, 0);
+      return;
+    }
+
+  if (!neg && TREE_CODE (stripped) == MINUS_EXPR)
+    {
+      pdp10_collect_folded_ptr_terms (TREE_OPERAND (stripped, 0), out, 0);
+      pdp10_collect_folded_ptr_terms (TREE_OPERAND (stripped, 1), out, 1);
+      return;
+    }
+
+  if (!neg && TREE_CODE (stripped) == NEGATE_EXPR)
+    {
+      pdp10_collect_folded_ptr_terms (TREE_OPERAND (stripped, 0), out, 1);
+      return;
+    }
+
+  if (!neg && POINTER_TYPE_P (TREE_TYPE (stripped)))
+    {
+      if (out->n_ptr >= PDP10_MAX_FOLDED_PTR_TERMS)
+        out->failed = 1;
+      else
+        out->ptr_terms[out->n_ptr++] = stripped;
+      return;
+    }
+
+  if (neg && POINTER_TYPE_P (TREE_TYPE (stripped)))
+    {
+      if (out->n_base >= PDP10_MAX_FOLDED_PTR_TERMS)
+        out->failed = 1;
+      else
+        out->base_terms[out->n_base++] = stripped;
+      return;
+    }
+
+  if (neg)
+    out->failed = 1;
+  else if (out->n_int >= PDP10_MAX_FOLDED_PTR_TERMS * 2)
+    out->failed = 1;
+  else
+    out->int_terms[out->n_int++] = exp;
+}
+
+
+
+static rtx
+pdp10_expand_folded_ptr_sum (mode, target, exp)
+     enum machine_mode mode;
+     rtx target;
+     tree exp;
+{
+  struct pdp10_folded_ptr_terms terms;
+  int i;
+  rtx acc;
+
+  if (POINTER_TYPE_P (TREE_TYPE (exp)))
+    return NULL_RTX;
+
+  memset ((char *) &terms, 0, sizeof terms);
+  pdp10_collect_folded_ptr_terms (exp, &terms, 0);
+
+  if (terms.failed || terms.n_ptr == 0 || terms.n_ptr != terms.n_base)
+    return NULL_RTX;
+
+  acc = gen_reg_rtx (SImode);
+  emit_move_insn (acc, const0_rtx);
+
+  for (i = 0; i < terms.n_int; i++)
+    {
+      rtx x = expand_expr (terms.int_terms[i], NULL_RTX, SImode,
+                           EXPAND_NORMAL);
+      if (GET_MODE (x) != SImode && GET_MODE (x) != VOIDmode)
+        x = convert_to_mode (SImode, x, 0);
+      if (!register_operand (x, SImode))
+        x = force_reg (SImode, x);
+      emit_insn (gen_addsi3 (acc, acc, x));
+    }
+
+  for (i = 0; i < terms.n_ptr; i++)
+    {
+      tree pexp = terms.ptr_terms[i];
+      tree bexp = terms.base_terms[i];
+      rtx p = expand_expr (pexp, NULL_RTX, Pmode, EXPAND_NORMAL);
+      rtx b = expand_expr (bexp, NULL_RTX, Pmode, EXPAND_CONST_ADDRESS);
+      rtx d;
+      if (GET_MODE (p) != Pmode && GET_MODE (p) != VOIDmode)
+        p = convert_to_mode (Pmode, p, 1);
+      if (optimize == 1
+          && terms.n_int == 1
+          && TREE_CODE (pdp10_strip_all_conversions (terms.int_terms[0]))
+             == VAR_DECL)
+        {
+          rtx rawp = p;
+          if (!register_operand (rawp, SImode))
+            rawp = force_reg (SImode, rawp);
+          emit_insn (gen_subsi3 (acc, acc, rawp));
+        }
+      d = expand_subtract_pointers (SImode, gen_reg_rtx (SImode),
+                                    p, TREE_TYPE (pexp), b,
+                                    TREE_TYPE (pexp));
+      if (GET_MODE (d) != SImode && GET_MODE (d) != VOIDmode)
+        d = convert_to_mode (SImode, d, 0);
+      if (!register_operand (d, SImode))
+        d = force_reg (SImode, d);
+      emit_insn (gen_addsi3 (acc, acc, d));
+    }
+
+  return acc;
+}
+
+/* Expand folded integer forms like
+
+     s + (PTR - CONST_BYTE_POINTER)
+
+   when the middle end has exposed them as
+
+     (s + (ptrdiff_t) PTR) + -CONST_BYTE_POINTER
+
+   A plain integer expansion would add the encoded byte-pointer word to S.
+   A pointer expansion is worse: it adjusts S as if S itself were a byte
+   pointer.  Rebuild the intended byte-pointer subtraction from the tree and
+   then add the resulting byte count to the integer term.  */
+static rtx
+pdp10_expand_int_plus_ptr_minus_const (mode, target, exp)
+     enum machine_mode mode;
+     rtx target;
+     tree exp;
+{
+  tree lhs;
+  tree rhs;
+  tree a;
+  tree b;
+  tree int_exp;
+  tree ptr_exp;
+  tree base_exp;
+  rtx int_rtx;
+  rtx ptr_rtx;
+  rtx base_rtx;
+  rtx diff;
+
+  if (TREE_CODE (exp) != PLUS_EXPR || POINTER_TYPE_P (TREE_TYPE (exp)))
+    return NULL_RTX;
+
+  lhs = pdp10_strip_all_conversions (TREE_OPERAND (exp, 0));
+  rhs = pdp10_strip_all_conversions (TREE_OPERAND (exp, 1));
+  if (TREE_CODE (lhs) != PLUS_EXPR || TREE_CODE (rhs) != NEGATE_EXPR)
+    return NULL_RTX;
+
+
+  a = pdp10_strip_all_conversions (TREE_OPERAND (lhs, 0));
+  b = pdp10_strip_all_conversions (TREE_OPERAND (lhs, 1));
+
+  if (POINTER_TYPE_P (TREE_TYPE (a)) && !POINTER_TYPE_P (TREE_TYPE (b)))
+    {
+      ptr_exp = a;
+      int_exp = TREE_OPERAND (lhs, 1);
+    }
+  else if (!POINTER_TYPE_P (TREE_TYPE (a)) && POINTER_TYPE_P (TREE_TYPE (b)))
+    {
+      int_exp = TREE_OPERAND (lhs, 0);
+      ptr_exp = b;
+    }
+  else
+    return NULL_RTX;
+
+
+  base_exp = TREE_OPERAND (rhs, 0);
+  base_rtx = expand_expr (base_exp, NULL_RTX, Pmode, EXPAND_CONST_ADDRESS);
+  if (!CONSTANT_P (base_rtx) || !pdp10_const_byte_pointer_p (base_rtx))
+    return NULL_RTX;
+
+  if (!target)
+    target = gen_reg_rtx (mode);
+
+  int_rtx = expand_expr (int_exp, NULL_RTX, mode, EXPAND_NORMAL);
+  ptr_rtx = expand_expr (ptr_exp, NULL_RTX, Pmode, EXPAND_NORMAL);
+  diff = expand_subtract_pointers (mode, gen_reg_rtx (Pmode), ptr_rtx,
+				       TREE_TYPE (ptr_exp), base_rtx,
+				       TREE_TYPE (ptr_exp));
+
+  if (!register_operand (int_rtx, mode))
+    int_rtx = force_reg (mode, int_rtx);
+  if (!register_operand (diff, mode))
+    diff = force_reg (mode, diff);
+  emit_insn (gen_addsi3 (target, int_rtx, diff));
+  return target;
+}
+
 /* Expand RTL instructions from a binary parse tree expression.  */
 rtx
 pdp10_expand_binop (mode, binoptab, op0, op1, target, unsignedp, methods, exp)
@@ -11497,7 +12760,19 @@ pdp10_expand_binop (mode, binoptab, op0, op1, target, unsignedp, methods, exp)
       exp1 = strip_conversions (code, TREE_TYPE (exp), TREE_OPERAND (exp, 1));
       type1 = TREE_TYPE (exp1);
       ptr1 = POINTER_TYPE_P (type1) && GET_CODE (op1) != CONST_INT;
-      if (!ptr1 && TREE_CODE (exp1) == MINUS_EXPR)
+
+      /* A pointer difference hidden under conversions may be used as an
+	 integer value, for example in
+
+	   s += (int)(p - global_byte_array)
+
+	 Do not classify the outer integer PLUS_EXPR as pointer arithmetic just
+	 because its right operand contains a pointer subtraction.  That makes
+	 expand_add_or_sub_pointer treat the integer accumulator as a byte
+	 pointer.  The hidden-pointer test is only useful when the outer
+	 expression itself produces a pointer value.  */
+      if (!ptr1 && POINTER_TYPE_P (TREE_TYPE (exp))
+	  && TREE_CODE (exp1) == MINUS_EXPR)
 	{
 	  if (POINTER_TYPE_P (TREE_TYPE (TREE_OPERAND (exp1, 0))))
 	    {
@@ -11516,6 +12791,15 @@ pdp10_expand_binop (mode, binoptab, op0, op1, target, unsignedp, methods, exp)
     {
     case PLUS_EXPR:
     case MINUS_EXPR:
+      if (code == PLUS_EXPR)
+	{
+	  rtx x = pdp10_expand_folded_ptr_sum (mode, target, exp);
+	  if (x != NULL_RTX)
+	    return x;
+	  x = pdp10_expand_int_plus_ptr_minus_const (mode, target, exp);
+	  if (x != NULL_RTX)
+	    return x;
+	}
       add = (code == PLUS_EXPR);
       if (GET_CODE (op0) == NEG)
 	{
@@ -11528,7 +12812,68 @@ pdp10_expand_binop (mode, binoptab, op0, op1, target, unsignedp, methods, exp)
 	  add = !add;
 	}
       if (!add && ptr0 && ptr1)
-	return expand_subtract_pointers (mode, target, op0, type0, op1, type1);
+        {
+          /* If the requested result mode is narrower than a pointer,
+             expand_expr may already have truncated pointer operands to
+             their address halves before this target hook sees them.  PDP-10
+             byte pointers need the full P/S selector for subtraction, so
+             re-expand both tree operands in Pmode and let the subtract path
+             truncate only the final byte count.  */
+          if (mode != Pmode)
+            {
+              op0 = expand_expr (exp0, NULL_RTX, Pmode, EXPAND_NORMAL);
+              op1 = expand_expr (exp1, NULL_RTX, Pmode, EXPAND_NORMAL);
+            }
+          return expand_subtract_pointers (mode, target, op0, type0, op1, type1);
+        }
+
+      /* The middle end can also leave pointer subtraction against a
+	 constant byte pointer as a plain MINUS_EXPR whose result type is
+	 integer ptrdiff_t.  In that case PTR1 is false because the RTL
+	 operand is a constant, not a register-valued pointer.  Do not send
+	 this to expand_add_or_sub_pointer: that routine adjusts a byte
+	 pointer and returns a byte pointer, which corrupts integer forms such
+	 as
+
+	   s += p - global_byte_array;
+
+	 Use the byte-pointer subtraction path so the result is a byte count.  */
+      if (!add && ptr0 && !POINTER_TYPE_P (TREE_TYPE (exp))
+	  && CONSTANT_P (op1) && pdp10_const_byte_pointer_p (op1))
+	return expand_subtract_pointers (mode, target, op0, type0,
+					 op1, type0);
+
+      /* The middle end can fold pointer subtraction against a constant
+	 byte pointer into a PLUS_EXPR whose second RTL operand is the
+	 negated pointer constant, while the tree result is still an
+	 integer ptrdiff_t.  Do not treat that as pointer plus integer:
+	 expand_add_or_sub_pointer would use TARGET as the byte pointer
+	 being adjusted, which corrupts expressions such as
+
+	   s += p - global_byte_array;
+
+	 when TARGET already holds the running integer sum.  Recover the
+	 positive byte-pointer constant and use the byte-pointer subtraction
+	 path instead.  */
+      if (add && ptr0 && !POINTER_TYPE_P (TREE_TYPE (exp))
+	  && CONSTANT_P (op1))
+	{
+	  rtx rhs = negate_rtx (Pmode, op1);
+
+	  if (pdp10_const_byte_pointer_p (rhs))
+	    return expand_subtract_pointers (mode, target, op0, type0,
+					     rhs, type0);
+	}
+
+      /* Do not perform pointer adjustment for an outer integer expression
+	 whose only pointer operand came from stripping a ptrdiff_t conversion.
+	 Such forms are part of folded pointer-difference arithmetic.  Let the
+	 ordinary integer expander handle the already-expanded operands unless a
+	 more specific pointer-difference pattern above matched.  */
+      if (add && !POINTER_TYPE_P (TREE_TYPE (exp))
+	  && ((ptr0 && !ptr1) || (!ptr0 && ptr1)))
+	break;
+
       if (ptr0 || ptr1)
 	{
 	  if (POINTER_TYPE_P (TREE_TYPE (exp)))
@@ -12593,6 +13938,9 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
 {
   tree object;
   tree base_tree = NULL_TREE;
+  tree dyn_index = NULL_TREE;
+  tree dyn_elem_type = NULL_TREE;
+  HOST_WIDE_INT dyn_index_scale = 1;
   rtx base_rtx;
   rtx base_addr;
   rtx addr;
@@ -12623,7 +13971,66 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
   if (!VALID_OWGBP_BYTE_SIZE_P (bytesize) || bytesize >= BITS_PER_WORD)
     return NULL_RTX;
 
-  if (!pdp10_dynamic_ref_base_bitpos (object, &base_tree, &bitpos))
+  if (TREE_CODE (object) == COMPONENT_REF
+      && TREE_CODE (TREE_OPERAND (object, 0)) == ARRAY_REF
+      && !host_integerp (TREE_OPERAND (TREE_OPERAND (object, 0), 1), 0))
+    {
+      tree array_ref = TREE_OPERAND (object, 0);
+      tree array = TREE_OPERAND (array_ref, 0);
+      tree index = TREE_OPERAND (array_ref, 1);
+      tree field = TREE_OPERAND (object, 1);
+      pdp10_word36 base_bits;
+      pdp10_word36 record_bits;
+
+      if (field == NULL_TREE || TREE_CODE (field) != FIELD_DECL)
+        return NULL_RTX;
+      if (!pdp10_dynamic_ref_base_bitpos (array, &base_tree, &base_bits))
+        return NULL_RTX;
+      if (!pdp10_initializer_type_bitsize (TREE_TYPE (array_ref),
+                                           &record_bits))
+        return NULL_RTX;
+      if ((record_bits % (pdp10_word36) bytesize) != 0)
+        return NULL_RTX;
+
+      /* Dynamic a[i].field must first build a byte pointer to a[0].field and
+         only then add i scaled by the record stride in field-sized bytes.
+         The generic path can add the stride to a record pointer and then DPB
+         through that pointer.  For subword fields this uses the record
+         pointer's byte size (often 18) instead of the selected field byte
+         size (usually 9), corrupting adjacent fields.  */
+      bitpos = base_bits + (pdp10_word36) int_bit_position (field);
+      dyn_index = index;
+      dyn_elem_type = TREE_TYPE (object);
+      dyn_index_scale = (HOST_WIDE_INT) (record_bits / (pdp10_word36) bytesize);
+    }
+  else if (TREE_CODE (object) == ARRAY_REF
+      && TREE_CODE (TREE_OPERAND (object, 0)) == COMPONENT_REF
+      && !host_integerp (TREE_OPERAND (object, 1), 0))
+    {
+      tree array = TREE_OPERAND (object, 0);
+      tree index = TREE_OPERAND (object, 1);
+      tree record_object = TREE_OPERAND (array, 0);
+      tree field = TREE_OPERAND (array, 1);
+      pdp10_word36 base_bits;
+
+      if (field == NULL_TREE || TREE_CODE (field) != FIELD_DECL)
+        return NULL_RTX;
+      if (!pdp10_dynamic_ref_base_bitpos (record_object, &base_tree,
+                                          &base_bits))
+        return NULL_RTX;
+
+      /* Dynamic p->field[i] must build a byte pointer to field[0] first,
+         then adjust that byte pointer by i elements.  The generic address
+         path may instead adjust the incoming struct pointer and only add the
+         field word offset later.  On PDP-6/KA10 this is wrong for a struct
+         pointer represented as a halfword byte pointer: IBP then walks
+         18-bit slots while the element index is a 9-bit char count.  */
+      bitpos = base_bits + (pdp10_word36) int_bit_position (field);
+      dyn_index = index;
+      dyn_elem_type = TREE_TYPE (object);
+      dyn_index_scale = 1;
+    }
+  else if (!pdp10_dynamic_ref_base_bitpos (object, &base_tree, &bitpos))
     return NULL_RTX;
 
   byte_pos = bitpos % BITS_PER_WORD;
@@ -12664,9 +14071,17 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
                                       ((pdp10_word36) ps) << 24);
 
   reg = gen_reg_rtx (Pmode);
-  if (GET_CODE (base_addr) == REG && !REGNO_PTR_FRAME_P (REGNO (base_addr)))
+  if (GET_CODE (base_addr) == REG
+      && base_addr != virtual_stack_vars_rtx
+      && !REGNO_PTR_FRAME_P (REGNO (base_addr)))
     {
       emit_move_insn (reg, base_addr);
+      /* BASE_ADDR may itself be a PDP-10 byte pointer, for example a
+         struct pointer used to form p->char_field[i].  Clear the old P,S
+         bits before installing this object's P,S selector; ORing the new
+         selector into an 18-bit record pointer leaves a corrupt byte
+         pointer for dynamic char array accesses.  */
+      emit_insn (gen_HRRZ (reg, reg));
       if (word_offset != 0)
         emit_insn (gen_addsi3 (reg, reg, GEN_INT ((HOST_WIDE_INT) word_offset)));
     }
@@ -12675,9 +14090,11 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
       /* BASE_ADDR is the run-time pointer value loaded from an object such as
          a pointer parameter's stack slot.  Do not wrap MEM+offset in
          UNSPEC_ADDRESS/MOVEI; that is an invalid address expression after
-         virtual register instantiation.  Load the pointer value first, then
-         add the word offset to its address half before installing P,S.  */
+         virtual register instantiation.  Load the pointer value first, clear
+         any old P,S byte-pointer selector, then add the word offset before
+         installing the selected field/element P,S.  */
       emit_move_insn (reg, base_addr);
+      emit_insn (gen_HRRZ (reg, reg));
       if (word_offset != 0)
         emit_insn (gen_addsi3 (reg, reg, GEN_INT ((HOST_WIDE_INT) word_offset)));
     }
@@ -12695,6 +14112,24 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
      which leaves IDPB/ILDB pointing at nonsense and misses packed struct
      fields. */
   emit_TLO (reg, reg, ps << 6);
+
+  if (dyn_index != NULL_TREE)
+    {
+      rtx index_rtx;
+
+      index_rtx = expand_expr (dyn_index, NULL_RTX, Pmode, EXPAND_NORMAL);
+      if (!register_operand (index_rtx, Pmode))
+        index_rtx = force_reg (Pmode, index_rtx);
+      if (dyn_index_scale != 1)
+        {
+          rtx scaled = gen_reg_rtx (Pmode);
+          emit_insn (gen_mulsi3 (scaled, index_rtx,
+                                 GEN_INT (dyn_index_scale)));
+          index_rtx = scaled;
+        }
+      return pdp10_expand_addbp3 (dyn_elem_type, reg, reg, index_rtx);
+    }
+
   return reg;
 }
 
@@ -13932,9 +15367,18 @@ void pdp10_md_array_offset (tree exp, tree index, tree unit_size,
 	 byte offset so subword fields inside the aggregate land in the
 	 proper PDP-10 word and byte position.  Scalar arrays, on the
 	 other hand, address whole PDP-10 words/halfwords directly.  */
-      if (TREE_CODE (elem_type) != RECORD_TYPE
-	  && TREE_CODE (elem_type) != UNION_TYPE
-	  && tree_low_cst (unit_size, 1) >= UNITS_PER_WORD)
+      if (0
+	  && (TREE_CODE (elem_type) == RECORD_TYPE
+	      || TREE_CODE (elem_type) == UNION_TYPE)
+	  && tree_low_cst (unit_size, 1) >= UNITS_PER_WORD
+	  && (tree_low_cst (unit_size, 1) % UNITS_PER_WORD) == 0)
+	unit_size = size_binop (TRUNC_DIV_EXPR,
+				unit_size,
+				convert (sizetype,
+					 build_int_2 (2, 0)));
+      else if (TREE_CODE (elem_type) != RECORD_TYPE
+	       && TREE_CODE (elem_type) != UNION_TYPE
+	       && tree_low_cst (unit_size, 1) >= UNITS_PER_WORD)
 	unit_size = size_binop (TRUNC_DIV_EXPR,
 				unit_size,
 				convert (sizetype,

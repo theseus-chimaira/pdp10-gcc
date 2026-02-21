@@ -3997,10 +3997,19 @@ expand_assignment (to, from, want_value, suggest_reg)
 		 extended one-word global byte-pointer format here and aborted for
 		 PDP-6/KA10 local byte pointers; native 9-bit stack QI arrays need
 		 the local path too.  */
-	      if ((REG_P (addr) && addr == virtual_stack_vars_rtx)
-		  || (GET_CODE (addr) == PLUS
-		      && REG_P (XEXP (addr, 0))
-		      && XEXP (addr, 0) == virtual_stack_vars_rtx))
+	      if (((REG_P (addr) && addr == virtual_stack_vars_rtx)
+		   || (GET_CODE (addr) == PLUS
+		       && REG_P (XEXP (addr, 0))
+		       && XEXP (addr, 0) == virtual_stack_vars_rtx))
+#if REAL_BITS_PER_UNIT == 36
+		  && !(TREE_CODE (to) == ARRAY_REF
+		       && bitsize == BITS_PER_UNIT
+		       && pdp10_bytesize (TREE_TYPE (to)) == BITS_PER_UNIT
+		       && TREE_CODE (TREE_OPERAND (to, 0)) == COMPONENT_REF
+		       && bitpos != 0
+		       && (bitpos % BITS_PER_UNIT) == 0)
+#endif
+		 )
 		{
 		  /* FIXME: code duplication with the load-side path below.  */
 		  HOST_WIDE_INT ps;
@@ -4056,6 +4065,38 @@ expand_assignment (to, from, want_value, suggest_reg)
 
 	      if (offset_rtx != const0_rtx)
 		{
+
+#if REAL_BITS_PER_UNIT == 36
+		  /* PDP-10: store-side twin of the dynamic byte-array field fix
+		     below.  Convert the record-field base to a real element-size
+		     byte pointer before adding the dynamic subscript.  */
+		  if (TREE_CODE (to) == ARRAY_REF
+		      && bitsize == BITS_PER_UNIT
+		      && pdp10_bytesize (TREE_TYPE (to)) == BITS_PER_UNIT
+		      && TREE_CODE (TREE_OPERAND (to, 0)) == COMPONENT_REF
+		      && bitpos != 0
+		      && (bitpos % BITS_PER_UNIT) == 0)
+		    {
+		      HOST_WIDE_INT bytepos = bitpos / BITS_PER_UNIT;
+		      HOST_WIDE_INT wordoff = bytepos / UNITS_PER_WORD;
+		      HOST_WIDE_INT byte = bytepos % UNITS_PER_WORD;
+		      rtx areg = gen_reg_rtx (Pmode);
+
+		      if (!general_operand (addr, Pmode))
+			addr = force_reg (Pmode, addr);
+		      emit_move_insn (areg, addr);
+		      if (!((addr == virtual_stack_vars_rtx)
+			    || (GET_CODE (addr) == PLUS
+				&& XEXP (addr, 0) == virtual_stack_vars_rtx)))
+			emit_insn (gen_HRRZ (areg, areg));
+		      if (wordoff != 0)
+			emit_insn (gen_addsi3 (areg, areg, GEN_INT (wordoff)));
+		      addr = pdp10_convert_ptr (NULL_TREE, areg, NULL_RTX, 36,
+					pdp10_bytesize (TREE_TYPE (to)), byte);
+		      bitpos = 0;
+		    }
+		  else
+#endif
 		  if (pdp10_bytesize (TREE_TYPE (tem)) >= BITS_PER_WORD)
 		    addr = pdp10_convert_ptr (NULL_TREE, addr, NULL_RTX, 36,
 					      pdp10_bytesize (TREE_TYPE (to)),
@@ -7968,9 +8009,18 @@ expand_expr (exp, target, tmode, modifier)
 		   extended one-word global byte-pointer format here and aborted for
 		   PDP-6/KA10 local byte pointers; native 9-bit stack QI arrays need
 		   the local path too.  */
-		if (addr == virtual_stack_vars_rtx
-		    || (GET_CODE (addr) == PLUS
-			&& XEXP (addr, 0) == virtual_stack_vars_rtx))
+		if ((addr == virtual_stack_vars_rtx
+		     || (GET_CODE (addr) == PLUS
+			 && XEXP (addr, 0) == virtual_stack_vars_rtx))
+#if REAL_BITS_PER_UNIT == 36
+		    && !(code == ARRAY_REF
+		         && bitsize == BITS_PER_UNIT
+		         && pdp10_bytesize (TREE_TYPE (exp)) == BITS_PER_UNIT
+		         && TREE_CODE (TREE_OPERAND (exp, 0)) == COMPONENT_REF
+		         && bitpos != 0
+		         && (bitpos % BITS_PER_UNIT) == 0)
+#endif
+		   )
 		  {
 		    int bytesize = pdp10_bytesize (TREE_TYPE (exp));
 		    int ps;
@@ -8007,6 +8057,41 @@ expand_expr (exp, target, tmode, modifier)
 		      }
 		  }
 
+
+#if REAL_BITS_PER_UNIT == 36
+		/* PDP-10: for a dynamic subscript into a byte array that is a
+		   record field, build a real element-size byte pointer to field[0]
+		   before applying the dynamic index.  Otherwise a struct pointer
+		   represented as an 18-bit byte pointer is adjusted with 9-bit
+		   element counts and final output can only guess at the lost byte
+		   position.  */
+		if (code == ARRAY_REF
+		    && bitsize == BITS_PER_UNIT
+		    && pdp10_bytesize (TREE_TYPE (exp)) == BITS_PER_UNIT
+		    && TREE_CODE (TREE_OPERAND (exp, 0)) == COMPONENT_REF
+		    && bitpos != 0
+		    && (bitpos % BITS_PER_UNIT) == 0)
+		  {
+		    HOST_WIDE_INT bytepos = bitpos / BITS_PER_UNIT;
+		    HOST_WIDE_INT wordoff = bytepos / UNITS_PER_WORD;
+		    HOST_WIDE_INT byte = bytepos % UNITS_PER_WORD;
+		    rtx areg = gen_reg_rtx (Pmode);
+
+		    if (!general_operand (addr, Pmode))
+		      addr = force_reg (Pmode, addr);
+		    emit_move_insn (areg, addr);
+		    if (!((addr == virtual_stack_vars_rtx)
+			  || (GET_CODE (addr) == PLUS
+			      && XEXP (addr, 0) == virtual_stack_vars_rtx)))
+		      emit_insn (gen_HRRZ (areg, areg));
+		    if (wordoff != 0)
+		      emit_insn (gen_addsi3 (areg, areg, GEN_INT (wordoff)));
+		    addr = pdp10_convert_ptr (NULL_TREE, areg, NULL_RTX, 36,
+					pdp10_bytesize (TREE_TYPE (exp)), byte);
+		    bitpos = 0;
+		  }
+		else
+#endif
 		if (pdp10_bytesize (TREE_TYPE (tem)) >= BITS_PER_WORD)
 		  addr = pdp10_convert_ptr (NULL_TREE, addr, NULL_RTX, 36,
 					    pdp10_bytesize (TREE_TYPE (exp)),
