@@ -46,6 +46,162 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "intl.h"
 #include "tm_p.h"
 
+
+
+#if REAL_BITS_PER_UNIT == 36
+/* Compute PDP-10 packed record field bit positions for dynamic byte-array
+   field expansion in this file.  GCC's normal int_bit_position can report
+   zero for array fields whose C-level DECL position has already been folded
+   into the addressed word; the PDP-10 backend still needs the packed byte
+   offset inside the record.  Keep this helper local to expr.c so the generic
+   expansion fixes below do not depend on backend-private static functions.  */
+static int pdp10_expr_type_bitsize PARAMS ((tree, HOST_WIDE_INT *));
+static int pdp10_expr_record_field_bitpos PARAMS ((tree, tree,
+                                                   HOST_WIDE_INT *));
+
+static int
+pdp10_expr_type_bitsize (type, bitsp)
+     tree type;
+     HOST_WIDE_INT *bitsp;
+{
+  int bytesize;
+
+  if (type == 0 || bitsp == 0)
+    return 0;
+
+  switch (TREE_CODE (type))
+    {
+    case ARRAY_TYPE:
+      {
+        tree domain = TYPE_DOMAIN (type);
+        tree minv;
+        tree maxv;
+        HOST_WIDE_INT minidx;
+        HOST_WIDE_INT maxidx;
+        HOST_WIDE_INT elem_bits;
+
+        if (domain == 0)
+          return 0;
+        minv = TYPE_MIN_VALUE (domain);
+        maxv = TYPE_MAX_VALUE (domain);
+        if (minv == 0 || maxv == 0)
+          return 0;
+        if (!host_integerp (minv, 0) || !host_integerp (maxv, 0))
+          return 0;
+        minidx = tree_low_cst (minv, 0);
+        maxidx = tree_low_cst (maxv, 0);
+        if (maxidx < minidx)
+          return 0;
+        if (!pdp10_expr_type_bitsize (TREE_TYPE (type), &elem_bits))
+          return 0;
+        *bitsp = (maxidx - minidx + 1) * elem_bits;
+        return 1;
+      }
+
+    case RECORD_TYPE:
+      {
+        tree field;
+        HOST_WIDE_INT bitpos = 0;
+
+        for (field = TYPE_FIELDS (type); field; field = TREE_CHAIN (field))
+          {
+            tree ftype;
+            HOST_WIDE_INT fbits;
+            HOST_WIDE_INT rem;
+            int fbytes;
+
+            if (TREE_CODE (field) != FIELD_DECL)
+              continue;
+            ftype = TREE_TYPE (field);
+            fbytes = pdp10_bytesize (ftype);
+            if (fbytes == 32)
+              fbytes = BITS_PER_WORD;
+            if (!pdp10_expr_type_bitsize (ftype, &fbits))
+              return 0;
+            if (fbytes >= BITS_PER_WORD || TREE_CODE (ftype) == RECORD_TYPE)
+              {
+                rem = bitpos % BITS_PER_WORD;
+                if (rem != 0)
+                  bitpos += BITS_PER_WORD - rem;
+                bitpos += ((fbits + BITS_PER_WORD - 1) / BITS_PER_WORD)
+                  * BITS_PER_WORD;
+              }
+            else
+              {
+                rem = bitpos % BITS_PER_WORD;
+                if (rem + (HOST_WIDE_INT) fbytes > BITS_PER_WORD)
+                  bitpos += BITS_PER_WORD - rem;
+                bitpos += fbits;
+              }
+          }
+        *bitsp = bitpos;
+        return 1;
+      }
+
+    default:
+      bytesize = pdp10_bytesize (type);
+      if (bytesize == 32)
+        bytesize = BITS_PER_WORD;
+      if (bytesize <= 0)
+        return 0;
+      *bitsp = bytesize;
+      return 1;
+    }
+}
+
+static int
+pdp10_expr_record_field_bitpos (record_type, wanted, bitposp)
+     tree record_type;
+     tree wanted;
+     HOST_WIDE_INT *bitposp;
+{
+  tree field;
+  HOST_WIDE_INT bitpos = 0;
+
+  if (record_type == 0 || TREE_CODE (record_type) != RECORD_TYPE)
+    return 0;
+
+  for (field = TYPE_FIELDS (record_type); field; field = TREE_CHAIN (field))
+    {
+      tree ftype;
+      HOST_WIDE_INT fbits;
+      HOST_WIDE_INT rem;
+      int fbytes;
+
+      if (TREE_CODE (field) != FIELD_DECL)
+        continue;
+      if (field == wanted)
+        {
+          *bitposp = bitpos;
+          return 1;
+        }
+      ftype = TREE_TYPE (field);
+      fbytes = pdp10_bytesize (ftype);
+      if (fbytes == 32)
+        fbytes = BITS_PER_WORD;
+      if (!pdp10_expr_type_bitsize (ftype, &fbits))
+        return 0;
+      if (fbytes >= BITS_PER_WORD || TREE_CODE (ftype) == RECORD_TYPE)
+        {
+          rem = bitpos % BITS_PER_WORD;
+          if (rem != 0)
+            bitpos += BITS_PER_WORD - rem;
+          bitpos += ((fbits + BITS_PER_WORD - 1) / BITS_PER_WORD)
+            * BITS_PER_WORD;
+        }
+      else
+        {
+          rem = bitpos % BITS_PER_WORD;
+          if (rem + (HOST_WIDE_INT) fbytes > BITS_PER_WORD)
+            bitpos += BITS_PER_WORD - rem;
+          bitpos += fbits;
+        }
+    }
+
+  return 0;
+}
+#endif
+
 /* Decide whether a function's arguments should be processed
    from first to last or from last to first.
 
@@ -4006,7 +4162,6 @@ expand_assignment (to, from, want_value, suggest_reg)
 		       && bitsize == BITS_PER_UNIT
 		       && pdp10_bytesize (TREE_TYPE (to)) == BITS_PER_UNIT
 		       && TREE_CODE (TREE_OPERAND (to, 0)) == COMPONENT_REF
-		       && bitpos != 0
 		       && (bitpos % BITS_PER_UNIT) == 0)
 #endif
 		 )
@@ -4074,12 +4229,31 @@ expand_assignment (to, from, want_value, suggest_reg)
 		      && bitsize == BITS_PER_UNIT
 		      && pdp10_bytesize (TREE_TYPE (to)) == BITS_PER_UNIT
 		      && TREE_CODE (TREE_OPERAND (to, 0)) == COMPONENT_REF
-		      && bitpos != 0
 		      && (bitpos % BITS_PER_UNIT) == 0)
 		    {
 		      HOST_WIDE_INT bytepos = bitpos / BITS_PER_UNIT;
-		      HOST_WIDE_INT wordoff = bytepos / UNITS_PER_WORD;
-		      HOST_WIDE_INT byte = bytepos % UNITS_PER_WORD;
+		      HOST_WIDE_INT wordoff;
+		      HOST_WIDE_INT byte;
+		      if (bytepos == 0)
+			{
+			  tree comp = TREE_OPERAND (to, 0);
+			  tree field = TREE_OPERAND (comp, 1);
+			  HOST_WIDE_INT fbitpos;
+
+			  if (field != 0 && TREE_CODE (field) == FIELD_DECL)
+			    {
+			      tree record_type = TREE_TYPE (TREE_OPERAND (comp, 0));
+
+			      if (record_type != 0 && POINTER_TYPE_P (record_type))
+				record_type = TREE_TYPE (record_type);
+			      if (pdp10_expr_record_field_bitpos (record_type, field, &fbitpos))
+				bytepos = fbitpos / BITS_PER_UNIT;
+			      else
+				bytepos = int_bit_position (field) / BITS_PER_UNIT;
+			    }
+			  }
+		      wordoff = bytepos / UNITS_PER_WORD;
+		      byte = bytepos % UNITS_PER_WORD;
 		      rtx areg = gen_reg_rtx (Pmode);
 
 		      if (!general_operand (addr, Pmode))
@@ -8017,7 +8191,6 @@ expand_expr (exp, target, tmode, modifier)
 		         && bitsize == BITS_PER_UNIT
 		         && pdp10_bytesize (TREE_TYPE (exp)) == BITS_PER_UNIT
 		         && TREE_CODE (TREE_OPERAND (exp, 0)) == COMPONENT_REF
-		         && bitpos != 0
 		         && (bitpos % BITS_PER_UNIT) == 0)
 #endif
 		   )
@@ -8069,12 +8242,31 @@ expand_expr (exp, target, tmode, modifier)
 		    && bitsize == BITS_PER_UNIT
 		    && pdp10_bytesize (TREE_TYPE (exp)) == BITS_PER_UNIT
 		    && TREE_CODE (TREE_OPERAND (exp, 0)) == COMPONENT_REF
-		    && bitpos != 0
 		    && (bitpos % BITS_PER_UNIT) == 0)
 		  {
 		    HOST_WIDE_INT bytepos = bitpos / BITS_PER_UNIT;
-		    HOST_WIDE_INT wordoff = bytepos / UNITS_PER_WORD;
-		    HOST_WIDE_INT byte = bytepos % UNITS_PER_WORD;
+		    HOST_WIDE_INT wordoff;
+		    HOST_WIDE_INT byte;
+		    if (bytepos == 0)
+		      {
+			tree comp = TREE_OPERAND (exp, 0);
+			tree field = TREE_OPERAND (comp, 1);
+			HOST_WIDE_INT fbitpos;
+
+			if (field != 0 && TREE_CODE (field) == FIELD_DECL)
+			  {
+			    tree record_type = TREE_TYPE (TREE_OPERAND (comp, 0));
+
+			    if (record_type != 0 && POINTER_TYPE_P (record_type))
+			      record_type = TREE_TYPE (record_type);
+			    if (pdp10_expr_record_field_bitpos (record_type, field, &fbitpos))
+			      bytepos = fbitpos / BITS_PER_UNIT;
+			    else
+			      bytepos = int_bit_position (field) / BITS_PER_UNIT;
+			  }
+			}
+		    wordoff = bytepos / UNITS_PER_WORD;
+		    byte = bytepos % UNITS_PER_WORD;
 		    rtx areg = gen_reg_rtx (Pmode);
 
 		    if (!general_operand (addr, Pmode))

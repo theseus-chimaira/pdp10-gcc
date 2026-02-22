@@ -7140,6 +7140,35 @@ pdp10_output_load_unsigned_byte (insn, operands)
         }
 
       if (GET_MODE (operands[1]) == QImode
+          && REG_P (addr)
+          && MEM_EXPR (operands[1]) != 0
+          && TREE_CODE (MEM_EXPR (operands[1])) == COMPONENT_REF
+          && TREE_CODE (TREE_TYPE (MEM_EXPR (operands[1]))) == ARRAY_TYPE)
+        {
+          pdp10_word36 bitpos;
+
+          if (pdp10_output_qi_tree_bitpos (MEM_EXPR (operands[1]), &bitpos)
+              && (bitpos % BITS_PER_WORD) != 0)
+            {
+              HOST_WIDE_INT byteoff;
+              HOST_WIDE_INT i;
+              rtx ops[3];
+              rtx scratch = gen_rtx_REG (SImode, 0);
+
+              byteoff = (HOST_WIDE_INT)
+                ((bitpos % BITS_PER_WORD) / BITS_PER_UNIT);
+              ops[0] = operands[0];
+              ops[1] = scratch;
+              ops[2] = addr;
+              output_asm_insn ("move %1,%2", ops);
+              for (i = 0; i < byteoff; i++)
+                output_asm_insn ("ibp %1", ops);
+              output_asm_insn ("ldb %0,%1", ops);
+              return "";
+            }
+        }
+
+      if (GET_MODE (operands[1]) == QImode
           && MEM_EXPR (operands[1]) != 0
           && TREE_CODE (MEM_EXPR (operands[1])) == COMPONENT_REF
           && TREE_CODE (TREE_TYPE (MEM_EXPR (operands[1]))) != ARRAY_TYPE)
@@ -7152,6 +7181,38 @@ pdp10_output_load_unsigned_byte (insn, operands)
               pos = (int) (bitpos % BITS_PER_WORD);
               if (pos < 0)
                 pos += BITS_PER_WORD;
+            }
+        }
+
+      if (GET_MODE (operands[1]) == QImode
+          && REG_P (addr)
+          && MEM_EXPR (operands[1]) != 0)
+        {
+          HOST_WIDE_INT logicaloff;
+          int unsignedp;
+
+          if (pdp10_qi_mem_logical_offset (operands[1], &logicaloff, &unsignedp))
+            {
+              HOST_WIDE_INT byteoff = logicaloff % UNITS_PER_WORD;
+              HOST_WIDE_INT i;
+
+              (void) unsignedp;
+              if (byteoff < 0)
+                byteoff += UNITS_PER_WORD;
+              if (byteoff != 0)
+                {
+                  rtx ops[3];
+                  rtx scratch = gen_rtx_REG (SImode, 0);
+
+                  ops[0] = operands[0];
+                  ops[1] = scratch;
+                  ops[2] = addr;
+                  output_asm_insn ("move %1,%2", ops);
+                  for (i = 0; i < byteoff; i++)
+                    output_asm_insn ("ibp %1", ops);
+                  output_asm_insn ("ldb %0,%1", ops);
+                  return "";
+                }
             }
         }
 
@@ -7480,7 +7541,20 @@ pdp10_output_store_byte (insn, operands)
                   && MEM_OFFSET (operands[0]) == 0
                   && TREE_CODE (MEM_EXPR (operands[0])) == COMPONENT_REF
                   && TREE_CODE (TREE_TYPE (MEM_EXPR (operands[0]))) == ARRAY_TYPE)
-                byteoff = 0;
+                {
+                  pdp10_word36 exprbit;
+
+                  /* Only suppress the logical in-word offset when the array
+                     field itself starts on a word boundary.  If it starts
+                     after an earlier packed field, such as short h; char
+                     data[], the register address may still be a byte pointer
+                     to byte zero of the containing word and needs the field
+                     byte displacement.  */
+                  if (pdp10_output_qi_tree_bitpos (MEM_EXPR (operands[0]),
+                                                   &exprbit)
+                      && (exprbit % BITS_PER_WORD) == 0)
+                    byteoff = 0;
+                }
 
               /* Late reload can leave stores into a 9-bit array field
                  whose field starts exactly on a PDP-10 word boundary with a
@@ -13998,7 +14072,19 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
          through that pointer.  For subword fields this uses the record
          pointer's byte size (often 18) instead of the selected field byte
          size (usually 9), corrupting adjacent fields.  */
-      bitpos = base_bits + (pdp10_word36) int_bit_position (field);
+      {
+        tree record_type = TREE_TYPE (array);
+        pdp10_word36 field_bits;
+
+        if (record_type != 0 && TREE_CODE (record_type) == ARRAY_TYPE)
+          record_type = TREE_TYPE (record_type);
+        if (record_type != 0 && POINTER_TYPE_P (record_type))
+          record_type = TREE_TYPE (record_type);
+        if (!pdp10_initializer_record_field_bitpos (record_type,
+                                                    field, &field_bits))
+          return NULL_RTX;
+        bitpos = base_bits + field_bits;
+      }
       dyn_index = index;
       dyn_elem_type = TREE_TYPE (object);
       dyn_index_scale = (HOST_WIDE_INT) (record_bits / (pdp10_word36) bytesize);
@@ -14025,7 +14111,17 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
          field word offset later.  On PDP-6/KA10 this is wrong for a struct
          pointer represented as a halfword byte pointer: IBP then walks
          18-bit slots while the element index is a 9-bit char count.  */
-      bitpos = base_bits + (pdp10_word36) int_bit_position (field);
+      {
+        tree record_type = TREE_TYPE (record_object);
+        pdp10_word36 field_bits;
+
+        if (record_type != 0 && POINTER_TYPE_P (record_type))
+          record_type = TREE_TYPE (record_type);
+        if (!pdp10_initializer_record_field_bitpos (record_type,
+                                                    field, &field_bits))
+          return NULL_RTX;
+        bitpos = base_bits + field_bits;
+      }
       dyn_index = index;
       dyn_elem_type = TREE_TYPE (object);
       dyn_index_scale = 1;
