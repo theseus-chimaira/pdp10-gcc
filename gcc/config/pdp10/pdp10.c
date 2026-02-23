@@ -446,6 +446,8 @@ cpu_table[] =
 {
   /* name,	cpu,		enable,		disable */
 
+  { "base",	CPU_166,	0,		CPU_EXTENDED	},
+  { "pdp10",	CPU_KA10,	0,		CPU_EXTENDED	},
   { "166",	CPU_166,	0,		CPU_EXTENDED	},
   { "ka10",	CPU_KA10,	0,		CPU_EXTENDED	},
   { "ki10",	CPU_KI10,	0,		CPU_EXTENDED	},
@@ -641,7 +643,8 @@ pdp10_override_options ()
     fprintf (stderr, "Unknown CPU: %s\n", pdp10_tune);
 
   /* If no processor was selected explicitly, use the configured
-     target baseline.  DAIMON sets this to PDP-6/166.  */
+     target baseline.  DAIMON sets this to the conservative base profile,
+     implemented with PDP-6/166-safe instruction selection.  */
   if (TARGET_CPU == 0)
     target_flags = (target_flags & ~CPU_MASK) | TARGET_CPU_DEFAULT;
   if (target_tune == 0)

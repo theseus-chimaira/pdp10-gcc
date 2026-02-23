@@ -124,6 +124,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #define CPP_SPEC "%(cpp_cpu_arch)"
 
 #define CPP_CPU_ARCH_SPEC "\
+%{march=base:-D__PDP10_BASE__ -Acpu=base} \
+%{march=pdp10:-D__PDP10_PDP10__ -Acpu=pdp10} \
 %{march=166:-D__PDP10_166__ -Acpu=166} \
 %{march=ka10:-D__PDP10_KA10__ -Acpu=ka10} \
 %{march=ki10:-D__PDP10_KI10__ -Acpu=ki10} \
@@ -132,6 +134,8 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 %{march=xkl1:-D__PDP10_XKL1__ -Acpu=xkl1} \
 %{march=xkl2:-D__PDP10_XKL2__ -Acpu=xkl2} \
 %{!march=*: \
+ %{mcpu=base:-D__PDP10_BASE__ -Acpu=base} \
+ %{mcpu=pdp10:-D__PDP10_PDP10__ -Acpu=pdp10} \
  %{mcpu=166:-D__PDP10_166__ -Acpu=166} \
  %{mcpu=ka10:-D__PDP10_KA10__ -Acpu=ka10} \
  %{mcpu=ki10:-D__PDP10_KI10__ -Acpu=ki10} \
@@ -157,7 +161,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 /* Default CPP architecture macro for builds that do not pass -march/-mcpu.
    Keep this in step with TARGET_CPU_DEFAULT below.  */
 #ifndef TARGET_CPU_DEFAULT_CPP_SPEC
-#define TARGET_CPU_DEFAULT_CPP_SPEC "-D__PDP10_166__ -Acpu=166"
+#define TARGET_CPU_DEFAULT_CPP_SPEC "-D__PDP10_BASE__ -Acpu=base"
 #endif
 #define CPP_ARCH_DEFAULT_SPEC TARGET_CPU_DEFAULT_CPP_SPEC
 
@@ -291,8 +295,10 @@ extern int target_model;
 #define TUNE_XKL1	(target_tune == CPU_XKL1)
 #define TUNE_XKL2	(target_tune == CPU_XKL2)
 
-/* DAIMON builds default to the PDP-6/166 baseline.  Later PDP-10
-   processors remain selectable with -march/-mcpu.  */
+/* DAIMON builds default to the conservative base profile.  It uses
+   PDP-6/166-safe instruction selection and is intended to run on all
+   validated DAIMOS V1A userland machines.  Later PDP-10 processors
+   remain selectable with -march/-mcpu.  */
 #ifndef TARGET_CPU_DEFAULT
 #define TARGET_CPU_DEFAULT CPU_166
 #endif

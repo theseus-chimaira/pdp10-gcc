@@ -5,7 +5,7 @@
 # no real dynamic loader, and PDP-6/166-safe code should run upward on
 # later PDP-10-class machines.
 
-TARGET_LIBGCC2_CFLAGS = -fomit-frame-pointer -DUNDERSCORE=. -Dinhibit_libc -march=166 -mtune=166 -munextended -mno-string -mlong-long-71bit
+TARGET_LIBGCC2_CFLAGS = -fomit-frame-pointer -DUNDERSCORE=. -Dinhibit_libc -march=base -mtune=166 -munextended -mno-string -mlong-long-71bit
 LIBGCC2_DEBUG_CFLAGS = -g0
 
 # Early DAIMOS baseline has no floating-point runtime yet.  Do not build
