@@ -37,6 +37,19 @@ set -eu
 # The top-level ./configure is old Cygnus configure, not a normal Autoconf
 # output.  Keep ./configure and ./configure.in as source.
 #
+# Some archive/extraction paths can preserve the configure file contents but
+# drop execute bits on generated configure scripts below the tree.  A direct
+# sub-configure then fails as "Permission denied" or the build appears to
+# stall while retrying old configure probes.  This is a checkout/archive-mode
+# problem, not a PDP-10 backend problem.  Before a serious build, normalize
+# generated script permissions in the extracted source tree, for example:
+#
+#   find . -name configure -type f -exec chmod a+x {} +
+#
+# Running a sub-configure through "sh path/to/configure" is also a safe
+# diagnostic workaround, but the normal build expects executable configure
+# scripts.
+#
 # Pruned components are intentionally not regenerated here:
 #
 #   Ada
