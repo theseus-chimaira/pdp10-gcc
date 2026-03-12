@@ -209,6 +209,7 @@ static rtx	pdp10_output_unwrap_address PARAMS ((rtx x));
 static rtx	pdp10_output_add_address_offset PARAMS ((rtx x,
 						       HOST_WIDE_INT offset));
 static int	pdp10_pad_varargs_down_p PARAMS ((HOST_WIDE_INT size));
+int	pdp10_word_address_plus_one_p PARAMS ((rtx first, rtx second));
 
 #define ADDRESS_MASK (TARGET_EXTENDED ? HWINT (07777777777) : HWINT (0777777))
 
@@ -15461,20 +15462,21 @@ void pdp10_md_array_offset (tree exp, tree index, tree unit_size,
     {
       tree elem_type = TREE_TYPE (exp);
 
-      /* For arrays of aggregates, keep the offset in GCC addressable
-	 units.  Component references below the ARRAY_REF still need the
-	 byte offset so subword fields inside the aggregate land in the
-	 proper PDP-10 word and byte position.  Scalar arrays, on the
-	 other hand, address whole PDP-10 words/halfwords directly.  */
-      if (0
-	  && (TREE_CODE (elem_type) == RECORD_TYPE
-	      || TREE_CODE (elem_type) == UNION_TYPE)
+      /* GCC computes array element sizes in C storage units, but PDP-10
+	 MEM addresses are word addresses.  Dynamic array indexes that select
+	 whole-word aggregate elements must therefore scale by PDP-10 words,
+	 not by 9-bit storage units; otherwise nested aggregate copies walk
+	 past the stack slot.  Constant aggregate subscripts still use the
+	 BIT_OFFSET path below, and non-word-sized arrays keep the byte or
+	 halfword handling already used for scalar arrays.  */
+      if ((TREE_CODE (elem_type) == RECORD_TYPE
+	   || TREE_CODE (elem_type) == UNION_TYPE)
 	  && tree_low_cst (unit_size, 1) >= UNITS_PER_WORD
 	  && (tree_low_cst (unit_size, 1) % UNITS_PER_WORD) == 0)
 	unit_size = size_binop (TRUNC_DIV_EXPR,
 				unit_size,
 				convert (sizetype,
-					 build_int_2 (2, 0)));
+					 build_int_2 (UNITS_PER_WORD, 0)));
       else if (TREE_CODE (elem_type) != RECORD_TYPE
 	       && TREE_CODE (elem_type) != UNION_TYPE
 	       && tree_low_cst (unit_size, 1) >= UNITS_PER_WORD)
