@@ -447,11 +447,11 @@ cpu_table[] =
 {
   /* name,	cpu,		enable,		disable */
 
-  { "base",	CPU_166,	0,		CPU_EXTENDED	},
-  { "pdp10",	CPU_KA10,	0,		CPU_EXTENDED	},
-  { "166",	CPU_166,	0,		CPU_EXTENDED	},
-  { "ka10",	CPU_KA10,	0,		CPU_EXTENDED	},
-  { "ki10",	CPU_KI10,	0,		CPU_EXTENDED	},
+  { "base",	CPU_166,	OPT_UNEXTENDED,	CPU_EXTENDED	},
+  { "pdp10",	CPU_KA10,	OPT_UNEXTENDED,	CPU_EXTENDED	},
+  { "166",	CPU_166,	OPT_UNEXTENDED,	CPU_EXTENDED	},
+  { "ka10",	CPU_KA10,	OPT_UNEXTENDED,	CPU_EXTENDED	},
+  { "ki10",	CPU_KI10,	OPT_UNEXTENDED,	CPU_EXTENDED	},
   { "ks10",	CPU_KS10,	0,		CPU_EXTENDED	},
   { "kl10",	CPU_KL10,	CPU_EXTENDED,	0		},
   { "sc20",	CPU_KL10,	CPU_EXTENDED,	0		},
