@@ -1068,7 +1068,7 @@
 
 (define_insn ""
   [(set (match_operand:SI 0 "memory_operand" "=m")
-	(and:SI (match_operand:SI 1 "memory_operand" "0")
+	(and:SI (match_dup 0)
 		(const_int LEFT_HALF)))]
   ""
   "hllzs %W0")

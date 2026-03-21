@@ -14400,6 +14400,10 @@ convert_local_pointer (op0, from, to, byte)
 	  emit_TLO  (reg, reg, 0040000);
 	  emit_label (label);
 	  break;
+	case 16:
+	  /* 16-bit local byte pointer -> 6-bit local byte pointer. */
+	  emit_ADD (reg, op0, 0116600);
+	  break;
 	case 18:
 	  /* 18-bit local byte pointer -> 6-bit local byte pointer.
 	     Preserve the source bit position by changing only P,S:
@@ -14438,6 +14442,10 @@ convert_local_pointer (op0, from, to, byte)
 	  emit_TLC (reg, op0, 0071600);
 	  emit_ADD (reg, reg, 0010000);
 	  break;
+	case 16:
+	  /* 16-bit local byte pointer -> 7-bit local byte pointer. */
+	  emit_ADD (reg, op0, 0106700);
+	  break;
 	case 18:
 	  /* 18-bit local byte pointer -> 7-bit local byte pointer. */
 	  emit_ADD (reg, op0, 0126500);
@@ -14464,6 +14472,10 @@ convert_local_pointer (op0, from, to, byte)
 	case 9:
 	  emit_TLO (reg, op0, 0040000);
 	  emit_TLZ (reg, reg, 0030100);
+	  break;
+	case 16:
+	  /* 16-bit local byte pointer -> 8-bit local byte pointer. */
+	  emit_ADD (reg, op0, 077000);
 	  break;
 	case 18:
 	  emit_TLO (reg, op0, 0141000);
@@ -14504,6 +14516,10 @@ convert_local_pointer (op0, from, to, byte)
 	  emit_TLO  (reg, reg, 0020000);
 	  emit_label (label);
 	  break;
+	case 16:
+	  /* 16-bit local byte pointer -> 9-bit local byte pointer. */
+	  emit_ADD (reg, op0, 067100);
+	  break;
 	case 18:
 	  emit_TLC (reg, op0, 0113300);
 	  break;
@@ -14538,6 +14554,10 @@ convert_local_pointer (op0, from, to, byte)
 	  emit_TLC (reg, op0, 0003300);
 	  emit_TLZ (reg, reg, 0110000);
 	  break;
+	case 16:
+	  /* 16-bit local byte pointer -> 18-bit local byte pointer. */
+	  emit_SUB (reg, op0, 017600);
+	  break;
 	case 36:
 	  emit_TLO (reg, op0, 0222200 - byte * 0220000);
 	  break;
@@ -14549,6 +14569,22 @@ convert_local_pointer (op0, from, to, byte)
     case 16:
       switch (from)
 	{
+	case 6:
+	  /* 6-bit local byte pointer -> 16-bit local byte pointer. */
+	  emit_SUB (reg, op0, 0116600);
+	  break;
+	case 7:
+	  /* 7-bit local byte pointer -> 16-bit local byte pointer. */
+	  emit_SUB (reg, op0, 0106700);
+	  break;
+	case 8:
+	  /* 8-bit local byte pointer -> 16-bit local byte pointer. */
+	  emit_SUB (reg, op0, 077000);
+	  break;
+	case 9:
+	  /* 9-bit local byte pointer -> 16-bit local byte pointer. */
+	  emit_SUB (reg, op0, 067100);
+	  break;
 	case 18:
 	  /* 18-bit local byte pointer -> 16-bit local byte pointer.
 	     Preserve the current bit position; change only P,S.  */
