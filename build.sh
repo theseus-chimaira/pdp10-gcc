@@ -465,22 +465,16 @@ if [ ! -d "$PREFIX" ]; then
 	fi
 fi
 
-if grep '^all-gcc:' Makefile >/dev/null 2>&1 \
-	&& [ -f libiberty/Makefile ] \
-	&& [ -f gcc/Makefile ]; then
-	echo "==> configure: already complete"
-else
-	echo "==> configure"
-	CC="$HOSTCC" CFLAGS="$HOSTCFLAGS" "$SRC/configure" $CONFIGURE_HOST \
-		--target="$TARGET" \
-		--prefix="$PREFIX" \
-		--enable-languages=c \
-		--with-as="$AS" \
-		--disable-nls \
-		--without-headers \
-		--disable-shared \
-		--disable-multilib
-fi
+echo "==> configure"
+CC="$HOSTCC" CFLAGS="$HOSTCFLAGS" "$SRC/configure" $CONFIGURE_HOST \
+	--target="$TARGET" \
+	--prefix="$PREFIX" \
+	--enable-languages=c \
+	--with-as="$AS" \
+	--disable-nls \
+	--without-headers \
+	--disable-shared \
+	--disable-multilib
 
 # Old Cygnus configure can leave a variable-only Makefile, or no final
 # Makefile at all, when interrupted or when modern tool behavior trips its
