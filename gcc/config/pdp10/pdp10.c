@@ -5353,7 +5353,8 @@ expand_builtin_pdp10_jffo (arglist, target)
      rtx target;
 {
   tree arg0;
-  rtx op0, pair, label, done, pat;
+  rtx op0, label, done;
+  rtx jffo_in, jffo_out;
 
   arg0 = TREE_VALUE (arglist);
   op0 = expand_expr (arg0, NULL_RTX, VOIDmode, 0);
@@ -5362,21 +5363,19 @@ expand_builtin_pdp10_jffo (arglist, target)
   if (target == 0 || !REG_P (target) || GET_MODE (target) != SImode)
     target = gen_reg_rtx (SImode);
 
-  pair = gen_reg_rtx (DImode);
   label = gen_label_rtx ();
   done = gen_label_rtx ();
+  jffo_in = gen_rtx_REG (SImode, 1);
+  jffo_out = gen_rtx_REG (SImode, 2);
 
-  emit_move_insn (gen_rtx_SUBREG (SImode, pair, 0), op0);
-  pat = gen_JFFO (pair, label);
-  if (!pat)
-    return 0;
-  emit_jump_insn (pat);
+  emit_move_insn (jffo_in, op0);
+  emit_jump_insn (gen_JFFO_ac1 (label));
 
   emit_move_insn (target, GEN_INT (-1));
   emit_jump (done);
 
   emit_label (label);
-  emit_move_insn (target, gen_rtx_SUBREG (SImode, pair, 4));
+  emit_move_insn (target, jffo_out);
 
   emit_label (done);
   return target;

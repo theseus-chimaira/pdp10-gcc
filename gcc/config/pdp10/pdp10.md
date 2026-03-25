@@ -3265,7 +3265,18 @@
   [(set (match_operand:DI 0 "register_operand" "")
 	(neg:DI (match_operand:DI 1 "reg_or_mem_operand" "")))]
   "TARGET_71BIT"
-  "")
+  "{
+     if (GET_CODE (operands[1]) == MEM
+	 && (GET_CODE (XEXP (operands[1], 0)) == MEM
+	     || !offsettable_memref_p (operands[1])))
+       {
+	 rtx addr = force_reg (Pmode, XEXP (operands[1], 0));
+	 rtx mem = gen_rtx_MEM (DImode, addr);
+
+	 MEM_COPY_ATTRIBUTES (mem, operands[1]);
+	 operands[1] = mem;
+       }
+   }")
 
 (define_insn "*negdi2"
   [(set (match_operand:DI 0 "register_operand" "=r,r")
@@ -3416,8 +3427,9 @@
      {
        rtx t1 = gen_reg_rtx (SImode);
        rtx t2 = gen_reg_rtx (SImode);
-       rtx t3 = gen_reg_rtx (DImode);
+       rtx t3 = gen_rtx_REG (SImode, 1);
        rtx t4 = gen_reg_rtx (SImode);
+       rtx t5 = gen_rtx_REG (SImode, 2);
        rtx label = gen_label_rtx ();
        extern int pdp10_expand_ffs;
 
@@ -3425,14 +3437,11 @@
 
        emit_insn (gen_negsi2 (t1, operands[1]));
        emit_insn (gen_andsi3 (t2, operands[1], t1));
-       emit_move_insn (gen_rtx_SUBREG (SImode, t3, 0), t2);
-       emit_jump_insn (gen_JFFO (t3, label));
-       emit_move_insn (gen_rtx_SUBREG (SImode, t3, 4),
-		       GEN_INT (36));
+       emit_move_insn (t3, t2);
+       emit_jump_insn (gen_JFFO_ac1 (label));
+       emit_move_insn (t5, GEN_INT (36));
        emit_label (label);
-       emit_insn (gen_subsi3 (t4,
-			      gen_rtx_SUBREG (SImode, t3, 4),
-			      GEN_INT (36)));
+       emit_insn (gen_subsi3 (t4, t5, GEN_INT (36)));
        emit_insn (gen_negsi2 (operands[0], t4));
        DONE;
      }")
@@ -6605,10 +6614,27 @@
   }
   [(set_attr "length" "2")])
 
+;; Fixed-AC JFFO helper for expansions that need the AC+1 result.
+;; GCC 3.2 reload cannot reliably allocate a DImode AC pair inside a
+;; conditional jump when the second word is also an output.  The PDP-10
+;; instruction intrinsically uses AC+1, so use an explicit call-clobbered
+;; pair for these small expanders and let ordinary RTL liveness keep other
+;; values away from AC1/AC2 at this point.
+(define_insn "JFFO_ac1"
+  [(set (pc)
+	(if_then_else (ne (reg:SI 1)
+			  (const_int 0))
+		      (label_ref (match_operand 0 "" ""))
+		      (pc)))
+   (set (reg:SI 2)
+	(unspec:SI [(reg:SI 1)] UNSPEC_FFO))]
+  "TARGET_KA10up"
+  "jffo 1,%l0")
+
 (define_insn "JFFO"
   [(set (pc)
 	(if_then_else (ne (subreg:SI
-			   (match_operand:DI 0 "register_operand" "+r") 0)
+			   (match_operand:DI 0 "register_operand" "+x") 0)
 			  (const_int 0))
 		      (label_ref (match_operand 1 "" ""))
 		      (pc)))
