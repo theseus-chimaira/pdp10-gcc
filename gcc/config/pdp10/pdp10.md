@@ -2171,10 +2171,10 @@
    dmove %0,%1
    setzb %0,%Z0%; movdf
    move %0,[%A1]%; movdf\;movei %Z0,0%; movdf
-   dmove %0,[%1]
+   move %0,[%A1]%; movdf\;move %Z0,[%B1]%; movdf
    setzm %0%; movdf\;setzm %Z0%; movdf
    dmovem %1,%0"
-  [(set_attr "length" "1,1,2,1,2,1")])
+  [(set_attr "length" "1,1,2,2,2,1")])
 
 (define_insn "*movdf_notKI10up"
   [(set (match_operand:DF 0 "nonimmediate_operand" "=r,r,r,r,o,o")
@@ -4911,22 +4911,18 @@
   "")
 
 (define_insn "DFAD"
-  [(set (match_operand:DF 0 "register_operand" "=r,r")
-	(plus:DF (match_operand:DF 1 "register_operand" "%0,0")
-		 (match_operand:DF 2 "general_operand" "rm,F")))]
+  [(set (match_operand:DF 0 "register_operand" "=r")
+	(plus:DF (match_operand:DF 1 "register_operand" "%0")
+		 (match_operand:DF 2 "general_operand" "rm")))]
   "TARGET_KI10up && !TARGET_GFLOAT"
-  "@
-   dfad %0,%2
-   dfad %0,[%2]")
+  "dfad %0,%2")
 
 (define_insn "*GFAD"
-  [(set (match_operand:DF 0 "register_operand" "=r,r")
-	(plus:DF (match_operand:DF 1 "register_operand" "%0,0")
-		 (match_operand:DF 2 "general_operand" "rm,F")))]
+  [(set (match_operand:DF 0 "register_operand" "=r")
+	(plus:DF (match_operand:DF 1 "register_operand" "%0")
+		 (match_operand:DF 2 "general_operand" "rm")))]
   "TARGET_KL10up && TARGET_GFLOAT"
-  "@
-   gfad %0,%2
-   gfad %0,[%2]")
+  "gfad %0,%2")
 
 (define_insn "subsf3"
   [(set (match_operand:SF 0 "nonimmediate_operand" "=r,r,m")
@@ -4954,22 +4950,18 @@
   "")
 
 (define_insn "*DFSB"
-  [(set (match_operand:DF 0 "register_operand" "=r,r")
-	(minus:DF (match_operand:DF 1 "register_operand" "0,0")
-		  (match_operand:DF 2 "general_operand" "rm,F")))]
+  [(set (match_operand:DF 0 "register_operand" "=r")
+	(minus:DF (match_operand:DF 1 "register_operand" "0")
+		  (match_operand:DF 2 "general_operand" "rm")))]
   "TARGET_KI10up && !TARGET_GFLOAT"
-  "@
-   dfsb %0,%2
-   dfsb %0,[%2]")
+  "dfsb %0,%2")
 
 (define_insn "*GFSB"
-  [(set (match_operand:DF 0 "register_operand" "=r,r")
-	(minus:DF (match_operand:DF 1 "register_operand" "0,0")
-		  (match_operand:DF 2 "general_operand" "rm,F")))]
+  [(set (match_operand:DF 0 "register_operand" "=r")
+	(minus:DF (match_operand:DF 1 "register_operand" "0")
+		  (match_operand:DF 2 "general_operand" "rm")))]
   "TARGET_KL10up && TARGET_GFLOAT"
-  "@
-   gfsb %0,%2
-   gfsb %0,[%2]")
+  "gfsb %0,%2")
 
 (define_insn "abssf2"
   [(set (match_operand:SF 0 "nonimmediate_operand" "=r,m,m")
@@ -5046,22 +5038,18 @@
   "")
 
 (define_insn "*DFMP"
-  [(set (match_operand:DF 0 "register_operand" "=r,r")
-	(mult:DF (match_operand:DF 1 "register_operand" "%0,0")
-		 (match_operand:DF 2 "general_operand" "rm,F")))]
+  [(set (match_operand:DF 0 "register_operand" "=r")
+	(mult:DF (match_operand:DF 1 "register_operand" "%0")
+		 (match_operand:DF 2 "general_operand" "rm")))]
   "TARGET_KI10up && !TARGET_GFLOAT"
-  "@
-   dfmp %0,%2
-   dfmp %0,[%2]")
+  "dfmp %0,%2")
 
 (define_insn "*GFMP"
-  [(set (match_operand:DF 0 "register_operand" "=r,r")
-	(mult:DF (match_operand:DF 1 "register_operand" "%0,0")
-		 (match_operand:DF 2 "general_operand" "rm,F")))]
+  [(set (match_operand:DF 0 "register_operand" "=r")
+	(mult:DF (match_operand:DF 1 "register_operand" "%0")
+		 (match_operand:DF 2 "general_operand" "rm")))]
   "TARGET_KL10up && TARGET_GFLOAT"
-  "@
-   gfmp %0,%2
-   gfmp %0,[%2]")
+  "gfmp %0,%2")
 
 (define_insn "divsf3"
   [(set (match_operand:SF 0 "nonimmediate_operand" "=r,r,m")
@@ -5089,22 +5077,18 @@
   "")
 
 (define_insn "*DFDV"
-  [(set (match_operand:DF 0 "register_operand" "=r,r")
-	(div:DF (match_operand:DF 1 "register_operand" "0,0")
-		(match_operand:DF 2 "general_operand" "rm,F")))]
+  [(set (match_operand:DF 0 "register_operand" "=r")
+	(div:DF (match_operand:DF 1 "register_operand" "0")
+		(match_operand:DF 2 "general_operand" "rm")))]
   "TARGET_KI10up && !TARGET_GFLOAT"
-  "@
-   dfdv %0,%2
-   dfdv %0,[%2]")
+  "dfdv %0,%2")
 
 (define_insn "*GFDV"
-  [(set (match_operand:DF 0 "register_operand" "=r,r")
-	(div:DF (match_operand:DF 1 "register_operand" "0,0")
-		(match_operand:DF 2 "general_operand" "rm,F")))]
+  [(set (match_operand:DF 0 "register_operand" "=r")
+	(div:DF (match_operand:DF 1 "register_operand" "0")
+		(match_operand:DF 2 "general_operand" "rm")))]
   "TARGET_KL10up && TARGET_GFLOAT"
-  "@
-   gfdv %0,%2
-   gfdv %0,[%2]")
+  "gfdv %0,%2")
 
 (define_insn "sqrtsf2"
   [(set (match_operand:SF 0 "register_operand" "=r")

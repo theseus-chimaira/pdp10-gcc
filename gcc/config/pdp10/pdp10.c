@@ -6972,7 +6972,11 @@ pdp10_output_movdi (insn, operands, which_alternative, have_dmove)
 	    return "move %Z0,[%B1]";
 	  if (unused & 2)
 	    return "move %0,[%A1]";
-	  return "dmove %0,[%D1]";
+	  /* Do not emit a two-word bracket literal here.  Our target
+	     assembler's bracket literal form is one word wide, so
+	     [hi,lo] is parsed as a single expression instead of a
+	     two-word literal.  Load the two one-word literals separately.  */
+	  return "move %0,[%A1]\n\tmove %Z0,[%B1]";
 	}
       else
 	{
