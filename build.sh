@@ -92,7 +92,9 @@ modes:
 
 environment:
   PDP10_GCC_TARGET       target triplet, default pdp10-dec-none
-  PDP10_GCC_PREFIX       install prefix, default /usr/local (/usr/cross on OpenBSD)
+  PDP10_PREFIX           common PDP-10 toolchain prefix
+  PDP10_GCC_PREFIX       GCC install prefix override; defaults to PDP10_PREFIX
+                         when set, otherwise /usr/local (/usr/cross on OpenBSD)
   PDP10_GCC_AS           assembler path
   CC                     host C compiler, default cc
   PDP10_GCC_BUILD_ALIAS  configure --build value
@@ -273,6 +275,8 @@ UNAME_R="$(uname -r 2>/dev/null || echo unknown)"
 
 if [ -n "${PDP10_GCC_PREFIX+x}" ]; then
 	PREFIX="$PDP10_GCC_PREFIX"
+elif [ -n "${PDP10_PREFIX+x}" ]; then
+	PREFIX="$PDP10_PREFIX"
 elif [ "$UNAME_S" = OpenBSD ]; then
 	PREFIX=/usr/cross
 else
@@ -316,7 +320,7 @@ elif [ "$UNAME_S" = OpenBSD ] && [ "$UNAME_M" = octeon ]; then
 fi
 
 if [ -d /system ] || [ "$(uname -o 2>/dev/null || true)" = Android ]; then
-	if [ -z "${PDP10_GCC_PREFIX+x}" ]; then
+	if [ -z "${PDP10_GCC_PREFIX+x}" ] && [ -z "${PDP10_PREFIX+x}" ]; then
 		PREFIX="$HOME/cross"
 	fi
 
@@ -359,7 +363,7 @@ fi
 
 if [ ! -x "$AS" ]; then
 	echo "error: target assembler is not executable: $AS" >&2
-	echo "       set PDP10_GCC_AS=/path/to/$TARGET-as or PDP10_GCC_PREFIX=/path/to/prefix" >&2
+	echo "       set PDP10_PREFIX=/path/to/prefix or PDP10_GCC_AS=/path/to/$TARGET-as" >&2
 	exit 1
 fi
 
@@ -500,6 +504,27 @@ make all-gcc \
 	BOOT_CFLAGS="$HOSTCFLAGS" \
 	WARN_CFLAGS=
 
+install_libgcc1_source () {
+	src_libgcc1="$SRC/gcc/config/pdp10/libgcc1.s"
+	if [ ! -f "$src_libgcc1" ]; then
+		echo "warning: libgcc1 source not found: $src_libgcc1" >&2
+		return 0
+	fi
+
+	share_dir="$PREFIX/share/gcc-pdp10/config/pdp10"
+	gcc_dir="$PREFIX/lib/gcc-lib/$TARGET/3.2"
+
+	if needs_install_privilege; then
+		privileged_command mkdir -p "$share_dir" "$gcc_dir"
+		privileged_command cp "$src_libgcc1" "$share_dir/libgcc1.s"
+		privileged_command cp "$src_libgcc1" "$gcc_dir/libgcc1.s"
+	else
+		mkdir -p "$share_dir" "$gcc_dir"
+		cp "$src_libgcc1" "$share_dir/libgcc1.s"
+		cp "$src_libgcc1" "$gcc_dir/libgcc1.s"
+	fi
+}
+
 echo "==> install"
 if needs_install_privilege; then
 	echo "==> install privilege: doas/sudo"
@@ -516,5 +541,9 @@ else
 		RANLIB_FOR_TARGET="$RANLIB_FOR_TARGET"
 fi
 
+echo "==> install libgcc1 source"
+install_libgcc1_source
+
 echo "==> installed cc1"
 ls -l "$PREFIX/lib/gcc-lib/$TARGET/3.2/cc1"
+ls -l "$PREFIX/share/gcc-pdp10/config/pdp10/libgcc1.s"
