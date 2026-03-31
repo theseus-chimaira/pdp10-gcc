@@ -103,6 +103,8 @@ environment:
   DOAS                   doas command, default "doas"
   SUDO                   sudo command, default "sudo -n"
   PDP10_GCC_INSTALL_PRIV install privilege mode: auto, always, never; default auto
+  PDP10_GCC_HOSTCFLAGS   host compiler flags override
+  PDP10_GCC_RECONFIGURE  set to yes to force rerunning configure
 EOF
 }
 
@@ -251,7 +253,7 @@ case "${1:-}" in
 esac
 
 HOSTCC="${CC:-cc}"
-HOSTCFLAGS="-std=gnu89 -g3 -O0 -w \
+DEFAULT_HOSTCFLAGS="-std=gnu89 -g3 -O0 -w \
 -fno-strict-aliasing \
 -Wno-implicit-int \
 -Wno-implicit-function-declaration \
@@ -265,6 +267,7 @@ HOSTCFLAGS="-std=gnu89 -g3 -O0 -w \
 -Wno-unused-variable \
 -Wno-unused-function \
 -Wno-format"
+HOSTCFLAGS="${PDP10_GCC_HOSTCFLAGS:-$DEFAULT_HOSTCFLAGS}"
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
 BUILD="$(pwd)"
@@ -469,16 +472,28 @@ if [ ! -d "$PREFIX" ]; then
 	fi
 fi
 
-echo "==> configure"
-CC="$HOSTCC" CFLAGS="$HOSTCFLAGS" "$SRC/configure" $CONFIGURE_HOST \
-	--target="$TARGET" \
-	--prefix="$PREFIX" \
-	--enable-languages=c \
-	--with-as="$AS" \
-	--disable-nls \
-	--without-headers \
-	--disable-shared \
-	--disable-multilib
+configured_already () {
+	[ -f Makefile ] || return 1
+	[ -f gcc/Makefile ] || return 1
+	grep '^all-gcc:' Makefile >/dev/null 2>&1 || return 1
+	grep '^all:' gcc/Makefile >/dev/null 2>&1 || return 1
+	return 0
+}
+
+if configured_already && [ "${PDP10_GCC_RECONFIGURE:-no}" != yes ]; then
+	echo "==> configure: skip, existing Makefiles are valid"
+else
+	echo "==> configure"
+	CC="$HOSTCC" CFLAGS="$HOSTCFLAGS" "$SRC/configure" $CONFIGURE_HOST \
+		--target="$TARGET" \
+		--prefix="$PREFIX" \
+		--enable-languages=c \
+		--with-as="$AS" \
+		--disable-nls \
+		--without-headers \
+		--disable-shared \
+		--disable-multilib
+fi
 
 # Old Cygnus configure can leave a variable-only Makefile, or no final
 # Makefile at all, when interrupted or when modern tool behavior trips its
