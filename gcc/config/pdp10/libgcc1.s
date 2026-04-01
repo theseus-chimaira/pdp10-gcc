@@ -631,10 +631,13 @@ memset_done:
 	.globl	__subdf3
 	.globl	__muldf3
 	.globl	__divdf3
+	.globl	__negdf2
+	.globl	__cmpdf2
 	.globl	__fixsfsi
 	.globl	__fixdfsi
 	.globl	__floatsisf
 	.globl	__floatsidf
+	.globl	__floatunssisf
 
 __adddf3:
 	; Avoid KA10 SIMH double-float op hangs in the bare harness.
@@ -666,6 +669,37 @@ __divdf3:
 	movem 3,__p10_df_rhs
 	fdvr 1,__p10_df_rhs
 	setz 2,
+	popj 17,
+
+__negdf2:
+	movn 1,1
+	setz 2,
+	popj 17,
+
+; Compare double floats in AC1:AC2 and AC3:AC4.
+; Return -1, 0, or 1 in AC1.  The bare double model used here stores
+; the value in the high single-float word and keeps the low word zero for
+; computed values.  Low-word tie checks keep exact equality working for
+; constants that still carry a nonzero low D-float word.
+__cmpdf2:
+	camn 1,3
+	 jrst __cmpdf2_hi_equal
+	camg 1,3
+	 jrst __cmpdf2_less
+	movei 1,1
+	popj 17,
+__cmpdf2_hi_equal:
+	camn 2,4
+	 jrst __cmpdf2_equal
+	camg 2,4
+	 jrst __cmpdf2_less
+	movei 1,1
+	popj 17,
+__cmpdf2_less:
+	seto 1,
+	popj 17,
+__cmpdf2_equal:
+	movei 1,0
 	popj 17,
 
 ; Convert signed integer in AC1 to single float in AC1.
@@ -715,6 +749,36 @@ __floatsisf_zero:
 __floatsidf:
 	pushj 17,__floatsisf
 	setz 2,
+	popj 17,
+
+; Convert unsigned integer in AC1 to single float in AC1.
+; This mirrors the positive path of __floatsisf.  The full 36-bit unsigned
+; range is normalized directly; there is no sign flag and no final negation.
+__floatunssisf:
+	jumpe 1,__floatunssisf_zero
+	move 2,1
+	movei 3,233
+__floatunssisf_rnorm:
+	tlne 2,777000		; any bits above the normalized mantissa
+	 jrst __floatunssisf_rshift
+	jrst __floatunssisf_ltest
+__floatunssisf_rshift:
+	lsh 2,-1
+	addi 3,1
+	jrst __floatunssisf_rnorm
+__floatunssisf_ltest:
+	tlne 2,400		; normalized mantissa bit is set
+	 jrst __floatunssisf_pack
+	lsh 2,1
+	subi 3,1
+	jrst __floatunssisf_ltest
+__floatunssisf_pack:
+	lsh 3,33
+	move 1,2
+	ior 1,3
+	popj 17,
+__floatunssisf_zero:
+	movei 1,0
 	popj 17,
 
 ; Scratch pair for double-float helpers.
