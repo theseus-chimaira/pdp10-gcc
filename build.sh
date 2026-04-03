@@ -92,9 +92,7 @@ modes:
 
 environment:
   PDP10_GCC_TARGET       target triplet, default pdp10-dec-none
-  PDP10_PREFIX           common PDP-10 toolchain prefix
-  PDP10_GCC_PREFIX       GCC install prefix override; defaults to PDP10_PREFIX
-                         when set, otherwise /usr/local (/usr/cross on OpenBSD)
+  PDP10_GCC_PREFIX       install prefix, default /usr/local (/usr/cross on OpenBSD)
   PDP10_GCC_AS           assembler path
   CC                     host C compiler, default cc
   PDP10_GCC_BUILD_ALIAS  configure --build value
@@ -103,8 +101,6 @@ environment:
   DOAS                   doas command, default "doas"
   SUDO                   sudo command, default "sudo -n"
   PDP10_GCC_INSTALL_PRIV install privilege mode: auto, always, never; default auto
-  PDP10_GCC_HOSTCFLAGS   host compiler flags override
-  PDP10_GCC_RECONFIGURE  set to yes to force rerunning configure
 EOF
 }
 
@@ -253,7 +249,7 @@ case "${1:-}" in
 esac
 
 HOSTCC="${CC:-cc}"
-DEFAULT_HOSTCFLAGS="-std=gnu89 -g3 -O0 -w \
+HOSTCFLAGS="-std=gnu89 -g3 -O0 -w \
 -fno-strict-aliasing \
 -Wno-implicit-int \
 -Wno-implicit-function-declaration \
@@ -267,7 +263,6 @@ DEFAULT_HOSTCFLAGS="-std=gnu89 -g3 -O0 -w \
 -Wno-unused-variable \
 -Wno-unused-function \
 -Wno-format"
-HOSTCFLAGS="${PDP10_GCC_HOSTCFLAGS:-$DEFAULT_HOSTCFLAGS}"
 
 SRC="$(cd "$(dirname "$0")" && pwd)"
 BUILD="$(pwd)"
@@ -278,8 +273,6 @@ UNAME_R="$(uname -r 2>/dev/null || echo unknown)"
 
 if [ -n "${PDP10_GCC_PREFIX+x}" ]; then
 	PREFIX="$PDP10_GCC_PREFIX"
-elif [ -n "${PDP10_PREFIX+x}" ]; then
-	PREFIX="$PDP10_PREFIX"
 elif [ "$UNAME_S" = OpenBSD ]; then
 	PREFIX=/usr/cross
 else
@@ -287,10 +280,10 @@ else
 fi
 
 AS="${PDP10_GCC_AS:-$PREFIX/bin/$TARGET-as}"
-AR_FOR_TARGET="${PDP10_GCC_AR:-$PREFIX/bin/$TARGET-ar}"
-NM_FOR_TARGET="${PDP10_GCC_NM:-$PREFIX/bin/$TARGET-nm}"
-RANLIB_FOR_TARGET="${PDP10_GCC_RANLIB:-$PREFIX/bin/$TARGET-ranlib}"
-INSTALL_CMD="${PDP10_GCC_INSTALL:-}"
+# Keep freshly installed target binutils visible to the old GCC makefiles.
+# They invoke tools such as pdp10-dec-none-ar by name when building libgcc.
+PATH="$PREFIX/bin:$PATH"
+export PATH
 DOAS="${DOAS:-doas}"
 SUDO="${SUDO:-sudo -n}"
 INSTALL_PRIV="${PDP10_GCC_INSTALL_PRIV:-auto}"
@@ -323,15 +316,11 @@ elif [ "$UNAME_S" = OpenBSD ] && [ "$UNAME_M" = octeon ]; then
 fi
 
 if [ -d /system ] || [ "$(uname -o 2>/dev/null || true)" = Android ]; then
-	if [ -z "${PDP10_GCC_PREFIX+x}" ] && [ -z "${PDP10_PREFIX+x}" ]; then
+	if [ -z "${PDP10_GCC_PREFIX+x}" ]; then
 		PREFIX="$HOME/cross"
 	fi
 
 	AS="${PDP10_GCC_AS:-$PREFIX/bin/$TARGET-as}"
-	AR_FOR_TARGET="${PDP10_GCC_AR:-$PREFIX/bin/$TARGET-ar}"
-	NM_FOR_TARGET="${PDP10_GCC_NM:-$PREFIX/bin/$TARGET-nm}"
-	RANLIB_FOR_TARGET="${PDP10_GCC_RANLIB:-$PREFIX/bin/$TARGET-ranlib}"
-	INSTALL_CMD="${PDP10_GCC_INSTALL:-$INSTALL_CMD}"
 
 	if [ -z "$CONFIGURE_HOST" ]; then
 		BUILD_ALIAS=`canonical_host_alias "${PDP10_GCC_BUILD_ALIAS:-x86_64-unknown-linux-gnu}"`
@@ -366,56 +355,8 @@ fi
 
 if [ ! -x "$AS" ]; then
 	echo "error: target assembler is not executable: $AS" >&2
-	echo "       set PDP10_PREFIX=/path/to/prefix or PDP10_GCC_AS=/path/to/$TARGET-as" >&2
+	echo "       set PDP10_GCC_AS=/path/to/$TARGET-as or PDP10_GCC_PREFIX=/path/to/prefix" >&2
 	exit 1
-fi
-
-TOOL_FALLBACK_DIR="$BUILD/.pdp10-tool-fallback"
-TOOL_FALLBACK_PATH_ADDED=no
-
-fallback_target_tool () {
-	tool_name=$1
-	target_name=$2
-	current_path=$3
-
-	if [ -x "$current_path" ]; then
-		echo "$current_path"
-		return 0
-	fi
-
-	real_tool=`command -v "$tool_name" 2>/dev/null || true`
-	if [ -z "$real_tool" ]; then
-		echo "error: required host fallback tool not found: $tool_name" >&2
-		exit 1
-	fi
-
-	mkdir -p "$TOOL_FALLBACK_DIR"
-	ln -sf "$real_tool" "$TOOL_FALLBACK_DIR/$target_name"
-	if [ "$TOOL_FALLBACK_PATH_ADDED" = no ]; then
-		PATH="$TOOL_FALLBACK_DIR:$PATH"
-		export PATH
-		TOOL_FALLBACK_PATH_ADDED=yes
-	fi
-	echo "$TOOL_FALLBACK_DIR/$target_name"
-}
-
-AR_FOR_TARGET=`fallback_target_tool ar "$TARGET-ar" "$AR_FOR_TARGET"`
-NM_FOR_TARGET=`fallback_target_tool nm "$TARGET-nm" "$NM_FOR_TARGET"`
-RANLIB_FOR_TARGET=`fallback_target_tool ranlib "$TARGET-ranlib" "$RANLIB_FOR_TARGET"`
-if [ -d "$TOOL_FALLBACK_DIR" ]; then
-	PATH="$TOOL_FALLBACK_DIR:$PATH"
-	export PATH
-fi
-
-echo "==> ar:     $AR_FOR_TARGET"
-echo "==> nm:     $NM_FOR_TARGET"
-echo "==> ranlib: $RANLIB_FOR_TARGET"
-
-if [ -z "$INSTALL_CMD" ] && have_command install; then
-	INSTALL_CMD="`command -v install` -c"
-fi
-if [ -n "$INSTALL_CMD" ]; then
-	echo "==> install tool: $INSTALL_CMD"
 fi
 
 privileged_command () {
@@ -472,93 +413,66 @@ if [ ! -d "$PREFIX" ]; then
 	fi
 fi
 
-configured_already () {
-	[ -f Makefile ] || return 1
-	[ -f gcc/Makefile ] || return 1
-	grep '^all-gcc:' Makefile >/dev/null 2>&1 || return 1
-	grep '^all:' gcc/Makefile >/dev/null 2>&1 || return 1
-	return 0
+echo "==> configure"
+CC="$HOSTCC" CFLAGS="$HOSTCFLAGS" "$SRC/configure" $CONFIGURE_HOST \
+	--target="$TARGET" \
+	--prefix="$PREFIX" \
+	--enable-languages=c \
+	--with-as="$AS" \
+	--disable-nls \
+	--without-headers \
+	--disable-shared \
+	--disable-multilib
+
+make_gcc_args () {
+	make \
+		CC="$HOSTCC" \
+		CC_FOR_BUILD="$HOSTCC" \
+		CFLAGS="$HOSTCFLAGS" \
+		HOST_CFLAGS="$HOSTCFLAGS" \
+		BOOT_CFLAGS="$HOSTCFLAGS" \
+		WARN_CFLAGS= "$@"
 }
 
-if configured_already && [ "${PDP10_GCC_RECONFIGURE:-no}" != yes ]; then
-	echo "==> configure: skip, existing Makefiles are valid"
-else
-	echo "==> configure"
-	CC="$HOSTCC" CFLAGS="$HOSTCFLAGS" "$SRC/configure" $CONFIGURE_HOST \
-		--target="$TARGET" \
-		--prefix="$PREFIX" \
-		--enable-languages=c \
-		--with-as="$AS" \
-		--disable-nls \
-		--without-headers \
-		--disable-shared \
-		--disable-multilib
-fi
+make_libiberty_args () {
+	make \
+		CC="$HOSTCC" \
+		CFLAGS="$HOSTCFLAGS" "$@"
+}
 
-# Old Cygnus configure can leave a variable-only Makefile, or no final
-# Makefile at all, when interrupted or when modern tool behavior trips its
-# temporary-file shuffle.  The complete generated makefile is kept in one of
-# the temporary files in that case.
-if ! grep '^all-gcc:' Makefile >/dev/null 2>&1; then
-	if [ -f Makefile.tm2 ]; then
-		cp Makefile.tm2 Makefile
-	elif [ -f Makefile.tem ]; then
-		cp Makefile.tem Makefile
-	fi
-fi
+top_make_has_target () {
+	[ -f Makefile ] && grep "^$1:" Makefile >/dev/null 2>&1
+}
 
 echo "==> make all-gcc"
-make all-gcc \
-	CC="$HOSTCC" \
-	CC_FOR_BUILD="$HOSTCC" \
-	AR_FOR_TARGET="$AR_FOR_TARGET" \
-	NM_FOR_TARGET="$NM_FOR_TARGET" \
-	RANLIB_FOR_TARGET="$RANLIB_FOR_TARGET" \
-	CFLAGS="$HOSTCFLAGS" \
-	HOST_CFLAGS="$HOSTCFLAGS" \
-	BOOT_CFLAGS="$HOSTCFLAGS" \
-	WARN_CFLAGS=
-
-install_libgcc1_source () {
-	src_libgcc1="$SRC/gcc/config/pdp10/libgcc1.s"
-	if [ ! -f "$src_libgcc1" ]; then
-		echo "warning: libgcc1 source not found: $src_libgcc1" >&2
-		return 0
-	fi
-
-	share_dir="$PREFIX/share/gcc-pdp10/config/pdp10"
-	gcc_dir="$PREFIX/lib/gcc-lib/$TARGET/3.2"
-
-	if needs_install_privilege; then
-		privileged_command mkdir -p "$share_dir" "$gcc_dir"
-		privileged_command cp "$src_libgcc1" "$share_dir/libgcc1.s"
-		privileged_command cp "$src_libgcc1" "$gcc_dir/libgcc1.s"
-	else
-		mkdir -p "$share_dir" "$gcc_dir"
-		cp "$src_libgcc1" "$share_dir/libgcc1.s"
-		cp "$src_libgcc1" "$gcc_dir/libgcc1.s"
-	fi
-}
-
-echo "==> install"
-if needs_install_privilege; then
-	echo "==> install privilege: doas/sudo"
-	privileged_command make install \
-		INSTALL="$INSTALL_CMD" \
-		AR_FOR_TARGET="$AR_FOR_TARGET" \
-		NM_FOR_TARGET="$NM_FOR_TARGET" \
-		RANLIB_FOR_TARGET="$RANLIB_FOR_TARGET"
+if top_make_has_target all-gcc; then
+	make_gcc_args all-gcc
 else
-	make install \
-		INSTALL="$INSTALL_CMD" \
-		AR_FOR_TARGET="$AR_FOR_TARGET" \
-		NM_FOR_TARGET="$NM_FOR_TARGET" \
-		RANLIB_FOR_TARGET="$RANLIB_FOR_TARGET"
+	echo "==> top-level all-gcc target missing; using direct gcc/libiberty fallback"
+	make_libiberty_args -C libiberty all
+	make_gcc_args -C gcc all.cross
 fi
 
-echo "==> install libgcc1 source"
-install_libgcc1_source
+echo "==> install"
+if top_make_has_target install; then
+	if needs_install_privilege; then
+		echo "==> install privilege: doas/sudo"
+		privileged_command make install
+	else
+		make install
+	fi
+else
+	echo "==> top-level install target missing; using direct gcc install fallback"
+	if needs_install_privilege; then
+		echo "==> install privilege: doas/sudo"
+		privileged_command make -C gcc install
+	else
+		make -C gcc install
+	fi
+fi
+
+mkdir -p "$PREFIX/share/gcc-pdp10/config/pdp10"
+cp "$SRC/gcc/config/pdp10/libgcc1.s" "$PREFIX/share/gcc-pdp10/config/pdp10/libgcc1.s"
 
 echo "==> installed cc1"
 ls -l "$PREFIX/lib/gcc-lib/$TARGET/3.2/cc1"
-ls -l "$PREFIX/share/gcc-pdp10/config/pdp10/libgcc1.s"
