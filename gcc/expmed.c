@@ -73,6 +73,10 @@ static int sdiv_pow2_cheap, smod_pow2_cheap;
 #define MAX_BITS_PER_WORD BITS_PER_WORD
 #endif
 
+#ifndef TARGET_USE_DIVSI_FOR_CONST_UDIV
+#define TARGET_USE_DIVSI_FOR_CONST_UDIV(MODE, OP1) 0
+#endif
+
 /* Reduce conditional compilation elsewhere.  */
 #ifndef HAVE_insv
 #define HAVE_insv	0
@@ -3419,6 +3423,20 @@ expand_divmod (rem_flag, code, mode, op0, op1, target, unsignedp)
 		    quotient = expand_shift (RSHIFT_EXPR, compute_mode, op0,
 					     build_int_2 (pre_shift, 0),
 					     tquotient, 1);
+		  }
+		else if (TARGET_USE_DIVSI_FOR_CONST_UDIV (compute_mode, op1))
+		  {
+		    rtx direct;
+
+		    direct = expand_binop (compute_mode,
+					   rem_flag ? umod_optab : udiv_optab,
+					   op0, op1,
+					   rem_flag ? remainder : tquotient,
+					   1, OPTAB_DIRECT);
+		    if (direct)
+		      return gen_lowpart (mode, direct);
+		    else
+		      goto fail1;
 		  }
 		else if (size <= HOST_BITS_PER_WIDE_INT)
 		  {

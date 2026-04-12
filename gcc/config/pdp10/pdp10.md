@@ -3201,7 +3201,37 @@
      DONE;
    }")
 
-(define_insn "udivsi3"
+(define_expand "udivsi3"
+  [(set (match_operand:SI 0 "nonimmediate_operand" "")
+	(udiv:SI (match_operand:SI 1 "register_operand" "")
+		 (match_operand:SI 2 "general_operand" "")))]
+  ""
+  "{
+     if (!TARGET_XKL2
+	 && GET_CODE (operands[2]) == CONST_INT
+	 && INTVAL (operands[2]) > 0
+	 && pdp10_const_ok_for_letter_p (INTVAL (operands[2]), 'I'))
+       {
+	 rtx temp = gen_reg_rtx (DImode);
+	 rtx temp0 = gen_rtx_SUBREG (SImode, temp, 0);
+
+	 emit_insn (gen_pdp10_udivmodsi4_divi (temp, operands[1],
+						operands[2]));
+	 emit_move_insn (operands[0], temp0);
+	 DONE;
+       }
+
+     if (TARGET_XKL2)
+       {
+	 emit_insn (gen_xkl2_udivsi3 (operands[0], operands[1],
+				      operands[2]));
+	 DONE;
+       }
+
+     FAIL;
+   }")
+
+(define_insn "xkl2_udivsi3"
   [(set (match_operand:SI 0 "nonimmediate_operand" "=r,r,r,m")
 	(udiv:SI (match_operand:SI 1 "register_operand" "0,0,0,r")
 		 (match_operand:SI 2 "general_operand" "I,i,rm,0")))]
@@ -3215,7 +3245,37 @@
 ;; UIDIVI with indexing missing.
 ;; UIDIVB missing.
 
-(define_insn "umodsi3"
+(define_expand "umodsi3"
+  [(set (match_operand:SI 0 "register_operand" "")
+	(umod:SI (match_operand:SI 1 "register_operand" "")
+		 (match_operand:SI 2 "general_operand" "")))]
+  ""
+  "{
+     if (!TARGET_XKL2
+	 && GET_CODE (operands[2]) == CONST_INT
+	 && INTVAL (operands[2]) > 0
+	 && pdp10_const_ok_for_letter_p (INTVAL (operands[2]), 'I'))
+       {
+	 rtx temp = gen_reg_rtx (DImode);
+	 rtx temp1 = gen_rtx_SUBREG (SImode, temp, 4);
+
+	 emit_insn (gen_pdp10_udivmodsi4_divi (temp, operands[1],
+						operands[2]));
+	 emit_move_insn (operands[0], temp1);
+	 DONE;
+       }
+
+     if (TARGET_XKL2)
+       {
+	 emit_insn (gen_xkl2_umodsi3 (operands[0], operands[1],
+				      operands[2]));
+	 DONE;
+       }
+
+     FAIL;
+   }")
+
+(define_insn "xkl2_umodsi3"
   [(set (match_operand:SI 0 "register_operand" "=r,r,r,m")
 	(umod:SI (match_operand:SI 1 "register_operand" "0,0,0,r")
 		 (match_operand:SI 2 "general_operand" "I,i,rm,0")))]
@@ -3228,6 +3288,18 @@
 
 ;; UIMODI with indexing missing.
 ;; UIMODB missing.
+
+(define_insn "pdp10_udivmodsi4_divi"
+  [(set (subreg:SI (match_operand:DI 0 "register_operand" "=&r") 0)
+	(udiv:SI (match_operand:SI 1 "register_operand" "r")
+		 (match_operand:SI 2 "const_int_operand" "I")))
+   (set (subreg:SI (match_dup 0) 4)
+	(umod:SI (match_dup 1) (match_dup 2)))]
+  "!TARGET_XKL2
+   && INTVAL (operands[2]) > 0
+   && pdp10_const_ok_for_letter_p (INTVAL (operands[2]), 'I')"
+  "move %Z0,%1\;skipl %0,%Z0\;%_tdza %0,%0\;%_%_movei %0,1\;divi %0,%2"
+  [(set_attr "length" "5")])
 
 (define_insn "negsi2"
   [(set (match_operand:SI 0 "nonimmediate_operand" "=r,m,r,m")
@@ -7654,4 +7726,3 @@
     output_asm_insn (pdp10_output_extzv (insn, ops), ops);
     return "";
   })
-

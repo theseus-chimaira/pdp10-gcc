@@ -1480,6 +1480,11 @@ do {								\
       return COSTS_N_INSNS (20);					     \
   case UDIV:								     \
   case UMOD:								     \
+    if (GET_MODE (X) == SImode					     \
+	&& GET_CODE (XEXP ((X), 1)) == CONST_INT			     \
+	&& INTVAL (XEXP ((X), 1)) > 0					     \
+	&& CONST_OK_FOR_LETTER_P (INTVAL (XEXP ((X), 1)), 'I'))	     \
+      return COSTS_N_INSNS (5);					     \
     if (!TARGET_XKL2)							     \
       return COSTS_N_INSNS (50);					     \
     /* Fall through.  */						     \
@@ -1498,6 +1503,12 @@ do {								\
     return COSTS_N_INSNS (optimize_size ? 3 : 2);			     \
   case UNSPEC:								     \
     return pdp10_operand_cost (X, OUTER_CODE);
+
+#define TARGET_USE_DIVSI_FOR_CONST_UDIV(MODE, OP1)		     \
+  ((MODE) == SImode						     \
+   && GET_CODE (OP1) == CONST_INT				     \
+   && INTVAL (OP1) > 0						     \
+   && CONST_OK_FOR_LETTER_P (INTVAL (OP1), 'I'))
 
 /* An expression giving the cost of an addressing mode that contains
    ADDRESS.  */
@@ -2266,4 +2277,3 @@ extern int pdp10_retregs;
   gen_rtx_UNSPEC ((MODE), gen_rtvec (2, (OP0), (OP1)), UNSPEC_ADJBP)
 
 #endif /* __PDP10_H__ */
-

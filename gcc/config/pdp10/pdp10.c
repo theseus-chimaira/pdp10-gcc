@@ -1740,7 +1740,12 @@ pdp10_operand_cost (x, outer_code)
 
     case UDIV:
     case UMOD:
-      return COSTS_N_INSNS (TARGET_XKL2 ? 20 : 50)
+      return (GET_MODE (x) == SImode
+	      && GET_CODE (XEXP (x, 1)) == CONST_INT
+	      && INTVAL (XEXP (x, 1)) > 0
+	      && pdp10_const_ok_for_letter_p (INTVAL (XEXP (x, 1)), 'I')
+	      ? COSTS_N_INSNS (5)
+	      : COSTS_N_INSNS (TARGET_XKL2 ? 20 : 50))
 	+ pdp10_operand_cost (XEXP (x, 0), outer_code)
 	+ pdp10_operand_cost (XEXP (x, 1), outer_code);
 
@@ -6240,10 +6245,10 @@ pdp10_asm_output_skip (stream, nbytes)
 
   if (nbytes >= UNITS_PER_WORD)
     {
-      int words = nbytes / UNITS_PER_WORD;
+      int bytes = nbytes - (nbytes % UNITS_PER_WORD);
 
-      fprintf (stream, "\t.space\t%d\n", words);
-      nbytes -= words * UNITS_PER_WORD;
+      fprintf (stream, "\t.space\t%d\n", bytes);
+      nbytes -= bytes;
     }
 
   /* A residual subword skip at a word boundary is padding already covered
@@ -15850,4 +15855,3 @@ pdp10_compare_and_jump (exp, op0, op1, code, unsignedp, mode, size,
     return;
   fprintf (file, "\t.align\t%d\n", power);
   }
-
