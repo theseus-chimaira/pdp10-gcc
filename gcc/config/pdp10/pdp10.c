@@ -1847,6 +1847,7 @@ static void	pdp10_print_word_decimal PARAMS ((FILE *stream,
 static void	print_symbolic_ref PARAMS ((FILE *stream, rtx x));
 static int	decode_ps PARAMS ((int ps, int *p, int *s));
 /*static*/ int	adjust_ps PARAMS ((int ps, int *adjust));
+static int	label_has_no_fallthrough_p PARAMS ((rtx label));
 static void	maybe_remove_label_and_following_code PARAMS ((rtx label));
 static rtx	follow_label PARAMS ((rtx label));
 
@@ -2206,6 +2207,25 @@ bytesize_for_ps (ps)
     }
 }
 
+/* Return nonzero when LABEL cannot also be reached by ordinary fall-through
+   from the preceding code.  */
+static int
+label_has_no_fallthrough_p (label)
+     rtx label;
+{
+  rtx insn;
+
+  for (insn = PREV_INSN (label); insn != NULL_RTX; insn = PREV_INSN (insn))
+    {
+      if (GET_CODE (insn) == BARRIER)
+	return 1;
+      if (!INSN_DELETED_P (insn) && active_insn_p (insn))
+	return 0;
+    }
+
+  return 1;
+}
+
 /* Decrease the reference count on LABEL, and if the count becomes
    zero, remove LABEL and the following instructions.
 
@@ -2223,13 +2243,8 @@ maybe_remove_label_and_following_code (label)
 
   INSN_DELETED_P (label) = 1;
 
-  for (insn = PREV_INSN (label); insn != NULL_RTX; insn = PREV_INSN (insn))
-    {
-      if (!INSN_DELETED_P (insn) && active_insn_p (insn))
-	return;
-      if (GET_CODE (insn) == BARRIER)
-	break;
-    }
+  if (!label_has_no_fallthrough_p (label))
+    return;
 
   for (insn = NEXT_INSN (label); GET_CODE (insn) != BARRIER;
        insn = NEXT_INSN (insn))
@@ -6757,6 +6772,7 @@ pdp10_output_range_compare (insn, ops, trna)
      instruction (and perhaps a jump back).  If so, replace the JRST
      by that instruction.  */
   if (LABEL_NUSES (operands[4]) == 1
+      && label_has_no_fallthrough_p (operands[4])
       && single_insn (jump_target, label, NULL_RTX))
     {
       rtx jump_back = next_nonnote_insn (jump_target);
@@ -12040,6 +12056,7 @@ pdp10_output_jrst (label)
   rtx address;
 
   if (optimize >= 2
+      && label_has_no_fallthrough_p (label)
       && jrst_or_popj_p (target)
       && ((address = jump_target (target)) == NULL_RTX
 	  || GET_CODE (address) != LABEL_REF
