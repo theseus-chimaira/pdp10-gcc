@@ -159,6 +159,10 @@ extern const char *
 						    int pos));
 extern int	pdp10_expand_extv PARAMS ((rtx *operands));
 extern int	pdp10_expand_extzv PARAMS ((rtx *operands));
+extern int	pdp10_normalize_blt_source_for_output PARAMS ((rtx insn,
+							    rtx src,
+							    rtx dest,
+							    rtx *outp));
 extern const char *
 		pdp10_output_extv PARAMS ((rtx insn, rtx *operands));
 extern const char *
@@ -192,6 +196,8 @@ extern const char *
 extern int	pdp10_expand_dmove PARAMS ((rtx destination, rtx source));
 extern int	pdp10_expand_move_4 PARAMS ((rtx destination, rtx source));
 extern int	pdp10_expand_movstrsi PARAMS ((rtx *operands));
+extern int	pdp10_word_address_plus_one_p PARAMS ((rtx first,
+						      rtx second));
 extern int	pdp10_normalize_blt_source_p PARAMS ((rtx src, rtx dest,
                                                      rtx end, rtx *outp));
 extern int	pdp10_expand_clrstrsi PARAMS ((rtx *operands));

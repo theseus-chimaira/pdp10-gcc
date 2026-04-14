@@ -3807,7 +3807,7 @@
 		   (match_operand:SI 2 "general_operand" "x,K,m")))]
   ""
   "@
-   hrrz %0,%1\;lsh %0,(%2)
+   hrrz %0,%1\;lsh %0,0(%2)
    hrrz %0,%1\;lsh %0,%2
    hrrz %0,%1\;lsh %0,@%2"
   [(set_attr "length" "2")])
@@ -3836,7 +3836,7 @@
 		      (neg:SI (match_operand:SI 2 "general_operand" "x,K,m"))))]
   ""
   "@
-   hrrz %0,%1\;lsh %0,(%2)
+   hrrz %0,%1\;lsh %0,0(%2)
    hrrz %0,%1\;lsh %0,%2
    hrrz %0,%1\;lsh %0,@%2"
   [(set_attr "length" "2")])
@@ -3865,7 +3865,7 @@
 		      (neg:SI (match_operand:SI 2 "general_operand" "x,K,m"))))]
   ""
   "@
-   hrre %0,%1\;ash %0,(%2)
+   hrre %0,%1\;ash %0,0(%2)
    hrre %0,%1\;ash %0,%2
    hrre %0,%1\;ash %0,@%2"
   [(set_attr "length" "2")])
@@ -3878,7 +3878,7 @@
 	UNSPEC_REAL_ASHIFT))]
  ""
  "@
-  ash %0,(%2)
+  ash %0,0(%2)
   ash %0,%2
   ash %0,@%2")
 
@@ -3913,7 +3913,7 @@
 		     (neg:SI (match_operand:SI 2 "general_operand" "x,K,m"))))]
   ""
   "@
-   lsh %0,(%2)
+   lsh %0,0(%2)
    lsh %0,%2
    lsh %0,@%2")
 
@@ -3934,7 +3934,7 @@
 	UNSPEC_REAL_ASHIFT))]
  "TARGET_71BIT"
  "@
-  ashc %0,(%2)
+  ashc %0,0(%2)
   ashc %0,%2
   ashc %0,@%2")
 
@@ -3975,7 +3975,7 @@
   {
     const char *asms[] =
     {
-      "lsh %Z0,1\;lshc %0,(%2)\;lsh %Z0,-1",
+      "lsh %Z0,1\;lshc %0,0(%2)\;lsh %Z0,-1",
       "lsh %Z0,1\;lshc %0,%2\;lsh %Z0,-1",
       "lsh %Z0,1\;lshc %0,@%2\;lsh %Z0,-1"
     };
@@ -4016,7 +4016,7 @@
 		     (neg:SI (match_operand:SI 2 "general_operand" "x,K,m"))))]
   "!TARGET_71BIT"
   "@
-   lshc %0,(%2)
+   lshc %0,0(%2)
    lshc %0,%2
    lshc %0,@%2")
 
@@ -4045,7 +4045,7 @@
 		   (match_operand:SI 2 "nonmemory_operand" "x,K")))]
   ""
   "@
-   lsh %0,(%2)
+   lsh %0,0(%2)
    lsh %0,%2")
 
 (define_insn "*LSH_left_plus"
@@ -4077,7 +4077,7 @@
 		     (neg:SI (match_operand:SI 2 "general_operand" "x,K,m"))))]
   ""
   "@
-   ash %0,(%2)
+   ash %0,0(%2)
    ash %0,%2
    ash %0,@%2")
 
@@ -4103,7 +4103,7 @@
 		   (match_operand:SI 2 "general_operand" "x,K,m")))]
   "!TARGET_71BIT"
   "@
-   lshc %0,(%2)
+   lshc %0,0(%2)
    lshc %0,%2
    lshc %0,@%2")
 
@@ -4114,7 +4114,7 @@
 		   UNSPEC_LSHC))]
   "TARGET_71BIT"
   "@
-   lshc %0,(%2)
+   lshc %0,0(%2)
    lshc %0,%2
    lshc %0,@%2")
 
@@ -4126,7 +4126,7 @@
   {
     const char *asms[] =
     {
-      "lsh %Z0,1\;lshc %0,(%2)\;lsh %Z0,-1",
+      "lsh %Z0,1\;lshc %0,0(%2)\;lsh %Z0,-1",
       "lsh %Z0,1\;lshc %0,%2\;lsh %Z0,-1",
       "lsh %Z0,1\;lshc %0,@%2\;lsh %Z0,-1"
     };
@@ -4295,7 +4295,7 @@
 		     (neg:SI (match_operand:SI 2 "general_operand" "x,K,m"))))]
   "TARGET_71BIT"
   "@
-   ashc %0,(%2)
+   ashc %0,0(%2)
    ashc %0,%2
    ashc %0,@%2")
 

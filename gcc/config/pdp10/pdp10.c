@@ -6584,31 +6584,6 @@ pdp10_align_with_pad (pad)
 
 **********************************************************************/
 
-static int	single_insn PARAMS ((rtx insn, rtx label1, rtx label2));
-
-/* Helper function for pdp10_output_range_compare.  Examines whether a
-   single instruction is suitable to replace the JRST in the range
-   comparision.  */
-static int
-single_insn (insn, label1, label2)
-     rtx insn;
-     rtx label1;
-     rtx label2;
-{
-  rtx jump;
-
-  if (get_attr_length (insn) != 1
-      || get_attr_skip (insn) == SKIP_YES)
-    return 0;
-
-  jump = next_nonnote_insn (insn);
-  return (jump == NULL_RTX
-	  || (GET_CODE (jump) == BARRIER && !simplejump_p (insn))
-	  || (GET_CODE (jump) == CODE_LABEL && jump == label2)
-	  || (simplejump_p (jump)
-	      && label1 == XEXP (SET_SRC (PATTERN (jump)), 0)));
-}
-
 /* Output instructions to conditionally jump to operands[3] depending
    on the result of a comparison of the register in operands[0]
    against a range represented by operands[1] and operands[2].  Return
@@ -6748,52 +6723,20 @@ pdp10_output_range_compare (insn, ops, trna)
 
   if (trna)
     {
-      /* Output a TRNA instrcution unless the next instruction is a
-	 single instruction, in which case the comparison is reversed
-	 (by not emitting the TRNA) and no jump instruction is output.  */
-
-      rtx next_insn = next_real_insn (insn);
-
-      if (!single_insn (next_insn, NULL_RTX, operands[4]))
-	output_asm_insn ("%_%_trna", operands);
-      else
-	{
-	  if (LABEL_NUSES (operands[4]) == 1)
-	    INSN_DELETED_P (operands[4]) = 1;
-	  pdp10_opcode_indentation = 2;
-	  return "";
-	}
+      /* Always output TRNA.  Omitting it when the next instruction is
+	 single-instruction-sized is unsafe for loop exits: fall-through can
+	 execute a return or the next function instead of branching.  */
+      output_asm_insn ("%_%_trna", operands);
     }
 
   label = next_nonnote_insn (insn);
   jump_target = next_nonnote_insn (operands[4]);
 
-  /* Ouput the JRST instruction unless the jump target is a single
-     instruction (and perhaps a jump back).  If so, replace the JRST
-     by that instruction.  */
-  if (LABEL_NUSES (operands[4]) == 1
-      && label_has_no_fallthrough_p (operands[4])
-      && single_insn (jump_target, label, NULL_RTX))
-    {
-      rtx jump_back = next_nonnote_insn (jump_target);
-
-      if (LABEL_NUSES (operands[4]) == 1)
-	INSN_DELETED_P (operands[4]) = 1;
-      if (GET_CODE (jump_back) != BARRIER)
-	{
-	  INSN_DELETED_P (jump_back) = 1;
-	  if (LABEL_NUSES (label) == 1)
-	    INSN_DELETED_P (label) = 1;
-	}
-      pdp10_opcode_indentation = 2 + trna;
-      final_scan_insn (jump_target, asm_out_file, optimize, 0, 0);
-      INSN_DELETED_P (jump_target) = 1;
-    }
-  else
-    {
-      pdp10_opcode_indentation = 2 + trna;
-      pdp10_output_jrst (operands[4]);
-    }
+  /* Always emit the JRST.  Copying a single target instruction here is
+     unsafe for backward loop branches: the target instruction has already
+     executed, so copying it turns iteration into fall-through.  */
+  pdp10_opcode_indentation = 2 + trna;
+  pdp10_output_jrst (operands[4]);
 
   return "";
 }
