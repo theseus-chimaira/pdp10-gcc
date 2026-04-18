@@ -2772,7 +2772,7 @@
 (define_insn "*DSUB"
   [(set (match_operand:DI 0 "register_operand" "=r,r")
 	(minus:DI (match_operand:DI 1 "register_operand" "0,0")
-		  (match_operand:DI 2 "reg_or_mem_operand" "rm,i")))]
+		  (match_operand:DI 2 "general_operand" "rm,i")))]
   "TARGET_71BIT && TARGET_KL10up"
   "@
    dsub %0,%2
