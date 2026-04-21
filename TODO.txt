@@ -1,2 +1,0 @@
-compare output to kcc / use better codegen from kcc if there is any
-cleanup gcc/ for GCC 4.7 port
