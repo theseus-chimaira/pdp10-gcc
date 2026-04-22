@@ -92,7 +92,7 @@ modes:
 
 environment:
   PDP10_GCC_TARGET       target triplet, default pdp10-dec-none
-  PDP10_GCC_PREFIX       install prefix, default /usr/local (/usr/cross on OpenBSD)
+  PREFIX                 install prefix, default /usr/local (/usr/cross on OpenBSD)
   PDP10_GCC_AS           assembler path
   CC                     host C compiler, default cc
   PDP10_GCC_BUILD_ALIAS  configure --build value
@@ -271,12 +271,20 @@ UNAME_S="$(uname -s 2>/dev/null || echo unknown)"
 UNAME_M="$(uname -m 2>/dev/null || echo unknown)"
 UNAME_R="$(uname -r 2>/dev/null || echo unknown)"
 
-if [ -n "${PDP10_GCC_PREFIX+x}" ]; then
-	PREFIX="$PDP10_GCC_PREFIX"
-elif [ "$UNAME_S" = OpenBSD ]; then
-	PREFIX=/usr/cross
-else
-	PREFIX=/usr/local
+: "${PREFIX:=}"
+IS_ANDROID=no
+if [ -d /system ] || [ "$(uname -o 2>/dev/null || true)" = Android ]; then
+	IS_ANDROID=yes
+fi
+
+if [ -z "$PREFIX" ]; then
+	if [ "$IS_ANDROID" = yes ]; then
+		PREFIX="$HOME/cross"
+	elif [ "$UNAME_S" = OpenBSD ]; then
+		PREFIX=/usr/cross
+	else
+		PREFIX=/usr/local
+	fi
 fi
 
 AS="${PDP10_GCC_AS:-$PREFIX/bin/$TARGET-as}"
@@ -315,13 +323,7 @@ elif [ "$UNAME_S" = OpenBSD ] && [ "$UNAME_M" = octeon ]; then
 	CONFIGURE_HOST="--build=$HOST_ALIAS --host=$HOST_ALIAS"
 fi
 
-if [ -d /system ] || [ "$(uname -o 2>/dev/null || true)" = Android ]; then
-	if [ -z "${PDP10_GCC_PREFIX+x}" ]; then
-		PREFIX="$HOME/cross"
-	fi
-
-	AS="${PDP10_GCC_AS:-$PREFIX/bin/$TARGET-as}"
-
+if [ "$IS_ANDROID" = yes ]; then
 	if [ -z "$CONFIGURE_HOST" ]; then
 		BUILD_ALIAS=`canonical_host_alias "${PDP10_GCC_BUILD_ALIAS:-x86_64-unknown-linux-gnu}"`
 		HOST_ALIAS=`canonical_host_alias "${PDP10_GCC_HOST_ALIAS:-x86_64-unknown-linux-gnu}"`
@@ -355,7 +357,7 @@ fi
 
 if [ ! -x "$AS" ]; then
 	echo "error: target assembler is not executable: $AS" >&2
-	echo "       set PDP10_GCC_AS=/path/to/$TARGET-as or PDP10_GCC_PREFIX=/path/to/prefix" >&2
+	echo "       set PDP10_GCC_AS=/path/to/$TARGET-as or PREFIX=/path/to/prefix" >&2
 	exit 1
 fi
 
