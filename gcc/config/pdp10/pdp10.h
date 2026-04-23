@@ -1469,9 +1469,12 @@ do {								\
     return pdp10_operand_cost (X, OUTER_CODE);			     \
   case MULT:								     \
     if (optimize_size)							     \
-      /* Shift instructions are preferred, so multiplications are	     \
-	 slightly more costly than one instruction.  */			     \
-      return COSTS_N_INSNS (3) / 2;					     \
+      /* PDP-10 MUL/MULI produces a doubleword result and can clobber	     \
+	 the next AC.  Treat it as more expensive than a simple		     \
+	 shift/add sequence even under -Os; otherwise byte-pointer index	     \
+	 scaling such as x * 3 may choose MULI, increase register		     \
+	 pressure, and grow the prologue/spill code.  */		     \
+      return COSTS_N_INSNS (5);						     \
     else if (GET_MODE (X) == SImode)					     \
       return COSTS_N_INSNS (5);						     \
     else if (GET_MODE (X) == DImode)					     \
