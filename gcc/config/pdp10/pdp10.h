@@ -431,6 +431,20 @@ extern char *pdp10_char_bytesize_arg;
    once just after all the command options have been parsed.  */
 #define OVERRIDE_OPTIONS pdp10_override_options ()
 
+/* Keep -Os conservative on the PDP-10.  The generic GCC 3.2 -Os mode
+   uses optimize=2 and therefore enables -fforce-mem.  On this target,
+   forcing memory operands into pseudo registers can easily allocate
+   callee-saved ACs across calls.  The save/restore prologue is often
+   larger than reloading the original memory operand, especially for
+   two-word floating values.  */
+#define OPTIMIZATION_OPTIONS(LEVEL, SIZE) \
+  do \
+    { \
+      if (SIZE) \
+	flag_force_mem = 0; \
+    } \
+  while (0)
+
 /* Define this macro if debugging can be performed even without a
    frame pointer.  If this macro is defined, GCC will turn on the
    -fomit-frame-pointer option whenever -O is specified.  */
