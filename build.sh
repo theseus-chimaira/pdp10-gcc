@@ -415,16 +415,21 @@ if [ ! -d "$PREFIX" ]; then
 	fi
 fi
 
-echo "==> configure"
-CC="$HOSTCC" CFLAGS="$HOSTCFLAGS" "$SRC/configure" $CONFIGURE_HOST \
-	--target="$TARGET" \
-	--prefix="$PREFIX" \
-	--enable-languages=c \
-	--with-as="$AS" \
-	--disable-nls \
-	--without-headers \
-	--disable-shared \
-	--disable-multilib
+if [ -f Makefile ] && [ -f config.status ] && [ "${PDP10_GCC_RECONFIGURE:-no}" != yes ]; then
+	echo "==> configure: existing Makefile, skip"
+	echo "==> configure: set PDP10_GCC_RECONFIGURE=yes to rerun"
+else
+	echo "==> configure"
+	CC="$HOSTCC" CFLAGS="$HOSTCFLAGS" "$SRC/configure" $CONFIGURE_HOST \
+		--target="$TARGET" \
+		--prefix="$PREFIX" \
+		--enable-languages=c \
+		--with-as="$AS" \
+		--disable-nls \
+		--without-headers \
+		--disable-shared \
+		--disable-multilib
+fi
 
 make_gcc_args () {
 	make \
@@ -456,6 +461,12 @@ else
 fi
 
 echo "==> install"
+# Old GCC install rules assume these documentation directories already
+# exist.  Create them for local non-privileged PREFIX installs.
+mkdir -p "$PREFIX/share/info" \
+	 "$PREFIX/share/man/man1" \
+	 "$PREFIX/share/man/man7"
+
 if top_make_has_target install; then
 	if needs_install_privilege; then
 		echo "==> install privilege: doas/sudo"

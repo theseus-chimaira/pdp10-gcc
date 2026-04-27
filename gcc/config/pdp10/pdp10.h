@@ -432,20 +432,21 @@ extern char *pdp10_char_bytesize_arg;
 #define OVERRIDE_OPTIONS pdp10_override_options ()
 
 /* Keep -Os conservative on the PDP-10.  The generic GCC 3.2 -Os mode
-   uses optimize=2 and therefore enables some transformations that can
-   increase PDP-10 code size.  On this target, forcing memory operands
-   into pseudo registers can allocate callee-saved ACs across calls; the
-   save/restore prologue is often larger than reloading the memory
-   operand.  Basic-block reordering can also undo compact PDP-10 skip
-   instruction shapes and replace them with extra JRST instructions.  */
+   uses optimize=2 and therefore enables -fforce-mem.  On this target,
+   forcing memory operands into pseudo registers can allocate callee-saved
+   ACs across calls; the save/restore prologue is often larger than
+   reloading the memory operand.
+
+   Do not disable block reordering globally for -Os.  Some DImode compare
+   shapes would be shorter without it, but the full test sweep shows that
+   turning it off regresses many loop-heavy cases where -Os should retain
+   the compact -O2 layout.  Those compare shapes need a targeted cbranchdi
+   fix instead.  */
 #define OPTIMIZATION_OPTIONS(LEVEL, SIZE) \
   do \
     { \
       if (SIZE) \
-	{ \
-	  flag_force_mem = 0; \
-	  flag_reorder_blocks = 0; \
-	} \
+	flag_force_mem = 0; \
     } \
   while (0)
 
