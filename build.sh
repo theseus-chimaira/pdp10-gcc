@@ -288,9 +288,12 @@ if [ -z "$PREFIX" ]; then
 fi
 
 AS="${PDP10_GCC_AS:-$PREFIX/bin/$TARGET-as}"
+ASDIR=`dirname "$AS"`
 # Keep freshly installed target binutils visible to the old GCC makefiles.
 # They invoke tools such as pdp10-dec-none-ar by name when building libgcc.
-PATH="$PREFIX/bin:$PATH"
+# Also include the assembler directory, since PREFIX may be a new install
+# directory while the bootstrap tools are still in an extracted cross tree.
+PATH="$ASDIR:$PREFIX/bin:$PATH"
 export PATH
 DOAS="${DOAS:-doas}"
 SUDO="${SUDO:-sudo -n}"
@@ -415,9 +418,8 @@ if [ ! -d "$PREFIX" ]; then
 	fi
 fi
 
-if [ -f Makefile ] && [ -f config.status ] && [ "${PDP10_GCC_RECONFIGURE:-no}" != yes ]; then
-	echo "==> configure: existing Makefile, skip"
-	echo "==> configure: set PDP10_GCC_RECONFIGURE=yes to rerun"
+if [ -f Makefile ] && [ -f config.status ]; then
+	echo "==> configure: existing build tree; skipping top-level configure"
 else
 	echo "==> configure"
 	CC="$HOSTCC" CFLAGS="$HOSTCFLAGS" "$SRC/configure" $CONFIGURE_HOST \
@@ -461,31 +463,57 @@ else
 fi
 
 echo "==> install"
-# Old GCC install rules assume these documentation directories already
-# exist.  Create them for local non-privileged PREFIX installs.
-mkdir -p "$PREFIX/share/info" \
-	 "$PREFIX/share/man/man1" \
-	 "$PREFIX/share/man/man7"
+if needs_install_privilege; then
+	INSTALL_WITH_PRIV=yes
+else
+	INSTALL_WITH_PRIV=no
+fi
+
+if [ "$INSTALL_WITH_PRIV" = yes ]; then
+	echo "==> install privilege: doas/sudo"
+	privileged_command mkdir -p \
+		"$PREFIX/bin" \
+		"$PREFIX/$TARGET/bin" \
+		"$PREFIX/lib/gcc-lib/$TARGET/3.2" \
+		"$PREFIX/info" \
+		"$PREFIX/man/man1" \
+		"$PREFIX/share/info" \
+		"$PREFIX/share/man/man1" \
+		"$PREFIX/share/man/man7"
+else
+	mkdir -p \
+		"$PREFIX/bin" \
+		"$PREFIX/$TARGET/bin" \
+		"$PREFIX/lib/gcc-lib/$TARGET/3.2" \
+		"$PREFIX/info" \
+		"$PREFIX/man/man1" \
+		"$PREFIX/share/info" \
+		"$PREFIX/share/man/man1" \
+		"$PREFIX/share/man/man7"
+fi
 
 if top_make_has_target install; then
-	if needs_install_privilege; then
-		echo "==> install privilege: doas/sudo"
+	if [ "$INSTALL_WITH_PRIV" = yes ]; then
 		privileged_command make install
 	else
 		make install
 	fi
 else
 	echo "==> top-level install target missing; using direct gcc install fallback"
-	if needs_install_privilege; then
-		echo "==> install privilege: doas/sudo"
+	if [ "$INSTALL_WITH_PRIV" = yes ]; then
 		privileged_command make -C gcc install
 	else
 		make -C gcc install
 	fi
 fi
 
-mkdir -p "$PREFIX/share/gcc-pdp10/config/pdp10"
-cp "$SRC/gcc/config/pdp10/libgcc1.s" "$PREFIX/share/gcc-pdp10/config/pdp10/libgcc1.s"
+if [ "$INSTALL_WITH_PRIV" = yes ]; then
+	privileged_command mkdir -p "$PREFIX/share/gcc-pdp10/config/pdp10"
+	privileged_command cp "$SRC/gcc/config/pdp10/libgcc1.s" "$PREFIX/share/gcc-pdp10/config/pdp10/libgcc1.s"
+else
+	mkdir -p "$PREFIX/share/gcc-pdp10/config/pdp10"
+	cp "$SRC/gcc/config/pdp10/libgcc1.s" "$PREFIX/share/gcc-pdp10/config/pdp10/libgcc1.s"
+fi
 
 echo "==> installed cc1"
 ls -l "$PREFIX/lib/gcc-lib/$TARGET/3.2/cc1"
