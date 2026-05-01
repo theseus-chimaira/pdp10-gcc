@@ -439,7 +439,9 @@ extern char *pdp10_char_bytesize_arg;
    callee-saved ACs across calls; the save/restore prologue is often
    larger than reloading the memory operand.  Basic-block reordering can
    undo compact PDP-10 skip instruction shapes and replace them with
-   extra JRST instructions.  */
+   extra JRST instructions.  GCC loop branch-count conversion can also
+   add setup code that is larger than the ordinary compare-and-branch
+   loop shape on PDP-10.  */
 #define OPTIMIZATION_OPTIONS(LEVEL, SIZE) \
   do \
     { \
@@ -448,6 +450,7 @@ extern char *pdp10_char_bytesize_arg;
 	  flag_expensive_optimizations = 0; \
 	  flag_force_mem = 0; \
 	  flag_reorder_blocks = 0; \
+	  flag_branch_on_count_reg = 0; \
 	} \
     } \
   while (0)
