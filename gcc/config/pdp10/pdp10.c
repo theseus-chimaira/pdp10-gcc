@@ -2505,21 +2505,33 @@ pdp10_print_operand (stream, x, code)
 
       /* Print next location.  */
     case 'Z':
-      switch (GET_CODE (x))
-	{
-	case REG:
-	  print_reg (stream, (REGNO (x) + 1) % 020);
-	  break;
-	case MEM:
-	  if (GET_CODE (XEXP (x, 0)) == MEM)
+      {
+	int word = 1;
+
+	while (GET_CODE (x) == SUBREG)
+	  {
+	    if ((SUBREG_BYTE (x) % UNITS_PER_WORD) != 0)
+	      abort ();
+	    word += SUBREG_BYTE (x) / UNITS_PER_WORD;
+	    x = SUBREG_REG (x);
+	  }
+
+	switch (GET_CODE (x))
+	  {
+	  case REG:
+	    print_reg (stream, (REGNO (x) + word) % 020);
+	    break;
+	  case MEM:
+	    if (GET_CODE (XEXP (x, 0)) == MEM)
+	      abort ();
+	    x = plus_constant (XEXP (x, 0), word);
+	    pdp10_print_operand_address (stream, x, word_mode, 0);
+	    break;
+	  default:
+	    debug_rtx (x);
 	    abort ();
-	  x = plus_constant (XEXP (x, 0), 1);
-	  pdp10_print_operand_address (stream, x, word_mode, 0);
-	  break;
-	default:
-	  debug_rtx (x);
-	  abort ();
-	}
+	  }
+      }
       return;
     }
 

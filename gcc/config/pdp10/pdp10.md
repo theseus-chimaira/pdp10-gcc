@@ -2360,17 +2360,25 @@
   [(set_attr "length" "3")])
 
 ;; This seemingly useless instruction combination is needed to enable
-;; the combination below.
+;; the carry-detect combination below.  It is safe to recognize normally:
+;; the emitted ADD/TLC sequence is the same shape that combine otherwise
+;; leaves behind as separate insns.
 (define_insn ""
   [(set (match_operand:SI 0 "register_operand" "=r")
 	(xor:SI (plus:SI (match_operand:SI 1 "register_operand" "0")
 			 (match_operand:SI 2 "reg_or_mem_operand" "rm"))
 		(const_int SIGNBIT)))]
-  "0"
+  ""
   "add %0,%2\;tlc %0,400000")
 
-;; Calculate the truth value of this particular unsigned comparison
-;; with ADD and JCRY0.
+;; Calculate the truth value of unsigned addition carry tests with ADD
+;; and JCRY0.  Generic DImode addition lowering commonly tests carry as
+;;
+;;     (unsigned) sum < (unsigned) lhs
+;;
+;; after computing the low word.  Match both the old reversed GT form and
+;; that direct LT form so the carry boolean does not require a second
+;; temporary register for sign-bit flipping and CAML.
 (define_insn ""
   [(set (match_operand:SI 0 "register_operand" "=r")
 	(gt:SI (xor:SI (match_operand:SI 1 "register_operand" "r")
@@ -2378,8 +2386,31 @@
 	       (xor:SI (plus:SI (match_operand:SI 2 "register_operand" "0")
 				(match_operand:SI 3 "reg_or_mem_operand" "1"))
 		       (const_int SIGNBIT))))]
-  "0"
+  ""
   "jfcl 17,.+1\;add %0,%3\;jcry0 .+2\;%_tdza %0,%0\;movei %0,1")
+
+(define_insn ""
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(plus:SI (match_operand:SI 1 "register_operand" "r")
+		 (match_operand:SI 2 "reg_or_mem_operand" "rm")))
+   (set (match_operand:SI 3 "register_operand" "=r")
+	(lt:SI (xor:SI (plus:SI (match_dup 1)
+				(match_dup 2))
+		       (const_int SIGNBIT))
+	       (xor:SI (match_dup 1)
+		       (const_int SIGNBIT))))]
+  "REGNO (operands[0]) != REGNO (operands[3])"
+  "move %0,%1\;jfcl 17,.+1\;add %0,%2\;jcry0 .+2\;%_tdza %3,%3\;movei %3,1")
+
+(define_insn ""
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(lt:SI (xor:SI (plus:SI (match_operand:SI 1 "register_operand" "r")
+				(match_operand:SI 2 "reg_or_mem_operand" "rm"))
+		       (const_int SIGNBIT))
+	       (xor:SI (match_dup 1)
+		       (const_int SIGNBIT))))]
+  ""
+  "move %0,%1\;jfcl 17,.+1\;add %0,%2\;jcry0 .+2\;%_tdza %0,%0\;movei %0,1")
 
 (define_insn "*sccsi"
   [(set (match_operand:SI 0 "register_operand" "=r,r")
@@ -2675,8 +2706,54 @@
   [(set (match_operand:DI 0 "register_operand" "")
 	(plus:DI (match_operand:DI 1 "register_operand" "")
 		 (match_operand:DI 2 "general_operand" "")))]
-  "TARGET_KL10up && TARGET_71BIT"
-  "")
+  "TARGET_71BIT"
+  "{
+     if (!TARGET_KL10up)
+       {
+	 if (!register_operand (operands[1], DImode))
+	   operands[1] = force_reg (DImode, operands[1]);
+	 emit_insn (gen_adddi3_71_no_dadd (operands[0], operands[1],
+					    operands[2]));
+	 DONE;
+       }
+   }")
+
+;; KA10/PDP-6-class 71-bit DImode addition.  GCC's generic lowering
+;; computes the low word, then tests carry by sign-bit-flipping two
+;; temporaries and comparing them.  Use PDP-10 arithmetic flags directly
+;; instead, keeping the flag-setting ADD and JCRY0 in one insn so the
+;; intermediate carry flag does not have to be represented in RTL.
+(define_insn "adddi3_71_no_dadd"
+  [(set (match_operand:DI 0 "register_operand" "=r,r,r,r")
+	(plus:DI (match_operand:DI 1 "register_operand" "r,r,r,r")
+		 (match_operand:DI 2 "general_operand" "ro,I,J,i")))]
+  "TARGET_71BIT && !TARGET_KL10up"
+  {
+    int same = rtx_equal_p (operands[0], operands[1]);
+
+    switch (which_alternative)
+      {
+      case 0:
+	return same
+	  ? "jfcl 17,.+1\;add %Z0,%Z2\;jcry0 .+2\;%_jrst .+2\;%_aoja %0,.+1\;add %0,%2"
+	  : "move %0,%1\;move %Z0,%Z1\;jfcl 17,.+1\;add %Z0,%Z2\;jcry0 .+2\;%_jrst .+2\;%_aoja %0,.+1\;add %0,%2";
+      case 1:
+	return same
+	  ? "jfcl 17,.+1\;addi %Z0,%2\;jcry0 .+2\;%_jrst .+2\;%_aoja %0,.+1"
+	  : "move %0,%1\;move %Z0,%Z1\;jfcl 17,.+1\;addi %Z0,%2\;jcry0 .+2\;%_jrst .+2\;%_aoja %0,.+1";
+      case 2:
+	return same
+	  ? "jfcl 17,.+1\;subi %Z0,%N2\;jcry0 .+2\;%_subi %0,1"
+	  : "move %0,%1\;move %Z0,%Z1\;jfcl 17,.+1\;subi %Z0,%N2\;jcry0 .+2\;%_subi %0,1";
+      case 3:
+	return same
+	  ? "jfcl 17,.+1\;add %Z0,[%B2]\;jcry0 .+2\;%_jrst .+2\;%_aoja %0,.+1\;add %0,[%A2]"
+	  : "move %0,%1\;move %Z0,%Z1\;jfcl 17,.+1\;add %Z0,[%B2]\;jcry0 .+2\;%_jrst .+2\;%_aoja %0,.+1\;add %0,[%A2]";
+      default:
+	abort ();
+      }
+  }
+  [(set_attr "length" "8,7,6,8")])
 
 (define_insn "*adddi3"
   [(set (match_operand:DI 0 "nonimmediate_operand" "=r,r,r,r,o,o,o")
@@ -2756,8 +2833,32 @@
   [(set (match_operand:DI 0 "register_operand" "")
 	(minus:DI (match_operand:DI 1 "register_operand" "")
 		  (match_operand:DI 2 "general_operand" "")))]
-  "TARGET_KL10up && TARGET_71BIT"
-  "")
+  ""
+  "{
+     if (TARGET_71BIT && !TARGET_KL10up)
+       {
+	 if (!reg_or_mem_operand (operands[2], DImode))
+	   operands[2] = force_reg (DImode, operands[2]);
+	 emit_insn (gen_subdi3_71_no_dadd (operands[0], operands[1],
+					    operands[2]));
+	 DONE;
+       }
+   }")
+
+;; KA10/PDP-6-class 71-bit DImode subtraction.  GCC's generic lowering
+;; computes the low word, then builds an unsigned borrow test through
+;; sign-bit flips and a compare.  Use PDP-10 arithmetic flags directly:
+;; after SUB of the low word, JCRY0 means no borrow, so only the fallthrough
+;; path decrements the high word.
+(define_insn "subdi3_71_no_dadd"
+  [(set (match_operand:DI 0 "register_operand" "=r,&r")
+	(minus:DI (match_operand:DI 1 "register_operand" "0,r")
+		  (match_operand:DI 2 "reg_or_mem_operand" "ro,ro")))]
+  "TARGET_71BIT && !TARGET_KL10up"
+  "@
+   jfcl 17,.+1\;sub %Z0,%Z2\;jcry0 .+2\;%_subi %0,1\;sub %0,%2
+   move %0,%1\;move %Z0,%Z1\;jfcl 17,.+1\;sub %Z0,%Z2\;jcry0 .+2\;%_subi %0,1\;sub %0,%2"
+  [(set_attr "length" "5,7")])
 
 (define_insn "*subdi3"
   [(set (match_operand:DI 0 "register_operand" "=r,o")
