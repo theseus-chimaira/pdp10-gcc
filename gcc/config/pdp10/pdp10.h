@@ -1181,8 +1181,14 @@ enum reg_class
 
 **********************************************************************/
 
+/* Sibling calls are not always small on PDP-10.  In particular, a
+   function with incoming stack arguments can need extra AC saves and
+   argument shuffling before the tail jump.  GCC 3.2 treats -Os as
+   optimize=2 plus optimize_size, so avoid that code-size trap while
+   leaving the ordinary -O2 tail-call choice unchanged.  */
 #define FUNCTION_OK_FOR_SIBCALL(DECL) \
-  !(current_function_stdarg || current_function_varargs)
+  !(current_function_stdarg || current_function_varargs \
+    || (optimize_size && current_function_args_size > 0))
 
 
 
@@ -2302,5 +2308,8 @@ extern int pdp10_retregs;
 
 #define gen_rtx_ADJBP(MODE, OP0, OP1) \
   gen_rtx_UNSPEC ((MODE), gen_rtvec (2, (OP0), (OP1)), UNSPEC_ADJBP)
+
+#define TARGET_SKIP_REGMOVE_PASS \
+  (optimize_size && current_function_args_size > 0)
 
 #endif /* __PDP10_H__ */

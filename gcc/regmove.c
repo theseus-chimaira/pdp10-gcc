@@ -42,6 +42,10 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #include "toplev.h"
 #include "reload.h"
 
+#ifndef TARGET_SKIP_REGMOVE_PASS
+#define TARGET_SKIP_REGMOVE_PASS 0
+#endif
+
 
 /* Turn STACK_GROWS_DOWNWARD into a boolean.  */
 #ifdef STACK_GROWS_DOWNWARD
@@ -1065,6 +1069,9 @@ regmove_optimize (f, nregs, regmove_dump_file)
   /* ??? Hack.  Regmove doesn't examine the CFG, and gets mightily
      confused by non-call exceptions ending blocks.  */
   if (flag_non_call_exceptions)
+    return;
+
+  if (TARGET_SKIP_REGMOVE_PASS)
     return;
 
   /* Find out where a potential flags register is live, and so that we
