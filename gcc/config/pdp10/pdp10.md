@@ -3302,34 +3302,99 @@
      DONE;
    }")
 
+;; The signed DIV instruction can divide an unsigned 36-bit dividend by a
+;; positive 35-bit divisor when the dividend is placed in the low word of a
+;; zero-extended AC pair.  A divisor with bit 35 set can only produce quotient
+;; zero or one, so handle that case with an unsigned comparison.  Do not use
+;; reciprocal multiplication: default PDP-10 DImode has only 71 value bits.
+(define_expand "udivmodsi4"
+  [(parallel
+    [(set (match_operand:SI 0 "nonimmediate_operand" "")
+          (udiv:SI (match_operand:SI 1 "register_operand" "")
+                   (match_operand:SI 2 "general_operand" "")))
+     (set (match_operand:SI 3 "nonimmediate_operand" "")
+          (umod:SI (match_dup 1) (match_dup 2)))])]
+  "!TARGET_XKL2"
+  "{
+     rtx pair = gen_reg_rtx (DImode);
+     rtx quotient = gen_rtx_SUBREG (SImode, pair, 0);
+     rtx remainder = gen_rtx_SUBREG (SImode, pair, 4);
+
+     if (!register_operand (operands[1], SImode))
+       operands[1] = force_reg (SImode, operands[1]);
+     if (GET_CODE (operands[2]) == CONST_INT
+         && INTVAL (operands[2]) >= 0)
+       emit_insn (gen_pdp10_udivmodsi4_positive
+                  (pair, operands[1], operands[2]));
+     else
+       {
+         if (!register_operand (operands[2], SImode))
+           operands[2] = force_reg (SImode, operands[2]);
+         emit_insn (gen_pdp10_udivmodsi4_general
+                    (pair, operands[1], operands[2]));
+       }
+     emit_move_insn (operands[0], quotient);
+     emit_move_insn (operands[3], remainder);
+     DONE;
+   }")
+
+(define_insn "pdp10_udivmodsi4_positive"
+  [(set (subreg:SI (match_operand:DI 0 "register_operand" "=&r,&r,&r") 0)
+        (udiv:SI (match_operand:SI 1 "register_operand" "r,r,r")
+                 (match_operand:SI 2 "general_operand" "rm,I,i")))
+   (set (subreg:SI (match_dup 0) 4)
+        (umod:SI (match_dup 1) (match_dup 2)))]
+  ""
+  "@
+   move %Z0,%1\;setz %0,\;div %0,%2
+   move %Z0,%1\;setz %0,\;divi %0,%2
+   move %Z0,%1\;setz %0,\;div %0,[%2]"
+  [(set_attr "length" "3,3,3")])
+
+(define_insn "pdp10_udivmodsi4_general"
+  [(set (subreg:SI (match_operand:DI 0 "register_operand" "=&r") 0)
+        (udiv:SI (match_operand:SI 1 "register_operand" "r")
+                 (match_operand:SI 2 "register_operand" "r")))
+   (set (subreg:SI (match_dup 0) 4)
+        (umod:SI (match_dup 1) (match_dup 2)))
+   (clobber (match_scratch:SI 3 "=&r"))]
+  ""
+  "jumpge %2,.+14\;move %0,%1\;tlc %0,400000\;move %3,%2\;tlc %3,400000\;camge %0,%3\;jrst .+5\;movei %0,1\;move %Z0,%1\;sub %Z0,%2\;jrst .+7\;movei %0,0\;move %Z0,%1\;jrst .+4\;move %Z0,%1\;setz %0,\;div %0,%2"
+  [(set_attr "length" "17")])
+
 (define_expand "udivsi3"
   [(set (match_operand:SI 0 "nonimmediate_operand" "")
 	(udiv:SI (match_operand:SI 1 "register_operand" "")
 		 (match_operand:SI 2 "general_operand" "")))]
   ""
   "{
-     if (!TARGET_XKL2
-	 && GET_CODE (operands[2]) == CONST_INT
-	 && INTVAL (operands[2]) > 0
-	 && pdp10_const_ok_for_letter_p (INTVAL (operands[2]), 'I'))
-       {
-	 rtx temp = gen_reg_rtx (DImode);
-	 rtx temp0 = gen_rtx_SUBREG (SImode, temp, 0);
-
-	 emit_insn (gen_pdp10_udivmodsi4_divi (temp, operands[1],
-						operands[2]));
-	 emit_move_insn (operands[0], temp0);
-	 DONE;
-       }
-
      if (TARGET_XKL2)
        {
 	 emit_insn (gen_xkl2_udivsi3 (operands[0], operands[1],
 				      operands[2]));
 	 DONE;
        }
+     else
+       {
+	 rtx pair = gen_reg_rtx (DImode);
+	 rtx quotient = gen_rtx_SUBREG (SImode, pair, 0);
 
-     FAIL;
+	 if (!register_operand (operands[1], SImode))
+	   operands[1] = force_reg (SImode, operands[1]);
+	 if (GET_CODE (operands[2]) == CONST_INT
+	     && INTVAL (operands[2]) >= 0)
+	   emit_insn (gen_pdp10_udivmodsi4_positive
+		      (pair, operands[1], operands[2]));
+	 else
+	   {
+	     if (!register_operand (operands[2], SImode))
+	       operands[2] = force_reg (SImode, operands[2]);
+	     emit_insn (gen_pdp10_udivmodsi4_general
+			(pair, operands[1], operands[2]));
+	   }
+	 emit_move_insn (operands[0], quotient);
+	 DONE;
+       }
    }")
 
 (define_insn "xkl2_udivsi3"
@@ -3352,28 +3417,33 @@
 		 (match_operand:SI 2 "general_operand" "")))]
   ""
   "{
-     if (!TARGET_XKL2
-	 && GET_CODE (operands[2]) == CONST_INT
-	 && INTVAL (operands[2]) > 0
-	 && pdp10_const_ok_for_letter_p (INTVAL (operands[2]), 'I'))
-       {
-	 rtx temp = gen_reg_rtx (DImode);
-	 rtx temp1 = gen_rtx_SUBREG (SImode, temp, 4);
-
-	 emit_insn (gen_pdp10_udivmodsi4_divi (temp, operands[1],
-						operands[2]));
-	 emit_move_insn (operands[0], temp1);
-	 DONE;
-       }
-
      if (TARGET_XKL2)
        {
 	 emit_insn (gen_xkl2_umodsi3 (operands[0], operands[1],
 				      operands[2]));
 	 DONE;
        }
+     else
+       {
+	 rtx pair = gen_reg_rtx (DImode);
+	 rtx remainder = gen_rtx_SUBREG (SImode, pair, 4);
 
-     FAIL;
+	 if (!register_operand (operands[1], SImode))
+	   operands[1] = force_reg (SImode, operands[1]);
+	 if (GET_CODE (operands[2]) == CONST_INT
+	     && INTVAL (operands[2]) >= 0)
+	   emit_insn (gen_pdp10_udivmodsi4_positive
+		      (pair, operands[1], operands[2]));
+	 else
+	   {
+	     if (!register_operand (operands[2], SImode))
+	       operands[2] = force_reg (SImode, operands[2]);
+	     emit_insn (gen_pdp10_udivmodsi4_general
+			(pair, operands[1], operands[2]));
+	   }
+	 emit_move_insn (operands[0], remainder);
+	 DONE;
+       }
    }")
 
 (define_insn "xkl2_umodsi3"
@@ -3389,18 +3459,6 @@
 
 ;; UIMODI with indexing missing.
 ;; UIMODB missing.
-
-(define_insn "pdp10_udivmodsi4_divi"
-  [(set (subreg:SI (match_operand:DI 0 "register_operand" "=&r") 0)
-	(udiv:SI (match_operand:SI 1 "register_operand" "r")
-		 (match_operand:SI 2 "const_int_operand" "I")))
-   (set (subreg:SI (match_dup 0) 4)
-	(umod:SI (match_dup 1) (match_dup 2)))]
-  "!TARGET_XKL2
-   && INTVAL (operands[2]) > 0
-   && pdp10_const_ok_for_letter_p (INTVAL (operands[2]), 'I')"
-  "move %Z0,%1\;skipl %0,%Z0\;%_tdza %0,%0\;%_%_movei %0,1\;divi %0,%2"
-  [(set_attr "length" "5")])
 
 (define_insn "negsi2"
   [(set (match_operand:SI 0 "nonimmediate_operand" "=r,m,r,m")

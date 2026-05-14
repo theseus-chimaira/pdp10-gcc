@@ -27,6 +27,14 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 
 #define ASM_COMMENT_START ";"
 
+/* The generic PDP-10 header leaves the text-section directive empty for
+   assemblers that do not distinguish sections.  The GAS-style DAIMOS
+   assembler does distinguish them and lays text before data.  Without an
+   explicit .text directive, a function emitted after initialized data stays
+   in .data and the assembler reorders executable code as writable data.  */
+#undef TEXT_SECTION_ASM_OP
+#define TEXT_SECTION_ASM_OP "\t.text"
+
 /* The GCC/GAS-ish DAIMOS bring-up assembler accepts the same minimal
    .PSECT syntax as the old MACRO path.  GCC 3.2 will otherwise abort in
    default_no_named_section when libgcc or debug-related code asks for a

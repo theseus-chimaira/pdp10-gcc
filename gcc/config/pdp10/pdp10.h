@@ -1519,7 +1519,11 @@ do {								\
 	&& CONST_OK_FOR_LETTER_P (INTVAL (XEXP ((X), 1)), 'I'))	     \
       return COSTS_N_INSNS (5);					     \
     if (!TARGET_XKL2)							     \
-      return COSTS_N_INSNS (50);					     \
+      /* Keep generic reciprocal multiplication from replacing the	     \
+	 target divide expander.  The reciprocal path needs a full	     \
+	 72-bit high product, but default PDP-10 DImode has 71 value	     \
+	 bits.  Positive constants expand to three instructions.  */	     \
+      return COSTS_N_INSNS (3);					     \
     /* Fall through.  */						     \
   case DIV:								     \
   case MOD:								     \
