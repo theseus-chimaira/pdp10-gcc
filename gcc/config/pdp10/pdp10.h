@@ -112,10 +112,10 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
    replace the first option.  */
 #if XKL_STUFF
 #define TARGET_OPTION_TRANSLATE_TABLE		\
-  { "-g", "-g -O0 -mregparm=0" },		\
-  { "-g1", "-g1 -O0 -mregparm=0" },		\
-  { "-g2", "-g2 -O0 -mregparm=0" },		\
-  { "-g3", "-g3 -O0 -mregparm=0" }
+  { "-g", "-g -O0" },			\
+  { "-g1", "-g1 -O0" },			\
+  { "-g2", "-g2 -O0" },			\
+  { "-g3", "-g3 -O0" }
 #endif
 
 /* A C string constant that tells the GCC driver program options to
@@ -196,9 +196,9 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
    system.  */
 #ifndef CPP_PREDEFINES
 #if XKL_STUFF
-#define CPP_PREDEFINES  "-D__PDP10__ -D__PDP10 -DGNUCC -DGCC -Amachine=pdp10"
+#define CPP_PREDEFINES  "-D__PDP10__ -D__PDP10 -D__PDP10_INLINE_UDIV__=1 -DGNUCC -DGCC -Amachine=pdp10"
 #else
-#define CPP_PREDEFINES  "-D__PDP10__ -D__PDP10 -Amachine=pdp10"
+#define CPP_PREDEFINES  "-D__PDP10__ -D__PDP10 -D__PDP10_INLINE_UDIV__=1 -Amachine=pdp10"
 #endif
 #endif
 
@@ -716,8 +716,8 @@ extern int pdp10_char_bytesize;
 /* Like FIXED_REGISTERS, but has 1 for each register that is clobbered
    (in general) by function calls as well as for fixed registers.
 
-   The default is to clobber AC1 - AC4, which are used to pass
-   arguments, and AC0.  */
+   The canonical C ABI clobbers AC0 - AC7.  AC1 - AC4 carry named
+   register arguments and AC1 - AC4 carry register return values.  */
 #define CALL_USED_REGISTERS	\
 {				\
   1, 1, 1, 1, 1, 1, 1, 1,	\
@@ -1014,6 +1014,7 @@ enum reg_class
 
 /* The default number of registers used to pass arguments.  */
 #define PDP10_DEFAULT_REGPARM 4
+#define PDP10_DEFAULT_CALL_CLOBBERED 8
 
 /* A C expression that controls whether a function argument is passed
    in a register, and which register.  */

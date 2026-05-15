@@ -418,8 +418,9 @@ if [ ! -d "$PREFIX" ]; then
 	fi
 fi
 
-if [ -f Makefile ] && [ -f config.status ]; then
-	echo "==> configure: existing build tree; skipping top-level configure"
+if [ -f Makefile ] && [ -f config.status ] && \
+   [ -f gcc/Makefile ] && [ -f libiberty/Makefile ]; then
+	echo "==> configure: existing complete build tree; skipping top-level configure"
 else
 	echo "==> configure"
 	CC="$HOSTCC" CFLAGS="$HOSTCFLAGS" "$SRC/configure" $CONFIGURE_HOST \
@@ -517,3 +518,12 @@ fi
 
 echo "==> installed cc1"
 ls -l "$PREFIX/lib/gcc-lib/$TARGET/3.2/cc1"
+
+echo "==> test: inline unsigned SI division"
+PDP10_GCC="$PREFIX/bin/$TARGET-gcc" \
+PDP10_AS="$AS" \
+    "$SRC/gcc/config/pdp10/tests/unsigned-divmod-inline.sh"
+
+echo "==> test: debug options preserve C ABI"
+PDP10_GCC="$PREFIX/bin/$TARGET-gcc" \
+    "$SRC/gcc/config/pdp10/tests/debug-abi.sh"

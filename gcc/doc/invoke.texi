@@ -662,7 +662,7 @@ in the following sections.
 @emph{PDP-10 Options}
 @gccoptlist{
 -mcpu=@var{cpu type}  -march=@var{cpu type}  -mtune=@var{cpu type} @gol
--mpsect=@var{name}  -mmodel=@var{name}  -margument-regs@var{n} @gol
+-mpsect=@var{name}  -mmodel=@var{name}  -mregparm=@var{n} @gol
 -mreturn-regs=@var{n}  -mcall-clobbereg=@var{n}  -mextended -munextended @gol
 -mdfloat  -mgfloat  -mtab  -mupper  -mindent-skipped}
 
@@ -9579,15 +9579,20 @@ Put executable code into PSECT @var{name}.
 Use code model @var{name}.  Supported values for @var{name} are
 @samp{small}, @samp{smallish}, @samp{medium}, @samp{large}.
 
-@item -margument-regs=@var{n}
+@item -mregparm=@var{n}
 Use accumulator 1 to accumulator @var{n} to pass function arguments.
+The canonical PDP-10 C ABI requires @var{n} to be 4; other values are
+rejected.
 
 @item -mreturn-regs=@var{n}
 Use accumulator 1 to accumulator @var{n} to return a function value.
+The canonical PDP-10 C ABI requires @var{n} to be 4; other values are
+rejected.
 
 @item -mcall-clobbered=@var{n}
-Consider accumulator 0 to accumulator @var{n} to be clobbered by a
-function call.
+Consider the first @var{n} accumulators, starting with accumulator 0, to
+be clobbered by a function call.  The canonical PDP-10 C ABI requires
+@var{n} to be 8, meaning AC0 through AC7; other values are rejected.
 
 @item -mextended
 Use extended addressing.

@@ -573,7 +573,6 @@ pdp10_override_options ()
       extern int flag_crossjumping, flag_gcse, flag_rerun_cse_after_loop;
       extern int flag_delete_null_pointer_checks;
 
-      pdp10_regparm = 0;
       optimize = 0;
 
       flag_defer_pop = 0;
@@ -793,6 +792,14 @@ pdp10_override_options ()
 	  exit (1);
 	}
 
+      if (pdp10_regparm != PDP10_DEFAULT_REGPARM)
+	{
+	  fprintf (stderr,
+		   "Unsupported noncanonical PDP-10 C ABI: -mregparm=%d (must be %d)\n",
+		   pdp10_regparm, PDP10_DEFAULT_REGPARM);
+	  exit (1);
+	}
+
     }
 
   pdp10_set_reg_alloc_order ();
@@ -804,6 +811,13 @@ pdp10_override_options ()
 	{
 	  fprintf (stderr, "Bad value for -mreturn-regs: %d\n",
 		   pdp10_retregs);
+	  exit (1);
+	}
+      if (pdp10_retregs != PDP10_DEFAULT_REGPARM)
+	{
+	  fprintf (stderr,
+		   "Unsupported noncanonical PDP-10 C ABI: -mreturn-regs=%d (must be %d)\n",
+		   pdp10_retregs, PDP10_DEFAULT_REGPARM);
 	  exit (1);
 	}
     }
@@ -821,6 +835,14 @@ pdp10_override_options ()
 	{
 	  fprintf (stderr, "-mcall-clobbered=%d clash with -mreturn-regs=%d\n",
 		   n, pdp10_retregs);
+	  exit (1);
+	}
+
+      if (n != PDP10_DEFAULT_CALL_CLOBBERED)
+	{
+	  fprintf (stderr,
+		   "Unsupported noncanonical PDP-10 C ABI: -mcall-clobbered=%d (must be %d)\n",
+		   n, PDP10_DEFAULT_CALL_CLOBBERED);
 	  exit (1);
 	}
 
