@@ -2381,13 +2381,13 @@
 ;; temporary register for sign-bit flipping and CAML.
 (define_insn ""
   [(set (match_operand:SI 0 "register_operand" "=r")
-	(gt:SI (xor:SI (match_operand:SI 1 "register_operand" "r")
+	(gt:SI (xor:SI (match_operand:SI 1 "register_operand" "rm")
 		       (const_int SIGNBIT))
 	       (xor:SI (plus:SI (match_operand:SI 2 "register_operand" "0")
-				(match_operand:SI 3 "reg_or_mem_operand" "1"))
+				(match_dup 1))
 		       (const_int SIGNBIT))))]
   ""
-  "jfcl 17,.+1\;add %0,%3\;jcry0 .+2\;%_tdza %0,%0\;movei %0,1")
+  "jfcl 17,.+1\;add %0,%1\;jcry0 .+2\;%_tdza %0,%0\;movei %0,1")
 
 (define_insn ""
   [(set (match_operand:SI 0 "register_operand" "=r")

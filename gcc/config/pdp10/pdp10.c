@@ -10105,6 +10105,8 @@ pdp10_output_movsi (insn, which_alternative)
           && MEM_EXPR (src) != 0
           && TREE_CODE (MEM_EXPR (src)) == COMPONENT_REF
           && TREE_CODE (TREE_TYPE (MEM_EXPR (src))) == ARRAY_TYPE
+          && TREE_CODE (TREE_TYPE (TREE_TYPE (MEM_EXPR (src)))) == INTEGER_TYPE
+          && TYPE_PRECISION (TREE_TYPE (TREE_TYPE (MEM_EXPR (src)))) == 9
           && MEM_OFFSET (src) != 0
           && GET_CODE (MEM_OFFSET (src)) == CONST_INT
           && INTVAL (MEM_OFFSET (src)) >= 0)
