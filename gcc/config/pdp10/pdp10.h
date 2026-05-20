@@ -153,7 +153,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 %{mregparm=6:-D__REGPARM__=6} \
 %{mregparm=7:-D__REGPARM__=7} \
 %{!mregparm*:-D__REGPARM__=4} \
-%{mlong-long-72bit:-D__LONG_LONG_72BIT__=1} \
+%{mlong-long-72bit:-D__LONG_LONG_71BIT__=1} \
 %{!mlong-long-72bit:-D__LONG_LONG_71BIT__=1} \
 %{mgfloat:-D__PDP10_GFLOAT__=1} \
 "
@@ -242,7 +242,7 @@ extern int target_model;
 #define CPU_STRING	0x00004000	/* String instructions.  */
 #define CPU_71BIT	0x00008000	/* Use 71-bit double-word integers.  */
 #define OPT_LONG_LONG_71BIT 0x00100000	/* User selected 71-bit long long. */
-#define OPT_LONG_LONG_72BIT 0x00200000	/* User selected raw 72-bit long long. */
+#define OPT_LONG_LONG_72BIT 0x00200000	/* User requested obsolete 72-bit long long. */
 #define OPT_GFLOAT	0x00400000	/* User explicitly selected G-float. */
 #define OPT_PDP6_FLOAT	0x00800000	/* Placeholder: user requested PDP-6 FP. */
 #define OPT_KA10_FLOAT	0x01000000	/* Placeholder: user requested KA10 FP. */
@@ -318,7 +318,7 @@ extern int target_model;
   { "string",	    CPU_STRING,	    "Use string instructions"		}, \
   { "no-string",   -CPU_STRING,	    "Don't use string instructions"	}, \
   { "long-long-71bit", CPU_71BIT | OPT_LONG_LONG_71BIT, "Use 71-bit long long" }, \
-  { "long-long-72bit", OPT_LONG_LONG_72BIT, "Use raw 72-bit long long" }, \
+  { "long-long-72bit", OPT_LONG_LONG_72BIT, "Deprecated: long long is always 71-bit" }, \
   { "tab",	    ASM_TAB,        "Tab between opcode and operands"	}, \
   { "upper",	    ASM_UPPER,	    "Upper-case opcodes"		}, \
   { "indent-skipped", ASM_INDENT_SKIPPED, "Indent skipped instructions"	}, \
@@ -655,7 +655,7 @@ extern char *pdp10_char_bytesize_arg;
    the target machine.  If you don't define this, the default is two
    words.  If you want to support GNU Ada on your machine, the value
    of this macro must be at least 64.  */
-#define LONG_LONG_TYPE_SIZE 72
+#define LONG_LONG_TYPE_SIZE 71
 
 /* A C expression for the size in bits of the type @code{char} on the
    target machine.  If you don't define this, the default is
