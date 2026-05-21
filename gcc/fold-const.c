@@ -207,6 +207,15 @@ force_fit_type (t, overflow)
   else
     prec = TYPE_PRECISION (TREE_TYPE (t));
 
+  /* PDP-10: Truncate long long to 71 bits.  (Perhaps the correct
+     solution is to set LONG_LONG_TYPE_SIZE in pdp10.h to 71?)  */
+  if (TARGET_71BIT
+      && ((TYPE_MAIN_VARIANT (TREE_TYPE (t))
+	   == long_long_integer_type_node)
+	  || (TYPE_MAIN_VARIANT (TREE_TYPE (t))
+	      == long_long_unsigned_type_node)))
+    prec = 71;
+
   /* First clear all bits that are beyond the type's precision.  */
 
   if (prec == 2 * HOST_BITS_PER_WIDE_INT)

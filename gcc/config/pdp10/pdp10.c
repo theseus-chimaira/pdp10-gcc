@@ -697,17 +697,23 @@ pdp10_override_options ()
     target_flags |= CPU_GFLOAT;
 
   /*
-   * DAIMON uses the PDP-10/KCC 71-bit doubleword integer model for
-   * ordinary long long.  Keep DImode as the two-word storage mode, but
-   * expose only 71 value bits to the language and arithmetic expanders.
+   * DAIMON defaults ordinary long long to the PDP-10 hardware-style
+   * 71-bit doubleword integer model.  Raw two-word 72-bit arithmetic
+   * remains available only when explicitly requested with
+   * -mlong-long-72bit.
    *
-   * Accept the historical -mlong-long-72bit spelling so old build scripts
-   * do not fail, but do not let it create a second, incompatible C ABI.
+   * If both command-line forms appear, make the explicit raw 72-bit
+   * request win.  This mirrors the CPP spec, which defines
+   * __LONG_LONG_72BIT__ whenever -mlong-long-72bit is present and
+   * otherwise defines __LONG_LONG_71BIT__.
    */
   if (target_flags & OPT_LONG_LONG_72BIT)
-    warning ("-mlong-long-72bit is obsolete; using 71-bit long long");
-  target_flags |= CPU_71BIT;
-  target_flags &= ~OPT_LONG_LONG_72BIT;
+    {
+      target_flags &= ~CPU_71BIT;
+      target_flags &= ~OPT_LONG_LONG_71BIT;
+    }
+  else
+    target_flags |= CPU_71BIT;
 
   if (pdp10_model)
     {
@@ -3901,9 +3907,11 @@ static void
 no_long_long_callback (pfile)
      cpp_reader *pfile ATTRIBUTE_UNUSED;
 {
-  target_flags |= CPU_71BIT;
-  target_flags &= ~OPT_LONG_LONG_72BIT;
-  warning ("#pragma no_long_long is obsolete; long long remains 71-bit");
+  target_flags &= ~CPU_71BIT;
+  target_flags &= ~OPT_LONG_LONG_71BIT;
+  target_flags |= OPT_LONG_LONG_72BIT;
+  warning ("#pragma no_long_long doesn't work properly.  "
+	   "Use -mlong-long-72bit instead.");
 }
 
 static void
