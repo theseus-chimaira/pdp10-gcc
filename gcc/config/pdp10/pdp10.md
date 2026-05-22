@@ -2066,6 +2066,23 @@
   ""
   "setzb %1,%0")
 
+;; Explicit 36/71-bit conversions for the normalized PDP-10
+;; doubleword representation.  The low word contributes 35 independent
+;; bits; its sign position duplicates bit 0 of the high word.
+(define_insn "extendsidi2"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+        (sign_extend:DI (match_operand:SI 1 "register_operand" "r")))]
+  "TARGET_71BIT"
+  "move %Z0,%1\;move %0,%1\;ash %0,-43"
+  [(set_attr "length" "3")])
+
+(define_insn "zero_extendsidi2"
+  [(set (match_operand:DI 0 "register_operand" "=r")
+        (zero_extend:DI (match_operand:SI 1 "register_operand" "r")))]
+  "TARGET_71BIT"
+  "move %Z0,%1\;move %0,%1\;lsh %0,-43\;tlz %Z0,400000"
+  [(set_attr "length" "4")])
+
 (define_expand "movdi"
   [(set (match_operand:DI 0 "nonimmediate_operand" "")
         (match_operand:DI 1 "general_operand" ""))]
