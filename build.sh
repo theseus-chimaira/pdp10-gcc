@@ -91,9 +91,10 @@ modes:
   --no-regen   skip autotools regeneration and build only
 
 environment:
+  PDP10_PREFIX           required PDP-10 tool/install root
   PDP10_GCC_TARGET       target triplet, default pdp10-dec-none
-  PREFIX                 install prefix, default /usr/local (/usr/cross on OpenBSD)
-  PDP10_GCC_AS           assembler path
+  PREFIX                 install prefix override, default $PDP10_PREFIX
+  PDP10_GCC_AS           assembler override, default $PDP10_PREFIX/bin/$PDP10_GCC_TARGET-as
   CC                     host C compiler, default cc
   PDP10_GCC_BUILD_ALIAS  configure --build value
   PDP10_GCC_HOST_ALIAS   configure --host value
@@ -271,30 +272,26 @@ UNAME_S="$(uname -s 2>/dev/null || echo unknown)"
 UNAME_M="$(uname -m 2>/dev/null || echo unknown)"
 UNAME_R="$(uname -r 2>/dev/null || echo unknown)"
 
-: "${PREFIX:=}"
+if [ -z "${PDP10_PREFIX:-}" ]; then
+	echo "error: PDP10_PREFIX must be set" >&2
+	exit 2
+fi
+
+: "${PREFIX:=$PDP10_PREFIX}"
 IS_ANDROID=no
 if [ -d /system ] || [ "$(uname -o 2>/dev/null || true)" = Android ]; then
 	IS_ANDROID=yes
 fi
 
-if [ -z "$PREFIX" ]; then
-	if [ "$IS_ANDROID" = yes ]; then
-		PREFIX="$HOME/cross"
-	elif [ "$UNAME_S" = OpenBSD ]; then
-		PREFIX=/usr/cross
-	else
-		PREFIX=/usr/local
-	fi
-fi
-
-AS="${PDP10_GCC_AS:-$PREFIX/bin/$TARGET-as}"
+AS="${PDP10_GCC_AS:-$PDP10_PREFIX/bin/$TARGET-as}"
 ASDIR=`dirname "$AS"`
 # Keep freshly installed target binutils visible to the old GCC makefiles.
 # They invoke tools such as pdp10-dec-none-ar by name when building libgcc.
-# Also include the assembler directory, since PREFIX may be a new install
-# directory while the bootstrap tools are still in an extracted cross tree.
-PATH="$ASDIR:$PREFIX/bin:$PATH"
+# Also include the assembler directory, since PREFIX may be overridden while
+# the bootstrap tools remain under PDP10_PREFIX.
+PATH="$ASDIR:$PDP10_PREFIX/bin:$PREFIX/bin:$PATH"
 export PATH
+export PDP10_PREFIX
 DOAS="${DOAS:-doas}"
 SUDO="${SUDO:-sudo -n}"
 INSTALL_PRIV="${PDP10_GCC_INSTALL_PRIV:-auto}"
@@ -360,7 +357,7 @@ fi
 
 if [ ! -x "$AS" ]; then
 	echo "error: target assembler is not executable: $AS" >&2
-	echo "       set PDP10_GCC_AS=/path/to/$TARGET-as or PREFIX=/path/to/prefix" >&2
+	echo "       set PDP10_PREFIX=/path/to/prefix or PDP10_GCC_AS=/path/to/$TARGET-as" >&2
 	exit 1
 fi
 
