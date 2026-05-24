@@ -9,6 +9,7 @@
 #
 # objext
 # LIB1ASMFUNCS
+# LIB1ASM_CFLAGS
 # LIB2FUNCS_1
 # LIB2FUNCS_2
 # LIB2FUNCS_ST
@@ -49,6 +50,7 @@ fi
 # Build lines.
 
 gcc_compile='$(GCC_FOR_TARGET) $(LIBGCC2_CFLAGS) $(INCLUDES)'
+libgcc1_compile="$gcc_compile $LIB1ASM_CFLAGS"
 make_compile='$(MAKE) GCC_FOR_TARGET="$(GCC_FOR_TARGET)" \
 	  AR_FOR_TARGET="$(AR_FOR_TARGET)" \
 	  AR_CREATE_FOR_TARGET="$(AR_CREATE_FOR_TARGET)" \
@@ -78,7 +80,7 @@ for name in $LIB1ASMFUNCS; do
     out="libgcc/${dir}/${name}${objext}"
 
     echo ${out}: stmp-dirs '$(srcdir)/config/$(LIB1ASMSRC)'
-    echo "	$gcc_compile" $flags -DL$name -xassembler-with-cpp \
+    echo "	$libgcc1_compile" $flags -DL$name -xassembler-with-cpp \
 	  -c '$(srcdir)/config/$(LIB1ASMSRC)' -o $out
 
     # Remove any objects from LIB2FUNCS and LIB2_DIVMOD_FUNCS that are
