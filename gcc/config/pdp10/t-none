@@ -13,7 +13,7 @@ LIBGCC2_DEBUG_CFLAGS = -g0
 # and assembler FP opcode support which are deliberately deferred.
 LIB2FUNCS_EXCLUDE = _floatdidf _floatdisf _fixunsdfsi _fixunssfsi \
   _fixunsdfdi _fixdfdi _fixunssfdi _fixsfdi _fixxfdi _fixunsxfdi \
-  _floatdixf _fixunsxfsi _fixtfdi _fixunstfdi _floatditf __main \
+  _floatdixf _fixunsxfsi _fixtfdi _fixunstfdi _floatditf __main _trampoline \
   _divdi3 _moddi3 _udivdi3 _umoddi3 _udivmoddi4 _udivsi3 _umodsi3
 
 
