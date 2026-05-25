@@ -11,7 +11,7 @@ LIBGCC2_DEBUG_CFLAGS = -g0
 # Early DAIMOS baseline has no floating-point runtime yet.  Do not build
 # libgcc2 floating conversion helpers; they would require target FP codegen
 # and assembler FP opcode support which are deliberately deferred.
-LIB2FUNCS_EXCLUDE = _floatdidf _floatdisf _fixunsdfsi _fixunssfsi \
+LIB2FUNCS_EXCLUDE = _floatdidf _floatdisf _fixunsdfsi _fixunssfsi _exit \
   _fixunsdfdi _fixdfdi _fixunssfdi _fixsfdi _fixxfdi _fixunsxfdi \
   _floatdixf _fixunsxfsi _fixtfdi _fixunstfdi _floatditf __main _trampoline \
   _divdi3 _moddi3 _udivdi3 _umoddi3 _udivmoddi4 _udivsi3 _umodsi3
@@ -30,6 +30,10 @@ LIB2FUNCS_EXCLUDE = _floatdidf _floatdisf _fixunsdfsi _fixunssfsi \
 
 # libgcc2.c __main assumes hosted EH/ctor frame registration.  The bare
 # PDP-10 runtime supplies a no-op __main in libgcc1.s instead.
+
+# libgcc2.c emits L_exit only when NEED_ATEXIT is defined.  The freestanding
+# PDP-10 target does not define it, so requesting _exit produces an empty
+# assembly file, which DAS correctly refuses as an empty image.
 
 # Build the merged PDP-10 assembly runtime through GCC's libgcc1
 # mechanism so libgcc1.s is preprocessed and only the selected
