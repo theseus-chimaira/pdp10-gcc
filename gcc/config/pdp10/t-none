@@ -46,6 +46,7 @@ LIB1ASMFUNCS = pdp10_bare_runtime
 # DAS does not recognize GNU assembler-style CPP line markers.
 # Suppress them only for preprocessed libgcc assembly sources.
 LIB1ASM_CFLAGS = -Wp,-P
+LIB2ASM_CFLAGS = -Wp,-P
 
 # Provide a real public abort symbol for freestanding pdp10-dec-none users.
 LIB2FUNCS_EXTRA = $(srcdir)/config/pdp10/abort.asm

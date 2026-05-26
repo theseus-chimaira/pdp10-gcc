@@ -10,6 +10,7 @@
 # objext
 # LIB1ASMFUNCS
 # LIB1ASM_CFLAGS
+# LIB2ASM_CFLAGS
 # LIB2FUNCS_1
 # LIB2FUNCS_2
 # LIB2FUNCS_ST
@@ -199,7 +200,7 @@ for file in $LIB2ADD; do
     flags=`echo ${ml} | sed -e 's/^[^;]*;//' -e 's/@/ -/g'`;
     out="libgcc/${dir}/${oname}${objext}"
     if [ ${name}.asm = ${file} ]; then
-      flags="$flags -xassembler-with-cpp"
+      flags="$flags $LIB2ASM_CFLAGS -xassembler-with-cpp"
     fi
 
     echo $out: stmp-dirs $file
@@ -217,7 +218,7 @@ for file in $LIB2ADDEH; do
     flags=`echo ${ml} | sed -e 's/^[^;]*;//' -e 's/@/ -/g'`;
     out="libgcc/${dir}/${oname}${objext}"
     if [ ${name}.asm = ${file} ]; then
-      flags="$flags -xassembler-with-cpp"
+      flags="$flags $LIB2ASM_CFLAGS -xassembler-with-cpp"
     fi
 
     echo $out: stmp-dirs $file
@@ -239,7 +240,7 @@ for file in $LIB2ADD_ST; do
     flags=`echo ${ml} | sed -e 's/^[^;]*;//' -e 's/@/ -/g'`;
     out="libgcc/${dir}/${oname}${objext}"
     if [ ${name}.asm = ${file} ]; then
-      flags="$flags -xassembler-with-cpp"
+      flags="$flags $LIB2ASM_CFLAGS -xassembler-with-cpp"
     fi
 
     echo $out: stmp-dirs $file
