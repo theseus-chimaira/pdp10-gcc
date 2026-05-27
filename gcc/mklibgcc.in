@@ -117,6 +117,9 @@ for name in $LIB2FUNCS_EXCLUDE; do
   LIB2FUNCS_2=`echo $LIB2FUNCS_2 | sed -e 's/^'$name' //' \
                                    -e 's/ '$name' / /' \
                                    -e 's/ '$name'$//'`
+  LIB2FUNCS_ST=`echo $LIB2FUNCS_ST | sed -e 's/^'$name' //' \
+                                    -e 's/ '$name' / /' \
+                                    -e 's/ '$name'$//'`
   LIB2_DIVMOD_FUNCS=`echo $LIB2_DIVMOD_FUNCS | sed -e 's/^'$name' //' \
                                              -e 's/ '$name' / /' \
                                              -e 's/ '$name'$//'`

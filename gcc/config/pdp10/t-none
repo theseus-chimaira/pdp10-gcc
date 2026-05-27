@@ -11,10 +11,13 @@ LIBGCC2_DEBUG_CFLAGS = -g0
 # Early DAIMOS baseline has no floating-point runtime yet.  Do not build
 # libgcc2 floating conversion helpers; they would require target FP codegen
 # and assembler FP opcode support which are deliberately deferred.
-LIB2FUNCS_EXCLUDE = _floatdidf _floatdisf _fixunsdfsi _fixunssfsi _exit \
+LIB2FUNCS_EXCLUDE = _floatdidf _floatdisf _fixunsdfsi _fixunssfsi _exit _eprintf \
   _fixunsdfdi _fixdfdi _fixunssfdi _fixsfdi _fixxfdi _fixunsxfdi \
   _floatdixf _fixunsxfsi _fixtfdi _fixunstfdi _floatditf __main _trampoline \
   _divdi3 _moddi3 _udivdi3 _umoddi3 _udivmoddi4 _udivsi3 _umodsi3
+
+# __eprintf is guarded by !inhibit_libc in libgcc2.c, so it emits an
+# intentionally empty translation unit for this freestanding target.
 
 
 # The DImode division/modulo helpers are supplied by libgcc1.s.
