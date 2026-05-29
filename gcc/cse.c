@@ -3699,6 +3699,18 @@ fold_rtx (x, insn)
 	      }
 	  }
 
+	/* PDP-10: a nonzero MEM_OFFSET on a QImode MEM carries byte-field
+	   identity that is not encoded in the containing-word address.  Folding
+	   such a MEM into ZERO_EXTRACT from the address alone loses the field
+	   position (notably for packed struct stores).  Leave it intact so the
+	   target output path can use MEM_OFFSET/MEM_EXPR.  */
+	if (GET_CODE (x) == MEM
+	    && GET_MODE (x) == QImode
+	    && MEM_OFFSET (x) != 0
+	    && GET_CODE (MEM_OFFSET (x)) == CONST_INT
+	    && INTVAL (MEM_OFFSET (x)) != 0)
+	  return x;
+
 	/* PDP-10: fold (mem:QI (const:SI <constant byte pointer>)) into
 	   (zero_extract:SI (mem:SI ...)).  */
 	if (base && CONSTANT_ADDRESS_P (base)

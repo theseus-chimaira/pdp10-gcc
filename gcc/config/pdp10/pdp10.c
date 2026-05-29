@@ -7630,6 +7630,28 @@ pdp10_output_store_byte (insn, operands)
 	{
 	  pos = p;
 	  size = s;
+
+	  /* A packed QImode COMPONENT_REF can retain its exact C field
+	     position only in MEM_EXPR/MEM_OFFSET even though its constant
+	     address is the containing word's canonical byte pointer.  Prefer
+	     that semantic position over the encoded pointer when available. */
+	  if (GET_MODE (operands[0]) == QImode
+	      && MEM_EXPR (operands[0]) != 0
+	      && MEM_OFFSET (operands[0]) != 0
+	      && GET_CODE (MEM_OFFSET (operands[0])) == CONST_INT
+	      && INTVAL (MEM_OFFSET (operands[0])) != 0)
+	    {
+	      pdp10_word36 bitpos;
+
+	      if (pdp10_output_qi_tree_bitpos (MEM_EXPR (operands[0]),
+	                                       &bitpos))
+		{
+		  pos = (int) (bitpos % BITS_PER_WORD);
+		  if (pos < 0)
+		    pos += BITS_PER_WORD;
+		  size = BITS_PER_UNIT;
+		}
+	    }
 	}
       else
 	{
