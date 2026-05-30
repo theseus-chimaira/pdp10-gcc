@@ -9015,19 +9015,6 @@ pdp10_output_lshiftrt_memory (insn, operands)
     }
 
   if (GET_CODE (mem) == MEM
-      && INTVAL (operands[2]) == 27
-      && MEM_EXPR (mem) == 0
-      && GET_CODE (XEXP (mem, 0)) == PLUS
-      && REG_P (XEXP (XEXP (mem, 0), 0))
-      && GET_CODE (XEXP (XEXP (mem, 0), 1)) == CONST_INT)
-    {
-      ops[1] = XEXP (XEXP (mem, 0), 0);
-      ops[2] = XEXP (XEXP (mem, 0), 1);
-      output_asm_insn ("ldb %0,[POINT 9,%2(%1),8]", ops);
-      return "";
-    }
-
-  if (GET_CODE (mem) == MEM
       && INTVAL (operands[2]) == 27)
     {
       HOST_WIDE_INT byteoff;
@@ -9086,8 +9073,16 @@ pdp10_output_lshiftrt_memory (insn, operands)
         }
     }
 
+  /* Packed exact-width fields can be lowered before final output into
+     word-mode MEMs whose address is still expressed in 9-bit storage
+     units.  Their MEM_EXPR has been lost and MEM_ALIGN may have risen to
+     word alignment, but MEM_IN_STRUCT_P still records that the access came
+     from an aggregate.  Convert those offsets just like explicit A9 MEMs;
+     otherwise offsets such as 15 and 16 are printed as PDP-10 word offsets
+     instead of word 3/bit 27 and word 4/bit 0.  */
   if (GET_CODE (mem) == MEM
-      && MEM_ALIGN (mem) == BITS_PER_UNIT
+      && (MEM_ALIGN (mem) == BITS_PER_UNIT
+          || (MEM_IN_STRUCT_P (mem) && MEM_EXPR (mem) == 0))
       && GET_CODE (XEXP (mem, 0)) == PLUS
       && GET_CODE (XEXP (XEXP (mem, 0), 1)) == CONST_INT)
     {
@@ -10122,6 +10117,60 @@ pdp10_output_movsi (insn, which_alternative)
       rtx addr = XEXP (src, 0);
       HOST_WIDE_INT byteoff;
       int unsignedp;
+
+      /* At -O0 an exact-width packed field that crosses a word boundary can
+         remain as a word load followed by a logical shift.  GCC has already
+         discarded MEM_EXPR, but the PLUS constant is still a 9-bit storage
+         offset rather than a PDP-10 word offset.  Recognize only this narrow
+         lowered shape: an in-struct anonymous MEM whose loaded register is
+         immediately shifted right by at least one target byte.  */
+      if (MEM_IN_STRUCT_P (src)
+          && MEM_EXPR (src) == 0
+          && GET_CODE (addr) == PLUS
+          && REG_P (XEXP (addr, 0))
+          && GET_CODE (XEXP (addr, 1)) == CONST_INT)
+        {
+          rtx next = next_nonnote_insn (insn);
+
+          if (next != 0
+              && GET_CODE (PATTERN (next)) == SET
+              && REG_P (SET_DEST (PATTERN (next)))
+              && GET_CODE (SET_SRC (PATTERN (next))) == LSHIFTRT
+              && REG_P (XEXP (SET_SRC (PATTERN (next)), 0))
+              && SAME_REG (XEXP (SET_SRC (PATTERN (next)), 0), dst)
+              && GET_CODE (XEXP (SET_SRC (PATTERN (next)), 1)) == NEG
+              && GET_CODE (XEXP (XEXP (SET_SRC (PATTERN (next)), 1), 0))
+                 == CONST_INT
+              && -INTVAL (XEXP (XEXP (SET_SRC (PATTERN (next)), 1), 0))
+                 >= BITS_PER_UNIT)
+            {
+              HOST_WIDE_INT off = INTVAL (XEXP (addr, 1));
+              HOST_WIDE_INT wordoff = off / UNITS_PER_WORD;
+              HOST_WIDE_INT byteoff = off % UNITS_PER_WORD;
+              rtx adjmem = copy_rtx (src);
+              rtx mops[2];
+
+              if (byteoff < 0)
+                {
+                  wordoff -= 1;
+                  byteoff += UNITS_PER_WORD;
+                }
+              XEXP (adjmem, 0) = pdp10_output_add_address_offset
+                (XEXP (addr, 0), wordoff);
+              mops[0] = dst;
+              mops[1] = adjmem;
+              output_asm_insn ("move %0,%W1", mops);
+              if (byteoff != 0)
+                {
+                  char sbuf[32];
+
+                  sprintf (sbuf, "lsh %%0,%o",
+                           (unsigned int) byteoff * BITS_PER_UNIT);
+                  output_asm_insn (sbuf, mops);
+                }
+              return "";
+            }
+        }
 
       if (pdp10_frame_address_p (addr)
           && MEM_EXPR (src) != 0
