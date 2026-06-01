@@ -8949,6 +8949,116 @@ pdp10_output_ashiftrt_memory (insn, operands)
   return "move %0,%1\n\tash %0,-33";
 }
 
+/* Return nonzero when MEM is one of the 9-bit storage-unit fragments
+   produced by GCC for a packed 36-bit scalar field in a static aggregate.
+   The generic expander numbers those fragments in C storage units, while the
+   PDP-10 object is a continuous bit stream.  Return the true field bit
+   position and the logical 9-bit fragment number.  */
+static int
+pdp10_static_packed_si_fragment (mem, bitposp, fragp, basep)
+     rtx mem;
+     HOST_WIDE_INT *bitposp;
+     int *fragp;
+     rtx *basep;
+{
+  tree object;
+  tree type;
+  tree field;
+  rtx base;
+  HOST_WIDE_INT off;
+
+  if (GET_CODE (mem) != MEM || MEM_EXPR (mem) == 0)
+    return 0;
+  object = MEM_EXPR (mem);
+  if (TREE_CODE (object) != VAR_DECL)
+    return 0;
+  type = TREE_TYPE (object);
+  if (type == 0
+      || (TREE_CODE (type) != RECORD_TYPE && TREE_CODE (type) != UNION_TYPE))
+    return 0;
+  if (!pdp10_decompose_symbolic_constant (XEXP (mem, 0), &base, &off)
+      || base == NULL_RTX)
+    return 0;
+
+  for (field = TYPE_FIELDS (type); field != 0; field = TREE_CHAIN (field))
+    {
+      HOST_WIDE_INT bitpos;
+      HOST_WIDE_INT first_unit;
+      HOST_WIDE_INT frag;
+
+      if (TREE_CODE (field) != FIELD_DECL
+          || !DECL_PACKED (field)
+          || int_size_in_bytes (TREE_TYPE (field)) != 4)
+        continue;
+      bitpos = int_bit_position (field);
+      if ((bitpos % BITS_PER_WORD) == 0)
+        continue;
+      first_unit = (bitpos + BITS_PER_UNIT - 1) / BITS_PER_UNIT;
+      frag = off - first_unit;
+      if (frag < 0 || frag >= 4)
+        continue;
+
+      if (bitposp)
+        *bitposp = bitpos;
+      if (fragp)
+        *fragp = (int) frag;
+      if (basep)
+        *basep = base;
+      return 1;
+    }
+  return 0;
+}
+
+/* Load one logical 9-bit fragment from a packed 36-bit field beginning at
+   BITPOS in the static object BASE.  The result is right-justified in DEST.
+   A fragment can straddle a PDP-10 word boundary.  */
+static void
+pdp10_output_static_packed_si_fragment (insn, dest, base, bitpos, frag)
+     rtx insn;
+     rtx dest;
+     rtx base;
+     HOST_WIDE_INT bitpos;
+     int frag;
+{
+  HOST_WIDE_INT start;
+  HOST_WIDE_INT wordoff;
+  int pos;
+  int first;
+  rtx mem;
+
+  start = bitpos + (HOST_WIDE_INT) frag * BITS_PER_UNIT;
+  wordoff = start / BITS_PER_WORD;
+  pos = (int) (start % BITS_PER_WORD);
+  if (pos < 0)
+    {
+      pos += BITS_PER_WORD;
+      wordoff -= 1;
+    }
+  mem = gen_rtx_MEM (SImode, pdp10_output_add_address_offset (base, wordoff));
+  first = BITS_PER_WORD - pos;
+  if (first >= BITS_PER_UNIT)
+    output_bitfield_move (asm_out_file, insn, 0, 0, dest, mem,
+                          BITS_PER_UNIT, pos);
+  else
+    {
+      rtx scratch = gen_rtx_REG (SImode, 0);
+      rtx mem2 = gen_rtx_MEM (SImode,
+                              pdp10_output_add_address_offset (base,
+                                                              wordoff + 1));
+      rtx ops[2];
+      char buf[32];
+
+      output_bitfield_move (asm_out_file, insn, 0, 0, dest, mem, first, pos);
+      ops[0] = dest;
+      sprintf (buf, "lsh %%0,%o", BITS_PER_UNIT - first);
+      output_asm_insn (buf, ops);
+      output_bitfield_move (asm_out_file, insn, 0, 0, scratch, mem2,
+                            BITS_PER_UNIT - first, 0);
+      ops[1] = scratch;
+      output_asm_insn ("ior %0,%1", ops);
+    }
+}
+
 const char *
 pdp10_output_lshiftrt_memory (insn, operands)
      rtx insn;
@@ -8967,6 +9077,22 @@ pdp10_output_lshiftrt_memory (insn, operands)
   ops[1] = operands[1];
   ops[2] = GEN_INT (BITS_PER_WORD - INTVAL (operands[2]));
   ops[3] = GEN_INT (0);
+
+  if (GET_CODE (mem) == MEM && INTVAL (operands[2]) == 27)
+    {
+      HOST_WIDE_INT packed_bitpos;
+      int packed_frag;
+      rtx packed_base;
+
+      if (pdp10_static_packed_si_fragment (mem, &packed_bitpos,
+                                           &packed_frag, &packed_base))
+        {
+          pdp10_output_static_packed_si_fragment (insn, operands[0],
+                                                  packed_base, packed_bitpos,
+                                                  packed_frag);
+          return "";
+        }
+    }
 
   if (GET_CODE (mem) == MEM
       && INTVAL (operands[2]) == 27
@@ -10038,72 +10164,60 @@ pdp10_output_movsi (insn, which_alternative)
      rtx insn;
      int which_alternative;
 {
-  /* struct-subword-packed-si-mem-byte-store-v23:
-     A packed SImode component can arrive at final as an ordinary word store,
-     e.g. MOVEM r,packed_rec+2, even though the laid-out C object is a
-     four-byte, 9-bit-unit field.  That full-word MOVEM clobbers adjacent
-     packed fields that share the containing PDP-10 word.  For static object
-     component stores, recover the FIELD_DECL byte offset from MEM_EXPR and
-     store the source word as four explicit 9-bit bytes.  AC0 is fixed as a
-     scratch register by the PDP-10 backend.  */
+  /* Packed SImode fields can reach final output as ordinary word stores even
+     when the field begins in the middle of a PDP-10 word.  Do not use the
+     rounded MEM address as a full-word destination: split the 36-bit value at
+     the FIELD_DECL bit position and preserve the surrounding packed bits.  */
   if (which_alternative == 10
       && GET_CODE (PATTERN (insn)) == SET
       && GET_CODE (SET_DEST (PATTERN (insn))) == MEM
       && GET_MODE (SET_DEST (PATTERN (insn))) == SImode
       && REG_P (SET_SRC (PATTERN (insn)))
-      && MEM_EXPR (SET_DEST (PATTERN (insn))) != 0
-      && MEM_ALIGN (SET_DEST (PATTERN (insn))) < BITS_PER_WORD)
+      && MEM_EXPR (SET_DEST (PATTERN (insn))) != 0)
     {
       rtx dest = SET_DEST (PATTERN (insn));
       rtx src = SET_SRC (PATTERN (insn));
       tree expr = MEM_EXPR (dest);
-      tree object = NULL_TREE;
       tree field = NULL_TREE;
 
       if (TREE_CODE (expr) == COMPONENT_REF)
-        {
-          object = TREE_OPERAND (expr, 0);
-          field = TREE_OPERAND (expr, 1);
-        }
+        field = TREE_OPERAND (expr, 1);
 
-      if (object != NULL_TREE
-          && field != NULL_TREE
-          && TREE_CODE (object) == VAR_DECL
+      if (field != NULL_TREE
           && TREE_CODE (field) == FIELD_DECL
-          && int_size_in_bytes (TREE_TYPE (field)) == 4
-          && DECL_RTL (object) != 0
-          && GET_CODE (DECL_RTL (object)) == MEM)
+          && DECL_PACKED (field)
+          && int_size_in_bytes (TREE_TYPE (field)) == 4)
         {
-          HOST_WIDE_INT byteoff = int_byte_position (field);
-          rtx base = XEXP (DECL_RTL (object), 0);
-          rtx scratch = gen_rtx_REG (SImode, 0);
-          rtx ops[2];
-          rtx mem;
+          HOST_WIDE_INT bitpos = int_bit_position (field) % BITS_PER_WORD;
 
-          ops[0] = scratch;
-          ops[1] = src;
+          if (bitpos < 0)
+            bitpos += BITS_PER_WORD;
 
-          output_asm_insn ("move %0,%1", ops);
-          output_asm_insn ("lsh %0,-33", ops);
-          mem = gen_rtx_MEM (QImode, plus_constant (base, byteoff));
-          output_bitfield_move (asm_out_file, insn, 1, 0, scratch, mem, 9, 0);
+          if (bitpos != 0)
+            {
+              int first = BITS_PER_WORD - (int) bitpos;
+              rtx scratch = gen_rtx_REG (SImode, 0);
+              rtx first_mem = copy_rtx (dest);
+              rtx second_mem = copy_rtx (dest);
+              rtx ops[2];
+              char sbuf[32];
 
-          output_asm_insn ("move %0,%1", ops);
-          output_asm_insn ("lsh %0,-22", ops);
-          mem = gen_rtx_MEM (QImode, plus_constant (base, byteoff + 1));
-          output_bitfield_move (asm_out_file, insn, 1, 0, scratch, mem, 9, 0);
+              ops[0] = scratch;
+              ops[1] = src;
+              output_asm_insn ("move %0,%1", ops);
+              sprintf (sbuf, "lsh %%0,-%o", (unsigned int) bitpos);
+              output_asm_insn (sbuf, ops);
+              output_bitfield_move (asm_out_file, insn, 1, 0, scratch,
+                                    first_mem, first, (int) bitpos);
 
-          output_asm_insn ("move %0,%1", ops);
-          output_asm_insn ("lsh %0,-11", ops);
-          mem = gen_rtx_MEM (QImode, plus_constant (base, byteoff + 2));
-          output_bitfield_move (asm_out_file, insn, 1, 0, scratch, mem, 9, 0);
-
-          mem = gen_rtx_MEM (QImode, plus_constant (base, byteoff + 3));
-          output_bitfield_move (asm_out_file, insn, 1, 0, src, mem, 9, 0);
-
-          return "";
+              XEXP (second_mem, 0) = plus_constant (XEXP (dest, 0), 1);
+              output_bitfield_move (asm_out_file, insn, 1, 0, src,
+                                    second_mem, (int) bitpos, 0);
+              return "";
+            }
         }
     }
+
 
 
   if (which_alternative == 0
@@ -10117,6 +10231,44 @@ pdp10_output_movsi (insn, which_alternative)
       rtx addr = XEXP (src, 0);
       HOST_WIDE_INT byteoff;
       int unsignedp;
+      HOST_WIDE_INT packed_bitpos;
+      int packed_frag;
+      rtx packed_base;
+
+      if (pdp10_static_packed_si_fragment (src, &packed_bitpos,
+                                           &packed_frag, &packed_base))
+        {
+          rtx mops[1];
+
+          pdp10_output_static_packed_si_fragment (insn, dst, packed_base,
+                                                  packed_bitpos, packed_frag);
+          {
+            rtx next = next_nonnote_insn (insn);
+            int need_left = packed_frag == 0;
+
+            if (next != 0
+                && GET_CODE (PATTERN (next)) == SET
+                && REG_P (SET_DEST (PATTERN (next)))
+                && SAME_REG (SET_DEST (PATTERN (next)), dst)
+                && GET_CODE (SET_SRC (PATTERN (next))) == LSHIFTRT
+                && REG_P (XEXP (SET_SRC (PATTERN (next)), 0))
+                && SAME_REG (XEXP (SET_SRC (PATTERN (next)), 0), dst)
+                && ((GET_CODE (XEXP (SET_SRC (PATTERN (next)), 1)) == CONST_INT
+                     && INTVAL (XEXP (SET_SRC (PATTERN (next)), 1)) == 27)
+                    || (GET_CODE (XEXP (SET_SRC (PATTERN (next)), 1)) == NEG
+                        && GET_CODE (XEXP (XEXP (SET_SRC (PATTERN (next)), 1),
+                                           0)) == CONST_INT
+                        && INTVAL (XEXP (XEXP (SET_SRC (PATTERN (next)), 1),
+                                           0)) == -27)))
+              need_left = 1;
+            if (need_left)
+              {
+                mops[0] = dst;
+                output_asm_insn ("lsh %0,33", mops);
+              }
+          }
+          return "";
+        }
 
       /* At -O0 an exact-width packed field that crosses a word boundary can
          remain as a word load followed by a logical shift.  GCC has already
