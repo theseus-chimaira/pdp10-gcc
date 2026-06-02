@@ -60,6 +60,14 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #define ASM_OUTPUT_SKIP(STREAM, NBYTES) \
    pdp10_asm_output_skip ((STREAM), (NBYTES))
 
+#undef ASM_OUTPUT_LOCAL
+#define ASM_OUTPUT_LOCAL(STREAM, NAME, SIZE, ROUNDED) \
+  do { \
+    bss_section (); \
+    ASM_OUTPUT_LABEL ((STREAM), (NAME)); \
+    pdp10_asm_output_skip ((STREAM), (ROUNDED)); \
+  } while (0)
+
 /*
  * The generic GAS string emitter assumes ordinary byte-addressed
  * storage.  PDP-10 strings need target-specific packing.  For the

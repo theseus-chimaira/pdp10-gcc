@@ -6296,7 +6296,9 @@ pdp10_asm_output_skip (stream, nbytes)
     {
       int bytes = nbytes - (nbytes % UNITS_PER_WORD);
 
-      fprintf (stream, "\t.space\t%d\n", bytes);
+      /* DAS reserves PDP-10 words, while GCC passes this hook a count
+         of 9-bit target bytes.  Convert explicitly and emit octal words.  */
+      fprintf (stream, "\tBLOCK\t%o\n", bytes / UNITS_PER_WORD);
       nbytes -= bytes;
     }
 
