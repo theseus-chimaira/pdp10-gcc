@@ -580,6 +580,11 @@ extern char *pdp10_char_bytesize_arg;
 #define DATA_ALIGNMENT(TYPE, ALIGN) \
   pdp10_data_alignment ((ALIGN), (TYPE))
 
+#define ADJUST_FIELD_ALIGN(FIELD, ALIGN) \
+  pdp10_adjust_field_align ((FIELD), (ALIGN))
+
+#define PDP10_PRESERVE_PACKED_ARRAY_DECAY 1
+
 #define DATA_PADDING(DECL, X) \
   pdp10_data_padding (DECL, X)
 
@@ -1981,8 +1986,8 @@ do {								\
 #ifndef REGISTER_NAMES
 #define REGISTER_NAMES					\
 {							\
-   "0",  "1",  "2",  "3",  "4",  "5",  "6",  "7",	\
-  "10", "11", "12", "13", "14", "15", "16", "17",	\
+   "0",   "1",   "2",   "3",   "4",   "5",   "6",   "7",	\
+  "010", "011", "012", "013", "014", "015", "016", "017",	\
   "<fp>", "<ap>"					\
 }
 #endif

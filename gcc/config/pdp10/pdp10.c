@@ -932,6 +932,19 @@ pdp10_align_stack_pointer (x, align)
    ordinarily have.  The return value of this function is used instead
    of that alignment to align the object.  */
 int
+pdp10_adjust_field_align (field, align)
+     tree field;
+     int align;
+{
+  if (field != NULL_TREE && TREE_CODE (field) == FIELD_DECL
+      && DECL_PACKED (field) && !DECL_USER_ALIGN (field)
+      && TREE_TYPE (field) != NULL_TREE
+      && TREE_CODE (TREE_TYPE (field)) == ARRAY_TYPE)
+    return 1;
+  return align;
+}
+
+int
 pdp10_data_alignment (align, type)
      int align;
      tree type ATTRIBUTE_UNUSED;
@@ -7139,7 +7152,7 @@ pdp10_output_load_unsigned_byte (insn, operands)
               ops[1] = scratch;
               ops[2] = addr;
               output_asm_insn ("hrrz %1,%2", ops);
-              sprintf (abuf, "tlo %%1,%o", ps << 6);
+              sprintf (abuf, "tlo %%1,%#o", ps << 6);
               output_asm_insn (abuf, ops);
               output_asm_insn ("ldb %0,%1", ops);
               return "";
@@ -7256,8 +7269,8 @@ pdp10_output_load_signed_byte (insn, operands)
           ops[1] = XEXP (addr, 0);
           sprintf (buf, "ldb %%0,[POINT 9,(%%1),%d]", bitpos + 8);
           output_asm_insn (buf, ops);
-          output_asm_insn ("trne %0,400", ops);
-          output_asm_insn ("orcmi %0,777", ops);
+          output_asm_insn ("trne %0,0400", ops);
+          output_asm_insn ("orcmi %0,0777", ops);
           return "";
         }
 
@@ -7298,11 +7311,11 @@ pdp10_output_load_signed_byte (insn, operands)
               ops[1] = scratch;
               ops[2] = addr;
               output_asm_insn ("hrrz %1,%2", ops);
-              sprintf (abuf, "tlo %%1,%o", ps << 6);
+              sprintf (abuf, "tlo %%1,%#o", ps << 6);
               output_asm_insn (abuf, ops);
               output_asm_insn ("ldb %0,%1", ops);
-              output_asm_insn ("trne %0,400", ops);
-              output_asm_insn ("orcmi %0,777", ops);
+              output_asm_insn ("trne %0,0400", ops);
+              output_asm_insn ("orcmi %0,0777", ops);
               return "";
             }
         }
@@ -7435,7 +7448,7 @@ pdp10_output_store_byte (insn, operands)
                   ops[1] = XEXP (operands[0], 0);
                   ops[2] = operands[1];
                   output_asm_insn ("hrrz %0,%1", ops);
-                  sprintf (abuf, "tlo %%0,%o", ps << 6);
+                  sprintf (abuf, "tlo %%0,%#o", ps << 6);
                   output_asm_insn (abuf, ops);
                   output_asm_insn ("dpb %2,%0", ops);
                   return "";
@@ -7877,6 +7890,134 @@ pdp10_hi_mem_array_field_bitpos (mem, bitposp)
 /* Return or output a single instruction to move a half-word.  Called
    to output a movhi pattern.  SIGN_EXTEND should be 1 if this is a
    sign-extending load.  */
+/* Load/store a 16-bit value through a self-describing packed logical
+   pointer.  S=16 follows the native path.  S=1 carries an exact packed bit
+   address and is expanded as a correctness-first 16-bit bit stream.  */
+static int pdp10_bitptr_labelno;
+
+static const char *
+pdp10_output_maybe_bitptr_hi (operands, sign_extend)
+     rtx *operands;
+     int sign_extend;
+{
+  int store = GET_CODE (operands[0]) == MEM;
+  rtx mem = store ? operands[0] : operands[1];
+  rtx addr;
+  rtx ptrsrc;
+  int ptrsrc_word = 0;
+  rtx reg;
+  int scratchno;
+  rtx scratch;
+  char l_native[64], l_done[64];
+  int n = pdp10_bitptr_labelno++;
+  int i;
+  rtx ops[3];
+
+  if (GET_CODE (mem) != MEM || GET_MODE (mem) != HImode)
+    return NULL;
+  addr = XEXP (mem, 0);
+  if (REG_P (addr))
+    ptrsrc = addr;
+  else if (GET_CODE (addr) == PLUS)
+    {
+      ptrsrc = gen_rtx_MEM (SImode, addr);
+      ptrsrc_word = 1;
+    }
+  else if (GET_CODE (addr) == MEM)
+    {
+      ptrsrc = gen_rtx_MEM (SImode, XEXP (addr, 0));
+      ptrsrc_word = 1;
+    }
+  else
+    return NULL;
+
+  reg = store ? operands[1] : operands[0];
+  if (!REG_P (reg))
+    return NULL;
+
+  scratchno = REGNO (reg) == 0 ? 1 : 0;
+  scratch = gen_rtx_REG (SImode, scratchno);
+  ASM_GENERATE_INTERNAL_LABEL (l_native, "BPN", n);
+  ASM_GENERATE_INTERNAL_LABEL (l_done, "BPD", n);
+
+  ops[0] = scratch;
+  ops[1] = ptrsrc;
+  output_asm_insn ("push 017,%0", ops);
+  if (ptrsrc_word)
+    {
+      output_asm_insn ("push 017,%W1", ops);
+      output_asm_insn ("move %0,%W1", ops);
+    }
+  else
+    {
+      output_asm_insn ("push 017,%1", ops);
+      output_asm_insn ("move %0,%1", ops);
+    }
+  output_asm_insn ("lsh %0,-030", ops);
+  output_asm_insn ("andi %0,077", ops);
+  output_asm_insn ("caie %0,1", ops);
+  fprintf (asm_out_file, "\tJRST\t%s\n", l_native + 1);
+
+  if (!store)
+    {
+      ops[0] = reg;
+      output_asm_insn ("setz %0,", ops);
+      for (i = 0; i < 16; ++i)
+        {
+          output_asm_insn ("lsh %0,1", ops);
+          ops[0] = scratch;
+          output_asm_insn ("ldb %0,0(017)", ops);
+          ops[0] = reg;
+          ops[1] = scratch;
+          output_asm_insn ("ior %0,%1", ops);
+          if (i != 15)
+            output_asm_insn ("ibp 0(017)", ops);
+        }
+      if (sign_extend)
+        {
+          ops[0] = reg;
+          output_asm_insn ("lsh %0,020", ops);
+          output_asm_insn ("ash %0,-020", ops);
+        }
+    }
+  else
+    {
+      for (i = 15; i >= 0; --i)
+        {
+          ops[0] = scratch;
+          ops[1] = reg;
+          output_asm_insn ("move %0,%1", ops);
+          if (i != 0)
+            {
+              ops[2] = GEN_INT (-i);
+              output_asm_insn ("lsh %0,%2", ops);
+            }
+          output_asm_insn ("dpb %0,0(017)", ops);
+          if (i != 0)
+            output_asm_insn ("ibp 0(017)", ops);
+        }
+    }
+
+  ops[0] = scratch;
+  output_asm_insn ("sub 017,[1,,1]", ops);
+  output_asm_insn ("pop 017,%0", ops);
+  fprintf (asm_out_file, "\tJRST\t%s\n", l_done + 1);
+  ASM_OUTPUT_INTERNAL_LABEL (asm_out_file, "BPN", n);
+  ops[0] = scratch;
+  output_asm_insn ("sub 017,[1,,1]", ops);
+  output_asm_insn ("pop 017,%0", ops);
+
+  if (store)
+    output_asm_insn ("dpb %1,%0", operands);
+  else if (sign_extend)
+    output_asm_insn ("extend %0,[ldbe %1]", operands);
+  else
+    output_asm_insn ("ldb %0,%1", operands);
+
+  ASM_OUTPUT_INTERNAL_LABEL (asm_out_file, "BPD", n);
+  return "";
+}
+
 const char *
 pdp10_output_movhi (operands, sign_extend)
      rtx *operands;
@@ -7888,6 +8029,13 @@ pdp10_output_movhi (operands, sign_extend)
 
   if (GET_CODE (x) == MEM)
     address = XEXP (x, 0);
+
+  if (address)
+    {
+      const char *bitmove = pdp10_output_maybe_bitptr_hi (operands, sign_extend);
+      if (bitmove != NULL)
+        return bitmove;
+    }
 
   if (address && GET_CODE (address) == PRE_INC)
     {
@@ -8664,13 +8812,13 @@ output_bitfield_move (stream, insn, store, sign, reg, x, len, pos)
       ops[2] = scratch;
 
       output_asm_insn ("hrrz %2,%1", ops);
-      sprintf (buf, "tlo %%2,%o", ps << 6);
+      sprintf (buf, "tlo %%2,%#o", ps << 6);
       output_asm_insn (buf, ops);
       output_asm_insn (store ? "dpb %0,%2" : "ldb %0,%2", ops);
       if (!store && sign && len == 9)
         {
-          output_asm_insn ("trne %0,400", ops);
-          output_asm_insn ("orcmi %0,777", ops);
+          output_asm_insn ("trne %0,0400", ops);
+          output_asm_insn ("orcmi %0,0777", ops);
         }
       return "";
     }
@@ -8942,8 +9090,8 @@ pdp10_output_ashiftrt_memory (insn, operands)
           ops[0] = operands[0];
           ops[1] = addr;
           output_asm_insn ("ldb %0,%1", ops);
-          output_asm_insn ("trne %0,400", ops);
-          output_asm_insn ("orcmi %0,777", ops);
+          output_asm_insn ("trne %0,0400", ops);
+          output_asm_insn ("orcmi %0,0777", ops);
           return "";
         }
     }
@@ -9052,7 +9200,7 @@ pdp10_output_static_packed_si_fragment (insn, dest, base, bitpos, frag)
 
       output_bitfield_move (asm_out_file, insn, 0, 0, dest, mem, first, pos);
       ops[0] = dest;
-      sprintf (buf, "lsh %%0,%o", BITS_PER_UNIT - first);
+      sprintf (buf, "lsh %%0,%#o", BITS_PER_UNIT - first);
       output_asm_insn (buf, ops);
       output_bitfield_move (asm_out_file, insn, 0, 0, scratch, mem2,
                             BITS_PER_UNIT - first, 0);
@@ -9778,8 +9926,8 @@ pdp10_output_addsi (insn, operands, which_alternative)
 
                     if (!unsignedp)
                       {
-                        output_asm_insn ("trne %2,400", ops);
-                        output_asm_insn ("orcmi %2,777", ops);
+                        output_asm_insn ("trne %2,0400", ops);
+                        output_asm_insn ("orcmi %2,0777", ops);
                       }
 
                     output_asm_insn ("add %0,%2", ops);
@@ -9827,8 +9975,8 @@ pdp10_output_addsi (insn, operands, which_alternative)
               output_asm_insn (qbuf, ops);
               if (!unsignedp)
                 {
-                  output_asm_insn ("trne %2,400", ops);
-                  output_asm_insn ("orcmi %2,777", ops);
+                  output_asm_insn ("trne %2,0400", ops);
+                  output_asm_insn ("orcmi %2,0777", ops);
                 }
                 output_asm_insn ("add %0,%2", ops);
                 return "";
@@ -9884,8 +10032,8 @@ pdp10_output_addsi (insn, operands, which_alternative)
                       output_asm_insn (sbuf, ops);
                       if (!unsignedp)
                         {
-                          output_asm_insn ("trne %2,400", ops);
-                          output_asm_insn ("orcmi %2,777", ops);
+                          output_asm_insn ("trne %2,0400", ops);
+                          output_asm_insn ("orcmi %2,0777", ops);
                         }
                       output_asm_insn ("add %0,%2", ops);
                       return "";
@@ -9911,8 +10059,8 @@ pdp10_output_addsi (insn, operands, which_alternative)
               output_asm_insn ("ldb %2,%2", ops);
               if (!unsignedp)
                 {
-                  output_asm_insn ("trne %2,400", ops);
-                  output_asm_insn ("orcmi %2,777", ops);
+                  output_asm_insn ("trne %2,0400", ops);
+                  output_asm_insn ("orcmi %2,0777", ops);
                 }
               output_asm_insn ("add %0,%2", ops);
               return "";
@@ -9935,8 +10083,8 @@ pdp10_output_addsi (insn, operands, which_alternative)
               output_asm_insn ("ldb %2,%2", ops);
               if (!unsignedp)
                 {
-                  output_asm_insn ("trne %2,400", ops);
-                  output_asm_insn ("orcmi %2,777", ops);
+                  output_asm_insn ("trne %2,0400", ops);
+                  output_asm_insn ("orcmi %2,0777", ops);
                 }
               output_asm_insn ("add %0,%2", ops);
               return "";
@@ -10129,8 +10277,8 @@ pdp10_output_addsi (insn, operands, which_alternative)
 
           if (!unsignedp)
             {
-              output_asm_insn ("trne %2,400", ops);
-              output_asm_insn ("orcmi %2,777", ops);
+              output_asm_insn ("trne %2,0400", ops);
+              output_asm_insn ("orcmi %2,0777", ops);
             }
 
           output_asm_insn ("add %0,%2", ops);
@@ -10207,7 +10355,7 @@ pdp10_output_movsi (insn, which_alternative)
               ops[0] = scratch;
               ops[1] = src;
               output_asm_insn ("move %0,%1", ops);
-              sprintf (sbuf, "lsh %%0,-%o", (unsigned int) bitpos);
+              sprintf (sbuf, "lsh %%0,-%#o", (unsigned int) bitpos);
               output_asm_insn (sbuf, ops);
               output_bitfield_move (asm_out_file, insn, 1, 0, scratch,
                                     first_mem, first, (int) bitpos);
@@ -10266,7 +10414,7 @@ pdp10_output_movsi (insn, which_alternative)
             if (need_left)
               {
                 mops[0] = dst;
-                output_asm_insn ("lsh %0,33", mops);
+                output_asm_insn ("lsh %0,033", mops);
               }
           }
           return "";
@@ -10318,7 +10466,7 @@ pdp10_output_movsi (insn, which_alternative)
                 {
                   char sbuf[32];
 
-                  sprintf (sbuf, "lsh %%0,%o",
+                  sprintf (sbuf, "lsh %%0,%#o",
                            (unsigned int) byteoff * BITS_PER_UNIT);
                   output_asm_insn (sbuf, mops);
                 }
@@ -10369,8 +10517,8 @@ pdp10_output_movsi (insn, which_alternative)
               output_asm_insn (mbuf, ops);
               if (signedp)
                 {
-                  output_asm_insn ("trne %0,400", ops);
-                  output_asm_insn ("orcmi %0,777", ops);
+                  output_asm_insn ("trne %0,0400", ops);
+                  output_asm_insn ("orcmi %0,0777", ops);
                 }
               return "";
             }
@@ -10465,8 +10613,8 @@ pdp10_output_movsi (insn, which_alternative)
 
           if (!unsignedp)
             {
-              output_asm_insn ("trne %0,400", ops);
-              output_asm_insn ("orcmi %0,777", ops);
+              output_asm_insn ("trne %0,0400", ops);
+              output_asm_insn ("orcmi %0,0777", ops);
             }
           return "";
         }
@@ -11723,6 +11871,29 @@ pdp10_expand_addbp3 (type, target, op0, op1)
   int units_per_byte = (byte_size + BITS_PER_UNIT - 1) / BITS_PER_UNIT;
   HOST_WIDE_INT increment;
 
+  /* Generic ARRAY_REF expansion represents a dynamic short16 index as
+     INDEX * TYPE_SIZE_UNIT, i.e. INDEX * 2 in 9-bit C storage units.  The
+     PDP-10 byte-pointer adjuster below needs a count of 16-bit bytes instead.
+
+     Backend-specific packed ARRAY_REF lowering also calls this routine, but
+     passes its dynamic element index unscaled.  Normalize only the explicit
+     multiply/shift forms produced by the generic expander so those direct
+     packed paths remain unchanged.  */
+  if (byte_size == 16 && GET_CODE (op1) == MULT)
+    {
+      rtx a = XEXP (op1, 0);
+      rtx b = XEXP (op1, 1);
+
+      if (GET_CODE (b) == CONST_INT && INTVAL (b) == units_per_byte)
+        op1 = a;
+      else if (GET_CODE (a) == CONST_INT && INTVAL (a) == units_per_byte)
+        op1 = b;
+    }
+  else if (byte_size == 16 && GET_CODE (op1) == ASHIFT
+           && GET_CODE (XEXP (op1, 1)) == CONST_INT
+           && INTVAL (XEXP (op1, 1)) == 1)
+    op1 = XEXP (op1, 0);
+
   /* Some constant pointer adjustments arrive from GCC already scaled in
      addressable C storage units rather than PDP-10 byte-pointer units.  For
      short16/short18, TYPE_SIZE_UNIT is 2 while one array element occupies
@@ -12778,6 +12949,11 @@ pdp10_print_number (stream, x, div, bits, zero)
 
   if (zero == 0 || x > 0)
     {
+      /* DAS treats an unprefixed number as decimal.  GCC's PDP-10 backend
+         prints assembler operands in octal, so values above 7 need an
+         explicit leading-zero octal marker.  */
+      if (x > 7)
+        fputc ('0', stream);
       if (bits == 9)
 	fprintf (stream, "%03llo", x);
       else
@@ -14186,8 +14362,13 @@ pdp10_dynamic_ref_base_bitpos (exp, basep, bitposp)
               return 0;
             if (!pdp10_initializer_type_bitsize (TREE_TYPE (exp), &elem_bits))
               return 0;
-            if (!pdp10_initializer_record_field_bitpos (TREE_TYPE (record_object),
-                                                        field, &field_bits))
+            if (field != NULL_TREE && TREE_CODE (field) == FIELD_DECL
+                && TREE_TYPE (record_object) != NULL_TREE
+                && TREE_CODE (TREE_TYPE (record_object)) == RECORD_TYPE
+                && TYPE_PACKED (TREE_TYPE (record_object)))
+              field_bits = (pdp10_word36) int_bit_position (field);
+            else if (!pdp10_initializer_record_field_bitpos
+                     (TREE_TYPE (record_object), field, &field_bits))
               return 0;
 
             *basep = record_base;
@@ -14218,8 +14399,13 @@ pdp10_dynamic_ref_base_bitpos (exp, basep, bitposp)
 
         if (!pdp10_dynamic_ref_base_bitpos (object, basep, &base_bits))
           return 0;
-        if (!pdp10_initializer_record_field_bitpos (TREE_TYPE (object),
-                                                    field, &field_bits))
+        if (field != NULL_TREE && TREE_CODE (field) == FIELD_DECL
+            && TREE_TYPE (object) != NULL_TREE
+            && TREE_CODE (TREE_TYPE (object)) == RECORD_TYPE
+            && TYPE_PACKED (TREE_TYPE (object)))
+          field_bits = (pdp10_word36) int_bit_position (field);
+        else if (!pdp10_initializer_record_field_bitpos (TREE_TYPE (object),
+                                                         field, &field_bits))
           return 0;
         *bitposp = base_bits + field_bits;
         return 1;
@@ -14256,6 +14442,7 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
   pdp10_word36 byte_pos;
   pdp10_word36 word_offset;
   int ps;
+  int logical_bitptr = 0;
 
   if (TARGET_EXTENDED)
     return NULL_RTX;
@@ -14363,11 +14550,23 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
     return NULL_RTX;
 
   byte_pos = bitpos % BITS_PER_WORD;
-  if (byte_pos + (pdp10_word36) bytesize > BITS_PER_WORD)
+
+  if (((TREE_CODE (object) == ARRAY_REF
+        && TREE_CODE (TREE_OPERAND (object, 0)) == COMPONENT_REF)
+       || (TREE_CODE (object) == COMPONENT_REF
+           && TREE_CODE (TREE_TYPE (object)) == ARRAY_TYPE))
+      && (bitpos % BITS_PER_UNIT) != 0)
+    logical_bitptr = 1;
+
+  if (!logical_bitptr
+      && byte_pos + (pdp10_word36) bytesize > BITS_PER_WORD)
     return NULL_RTX;
 
   word_offset = bitpos / BITS_PER_WORD;
-  ps = ((BITS_PER_WORD - byte_pos - bytesize) << 6) + bytesize;
+  if (logical_bitptr)
+    ps = ((BITS_PER_WORD - byte_pos - 1) << 6) + 1;
+  else
+    ps = ((BITS_PER_WORD - byte_pos - bytesize) << 6) + bytesize;
 
   base_rtx = expand_expr (base_tree, NULL_RTX, VOIDmode, EXPAND_CONST_ADDRESS);
   if (GET_CODE (base_rtx) == MEM)

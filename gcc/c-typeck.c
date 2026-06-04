@@ -951,6 +951,25 @@ default_function_array_conversion (exp)
 	  TREE_SIDE_EFFECTS (adr) = 0;   /* Default would be, same as EXP.  */
 	  return adr;
 	}
+      /* PDP-10 packed arrays may begin inside a 9-bit address unit.
+         Preserve an explicit element-zero ARRAY_REF so the target address
+         expander still sees the packed field and its exact bit position. */
+#ifdef PDP10_PRESERVE_PACKED_ARRAY_DECAY
+      if (TREE_CODE (exp) == COMPONENT_REF
+          && TREE_TYPE (TREE_OPERAND (exp, 0)) != NULL_TREE
+          && TREE_CODE (TREE_TYPE (TREE_OPERAND (exp, 0))) == RECORD_TYPE
+          && TYPE_PACKED (TREE_TYPE (TREE_OPERAND (exp, 0))))
+        {
+          tree elem0 = build_array_ref (exp, integer_zero_node);
+          if (!c_mark_addressable (elem0))
+            return error_mark_node;
+          adr = build1 (ADDR_EXPR, ptrtype, elem0);
+          TREE_CONSTANT (adr) = staticp (elem0);
+          TREE_SIDE_EFFECTS (adr) = TREE_SIDE_EFFECTS (elem0);
+          return adr;
+        }
+#endif
+
       /* This way is better for a COMPONENT_REF since it can
 	 simplify the offset for a component.  */
       adr = build_unary_op (ADDR_EXPR, exp, 1);

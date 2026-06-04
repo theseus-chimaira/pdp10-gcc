@@ -55,6 +55,7 @@ extern void	pdp10_override_options PARAMS ((void));
 /* Storage Layout.  */
 extern rtx	pdp10_align_stack_pointer PARAMS ((rtx x, unsigned align));
 extern int	pdp10_data_alignment PARAMS ((int align, tree type));
+extern int	pdp10_adjust_field_align PARAMS ((tree field, int align));
 extern rtx	pdp10_data_padding PARAMS ((tree decl, rtx x));
 extern int	pdp10_constant_alignment PARAMS ((int align, tree exp));
 extern int	pdp10_local_alignment PARAMS ((int align, tree type));

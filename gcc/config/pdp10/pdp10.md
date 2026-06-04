@@ -573,7 +573,7 @@
         (sign_extend:SI
 	 (match_operand:QI 1 "pdp10_maybe_volatile_memory_operand" "m")))]
   "pdp10_scalar_mem_p (operands[1])"
-  "move %0,%W1\;lsh %0,33\;ash %0,-33"
+  "move %0,%W1\;lsh %0,033\;ash %0,-033"
   [(set_attr "length" "3")])
 (define_insn ""
   [(set (match_operand:SI 0 "register_operand" "=r")
@@ -582,7 +582,7 @@
 	 (const_int 9)
 	 (const_int 27)))]
   "pdp10_scalar_mem_p (operands[1])"
-  "move %0,%1\;lsh %0,33\;ash %0,-33"
+  "move %0,%1\;lsh %0,033\;ash %0,-033"
   [(set_attr "length" "3")])
 
 (define_insn ""
@@ -630,7 +630,7 @@
 		    (match_operand 2 "const_int_operand" "")]
 		   UNSPEC_SIGN_EXTEND))]
   "pdp10_scalar_mem_p (operands[1]) && INTVAL (operands[2]) >= 18"
-  "move %0,%W1\;lsh %0,33\;ash %0,-33"
+  "move %0,%W1\;lsh %0,033\;ash %0,-033"
   [(set_attr "length" "3")])
 
 ;; Load scalar unsigned chars using MOVE.
@@ -3810,7 +3810,7 @@
     else if (zero_extended_p (operands[0], 27, insn))
       return "trne %0,400\;%_orcmi %0,777";
     else
-      return "lsh %0,33\;ash %0,-33";
+      return "lsh %0,033\;ash %0,-033";
   }
   [(set_attr "length" "2")])
 
@@ -7801,7 +7801,7 @@
   [(set (match_operand:QI 0 "register_operand" "=r")
 	(subreg:QI (match_operand:SI 1 "register_operand" "0") 0))]
   ""
-  "lsh %0,-33%; (set (reg:QI %0) (subreg:QI (reg:SI %1) 0))")
+  "lsh %0,-033%; (set (reg:QI %0) (subreg:QI (reg:SI %1) 0))")
 
 (define_insn ""
   [(set (match_operand:HI 0 "register_operand" "=r")
