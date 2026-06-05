@@ -5864,7 +5864,7 @@
 ;; *ADJBP_0 and IBP above; typed pointer arithmetic still uses the
 ;; C expander fallback where possible.
 (define_insn "*ADJBP_noKL10up_dynamic"
-  [(set (match_operand:SI 0 "register_operand" "=x,x")
+  [(set (match_operand:SI 0 "register_operand" "=&x,&x")
 	(unspec:SI
         [(match_operand:SI 1 "general_operand" "rm,i")
          (match_operand:SI 2 "register_operand" "r,r")]

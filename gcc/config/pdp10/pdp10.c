@@ -11504,6 +11504,10 @@ static void	emit_cmp_and_jump_insn_1 PARAMS ((rtx x, rtx y,
 					  int unsignedp, rtx label));
 static rtx	expand_adjust_byte_pointer PARAMS ((tree type, rtx target,
 						    rtx op1, rtx op2));
+static rtx	expand_adjust_byte_pointer_size PARAMS ((int byte_size, rtx target,
+						         rtx op1, rtx op2));
+static rtx	pdp10_expand_addbp_units PARAMS ((int byte_size, rtx target,
+						    rtx op0, rtx op1));
 static void	avoid_reg_equal PARAMS ((rtx op0, rtx op1));
 static void	pdp10_emit_ibp1 PARAMS ((rtx op0, rtx op1));
 static int	maybe_expand_ibp PARAMS ((int byte_size, rtx op0, rtx op1,
@@ -11600,20 +11604,18 @@ avoid_reg_equal (op0, op1)
    by OP1 units, and store the result in TARGET if that's convenient.
    Return the result.  */
 static rtx
-expand_adjust_byte_pointer (type, target, op0, op1)
-     tree type;
+expand_adjust_byte_pointer_size (byte_size, target, op0, op1)
+     int byte_size;
      rtx target;
      rtx op0;
      rtx op1;
 {
   int bytes_per_word;
-  int byte_size;
   int shift;
   int i;
   rtx words, rem;
   rtx loop_label, nonpos_label, neg_loop_label, done_label;
 
-  byte_size = pdp10_bytesize (type);
   bytes_per_word = BITS_PER_WORD / byte_size;
 
   /* This is the non-KL10up fallback for dynamic byte-pointer
@@ -11725,6 +11727,17 @@ expand_adjust_byte_pointer (type, target, op0, op1)
   emit_label (done_label);
 
   return target;
+}
+
+static rtx
+expand_adjust_byte_pointer (type, target, op0, op1)
+     tree type;
+     rtx target;
+     rtx op0;
+     rtx op1;
+{
+  return expand_adjust_byte_pointer_size (pdp10_bytesize (type),
+                                          target, op0, op1);
 }
 
 /* Emit a one-byte byte-pointer increment.  GCC's virtual-register
@@ -11928,6 +11941,62 @@ pdp10_expand_addbp3 (type, target, op0, op1)
         }
     }
 
+  /* ushort16 pointers are self-describing at the KCC/GCC ABI boundary:
+     native objects use S=16, while non-byte-aligned packed arrays decay to
+     a continuous S=1 logical pointer.  Select the physical element stride
+     from the runtime S field.  */
+  if (byte_size == 16 && !CONSTANT_P (op0))
+    {
+      rtx selector = gen_reg_rtx (Pmode);
+      rtx scaled;
+      rtx native_label = gen_label_rtx ();
+      rtx done_label = gen_label_rtx ();
+
+      if (!target || !register_operand (target, Pmode)
+          || reg_overlap_mentioned_p (target, op1))
+        target = gen_reg_rtx (Pmode);
+      if (!register_operand (op0, Pmode))
+        op0 = force_reg (Pmode, op0);
+
+      emit_move_insn (selector, op0);
+      emit_insn (gen_lshrsi3 (selector, selector, GEN_INT (24)));
+      emit_insn (gen_andsi3 (selector, selector, GEN_INT (077)));
+      emit_cmp_and_jump_insn_1 (selector, GEN_INT (1), Pmode, NE, 0,
+                                native_label);
+
+      if (GET_CODE (op1) == CONST_INT)
+        scaled = GEN_INT (INTVAL (op1) * 18);
+      else
+        {
+          scaled = gen_reg_rtx (Pmode);
+          emit_insn (gen_mulsi3 (scaled, op1, GEN_INT (18)));
+        }
+      if (!register_operand (scaled, Pmode) && GET_CODE (scaled) != CONST_INT)
+        scaled = force_reg (Pmode, scaled);
+      emit_insn (gen_rtx_SET (VOIDmode, target,
+                              gen_rtx_ADJBP (Pmode, op0, scaled)));
+      emit_jump_insn (gen_jump (done_label));
+      emit_barrier ();
+
+      emit_label (native_label);
+      pdp10_expand_addbp_units (byte_size, target, op0, op1);
+      emit_label (done_label);
+      return target;
+    }
+
+  return pdp10_expand_addbp_units (byte_size, target, op0, op1);
+}
+
+static rtx
+pdp10_expand_addbp_units (byte_size, target, op0, op1)
+     int byte_size;
+     rtx target;
+     rtx op0;
+     rtx op1;
+{
+  int bytes_per_word = BITS_PER_WORD / byte_size;
+  HOST_WIDE_INT increment;
+
   /* First, try to use ADDI or SUBI.  On KS10/KL10-class machines,
      prefer ADJBP for non-one byte-pointer increments, even when the
      increment is a whole number of PDP-10 words.  Adding to the word
@@ -12001,7 +12070,7 @@ pdp10_expand_addbp3 (type, target, op0, op1)
   else
     {
       /* Emit sequence to adjust a byte pointer without ADJBP.  */
-      return expand_adjust_byte_pointer (type, target, op0, op1);
+      return expand_adjust_byte_pointer_size (byte_size, target, op0, op1);
     }
 }
 
@@ -13848,12 +13917,25 @@ pdp10_initializer_ref_bitpos (exp, basep, bitposp)
 
         if (!host_integerp (index, 0))
           return 0;
-        if (!pdp10_initializer_ref_bitpos (array, basep, &base_bits))
-          return 0;
         idx = tree_low_cst (index, 0);
         if (idx < 0)
           return 0;
         if (!pdp10_initializer_type_bitsize (TREE_TYPE (exp), &elem_bits))
+          return 0;
+        if (TREE_CODE (array) == COMPONENT_REF
+            && TREE_OPERAND (array, 1) != NULL_TREE
+            && TREE_CODE (TREE_OPERAND (array, 1)) == FIELD_DECL
+            && TREE_TYPE (TREE_OPERAND (array, 0)) != NULL_TREE
+            && TREE_CODE (TREE_TYPE (TREE_OPERAND (array, 0))) == RECORD_TYPE
+            && TYPE_PACKED (TREE_TYPE (TREE_OPERAND (array, 0))))
+          {
+            tree record_object = TREE_OPERAND (array, 0);
+            tree field = TREE_OPERAND (array, 1);
+            if (!pdp10_initializer_ref_bitpos (record_object, basep, &base_bits))
+              return 0;
+            base_bits += (pdp10_word36) int_bit_position (field);
+          }
+        else if (!pdp10_initializer_ref_bitpos (array, basep, &base_bits))
           return 0;
         *bitposp = base_bits + (pdp10_word36) idx * elem_bits;
         return 1;
@@ -14094,6 +14176,7 @@ pdp10_initializer_byte_pointer (exp)
   pdp10_word36 encoded;
   int bytesize;
   int ps;
+  int logical_bitptr = 0;
   rtx base_rtx;
   rtx base_addr;
   rtx offset_rtx;
@@ -14168,6 +14251,11 @@ pdp10_initializer_byte_pointer (exp)
 
   byte_pos = bitpos % BITS_PER_WORD;
 
+  if (TREE_CODE (object) == ARRAY_REF
+      && TREE_CODE (TREE_OPERAND (object, 0)) == COMPONENT_REF
+      && (bitpos % BITS_PER_UNIT) != 0)
+    logical_bitptr = 1;
+
   /* Local PDP-10 byte pointers carry an explicit P,S selector.
      They can represent noncanonical byte starts, such as a 7-bit
      byte at bit position 24 or an 8-bit byte at bit position 12.
@@ -14176,9 +14264,10 @@ pdp10_initializer_byte_pointer (exp)
      Extended one-word global byte pointers, on the other hand, encode
      a byte number rather than an arbitrary local P value, so keep the
      canonical-alignment check there.  */
-  if (byte_pos + (pdp10_word36) bytesize > BITS_PER_WORD)
+  if (!logical_bitptr
+      && byte_pos + (pdp10_word36) bytesize > BITS_PER_WORD)
     return NULL_RTX;
-  if (TARGET_EXTENDED && byte_pos % bytesize != 0)
+  if (!logical_bitptr && TARGET_EXTENDED && byte_pos % bytesize != 0)
     return NULL_RTX;
   word_offset = bitpos / BITS_PER_WORD;
   base_rtx = expand_expr (base_tree, NULL_RTX, VOIDmode,
@@ -14203,7 +14292,9 @@ pdp10_initializer_byte_pointer (exp)
   if (pdp10_frame_address_p (base_addr))
     return NULL_RTX;
 
-  if (TARGET_EXTENDED)
+  if (logical_bitptr)
+    ps = ((BITS_PER_WORD - byte_pos - 1) << 6) + 1;
+  else if (TARGET_EXTENDED)
     ps = ps_base_for_bytesize (bytesize) + byte_pos / bytesize;
   else
     ps = ((BITS_PER_WORD - byte_pos - bytesize) << 6) + bytesize;
