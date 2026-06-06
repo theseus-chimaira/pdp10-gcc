@@ -4022,6 +4022,34 @@ expand_assignment (to, from, want_value, suggest_reg)
       return want_value ? result : NULL_RTX;
     }
 
+#if REAL_BITS_PER_UNIT == 36
+  /* Packed exact16 ARRAY_REF stores use the same S=1 address path as direct
+     loads and array decay.  Let expand_expr build that exact address first,
+     then store through the resulting MEM instead of feeding storage-unit
+     offsets to generic packed-field splitting.  */
+  if (TREE_CODE (to) == ARRAY_REF
+      && TREE_CODE (TREE_OPERAND (to, 0)) == COMPONENT_REF
+      && TREE_CODE (TREE_TYPE (to)) == INTEGER_TYPE
+      && TYPE_PRECISION (TREE_TYPE (to)) == 16)
+    {
+      tree array_ref = TREE_OPERAND (to, 0);
+      tree field = TREE_OPERAND (array_ref, 1);
+      tree record = TREE_OPERAND (array_ref, 0);
+      tree record_type = TREE_TYPE (record);
+
+      if (field != NULL_TREE && TREE_CODE (field) == FIELD_DECL
+          && (DECL_PACKED (field)
+              || (record_type != NULL_TREE
+                  && (TREE_CODE (record_type) == RECORD_TYPE
+                      || TREE_CODE (record_type) == UNION_TYPE)
+                  && TYPE_PACKED (record_type))))
+        {
+          rtx direct = expand_expr (to, NULL_RTX, VOIDmode, EXPAND_WRITE);
+          return store_expr (from, direct, want_value);
+        }
+    }
+#endif
+
   /* Assignment of a structure component needs special treatment
      if the structure component's rtx is not simply a MEM.
      Assignment of an array element at a constant index, and assignment of
@@ -7823,6 +7851,54 @@ expand_expr (exp, target, tmode, modifier)
     case ARRAY_REF:
       if (TREE_CODE (TREE_TYPE (TREE_OPERAND (exp, 0))) != ARRAY_TYPE)
 	abort ();
+
+#if REAL_BITS_PER_UNIT == 36
+      /* Direct access to packed exact16 array fields must keep the exact bit
+         address.  Build &field[0] as the established S=1 logical pointer,
+         materialize it, then use target byte-pointer arithmetic for INDEX. */
+      if (TREE_CODE (TREE_OPERAND (exp, 0)) == COMPONENT_REF
+          && TREE_CODE (TREE_TYPE (exp)) == INTEGER_TYPE
+          && TYPE_PRECISION (TREE_TYPE (exp)) == 16)
+        {
+          tree array_ref = TREE_OPERAND (exp, 0);
+          tree field = TREE_OPERAND (array_ref, 1);
+          tree record = TREE_OPERAND (array_ref, 0);
+          tree record_type = TREE_TYPE (record);
+
+          if (field != NULL_TREE && TREE_CODE (field) == FIELD_DECL
+              && (DECL_PACKED (field)
+                  || (record_type != NULL_TREE
+                      && (TREE_CODE (record_type) == RECORD_TYPE
+                          || TREE_CODE (record_type) == UNION_TYPE)
+                      && TYPE_PACKED (record_type))))
+            {
+              tree domain = TYPE_DOMAIN (TREE_TYPE (array_ref));
+              tree low = domain ? TYPE_MIN_VALUE (domain) : integer_zero_node;
+              tree first = build (ARRAY_REF, TREE_TYPE (exp), array_ref, low);
+              tree ptype = build_pointer_type (TREE_TYPE (exp));
+              tree aexp = build1 (ADDR_EXPR, ptype, first);
+              rtx base = pdp10_expand_ADDR_EXP
+                (aexp, ptype, NULL_RTX, 0, modifier);
+
+              if (base != NULL_RTX)
+                {
+                  rtx ptr = force_reg (Pmode, base);
+                  rtx idx = expand_expr (TREE_OPERAND (exp, 1), NULL_RTX,
+                                         Pmode, EXPAND_NORMAL);
+                  rtx addr;
+
+                  if (!register_operand (idx, Pmode)
+                      && GET_CODE (idx) != CONST_INT)
+                    idx = force_reg (Pmode, idx);
+                  addr = pdp10_expand_addbp3 (TREE_TYPE (exp), NULL_RTX,
+                                              ptr, idx);
+                  temp = gen_rtx_MEM (mode, memory_address (mode, addr));
+                  set_mem_attributes (temp, exp, 0);
+                  return temp;
+                }
+            }
+        }
+#endif
 
       {
 	tree array = TREE_OPERAND (exp, 0);
