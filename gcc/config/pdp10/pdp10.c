@@ -8796,22 +8796,38 @@ output_bitfield_move (stream, insn, store, sign, reg, x, len, pos)
 			&& GET_CODE (XEXP (x, 0)) == POST_INC);
 
   if (GET_CODE (x) == MEM
-      && GET_CODE (XEXP (x, 0)) == MEM
+      && (GET_CODE (XEXP (x, 0)) == MEM
+          || (GET_CODE (XEXP (x, 0)) == PLUS
+              && GET_CODE (XEXP (XEXP (x, 0), 0)) == MEM
+              && GET_CODE (XEXP (XEXP (x, 0), 1)) == CONST_INT))
       && pos >= 0
       && VALID_OWGBP_BYTE_SIZE_P (len)
       && pos + len <= BITS_PER_WORD)
     {
       rtx ops[3];
       rtx scratch = gen_rtx_REG (SImode, 0);
+      rtx addr = XEXP (x, 0);
+      HOST_WIDE_INT wordoff = 0;
       int ps;
       char buf[64];
 
+      if (GET_CODE (addr) == PLUS)
+        {
+          wordoff = INTVAL (XEXP (addr, 1));
+          addr = XEXP (addr, 0);
+        }
+
       ps = ((BITS_PER_WORD - pos - len) << 6) + len;
       ops[0] = reg;
-      ops[1] = XEXP (x, 0);
+      ops[1] = addr;
       ops[2] = scratch;
 
       output_asm_insn ("hrrz %2,%1", ops);
+      if (wordoff != 0)
+        {
+          sprintf (buf, "addi %%2,%ld", (long) wordoff);
+          output_asm_insn (buf, ops);
+        }
       sprintf (buf, "tlo %%2,%#o", ps << 6);
       output_asm_insn (buf, ops);
       output_asm_insn (store ? "dpb %0,%2" : "ldb %0,%2", ops);
