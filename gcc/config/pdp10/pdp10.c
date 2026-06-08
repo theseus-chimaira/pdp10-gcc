@@ -6305,19 +6305,12 @@ pdp10_asm_output_skip (stream, nbytes)
       nbytes--;
     }
 
-  if (nbytes >= UNITS_PER_WORD)
-    {
-      int bytes = nbytes - (nbytes % UNITS_PER_WORD);
-
-      /* DAS reserves PDP-10 words, while GCC passes this hook a count
-         of 9-bit target bytes.  Convert explicitly and emit octal words.  */
-      fprintf (stream, "\tBLOCK\t%o\n", bytes / UNITS_PER_WORD);
-      nbytes -= bytes;
-    }
-
-  /* A residual subword skip at a word boundary is padding already covered
-     by the previous full-word emission.  There is no subword location
-     counter in the bare PDP-10 assembler stream.  */
+  /* GCC passes this hook a count of target bytes.  DAS .space uses the
+     same decimal target-byte units and rounds the reservation to PDP-10
+     words itself.  Keep the interface in bytes here instead of translating
+     it back to the legacy MACRO BLOCK directive.  */
+  if (nbytes > 0)
+    fprintf (stream, "\t.space\t%d\n", nbytes);
 }
 
 

@@ -20,9 +20,9 @@ static word_t mres_member[4];
 word_t *map_address (void) { return &region_map.start[0]; }
 word_t *member_address (void) { return &mres_member[0]; }
 
-/* The map is 145 PDP-10 words = 580 target bytes.  DAS reservations are
-   expressed in words, so the active GAS path must emit BLOCK 0221 rather
-   than .space 580.  */
-/* { dg-final { scan-assembler "region_map:\\n[ \\t]*BLOCK[ \\t]+221" } } */
-/* { dg-final { scan-assembler "mres_member:\\n[ \\t]*BLOCK[ \\t]+4" } } */
-/* { dg-final { scan-assembler-not "\\.space[ \\t]+580" } } */
+/* The map is 145 PDP-10 words = 580 target bytes.  GCC's GAS output
+   hooks pass sizes in target bytes, and DAS .space accepts those same
+   decimal target-byte units.  Keep that byte-count contract intact.  */
+/* { dg-final { scan-assembler "region_map:\\n[ \\t]*\\.space[ \\t]+580" } } */
+/* { dg-final { scan-assembler "mres_member:\\n[ \\t]*\\.space[ \\t]+16" } } */
+/* { dg-final { scan-assembler-not "[ \\t]BLOCK[ \\t]" } } */
