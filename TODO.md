@@ -15,3 +15,16 @@
 - [ ] Compare costs reported or implied by KCC, GCC, PDP-10 documentation, SIMH, and other PDP-10 emulators.
 - [ ] Document disagreements between sources and choose the cost model GCC should optimize for.
 - [ ] Add or update tests that catch regressions in the chosen cost model.
+
+## Target Variants
+
+- [ ] Add orthogonal ITS target selection for KA10, KL10, and KS10.  The
+  variant must preserve the existing CPU backend while enabling ITS-specific
+  instruction availability such as `CIRC`.
+- [ ] Add orthogonal BBN/TENEX target selection for KA10, including `JSYS`
+  availability.
+- [ ] Define target preprocessor macros for the ITS and BBN variants so system
+  code can select the correct monitor/CPU interface without inventing separate
+  base CPU families.
+- [ ] Add focused target-variant tests for valid/invalid CPU combinations and
+  instruction gating.
