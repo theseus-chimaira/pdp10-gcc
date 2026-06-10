@@ -29,7 +29,7 @@ LIB2FUNCS_EXCLUDE = _floatdidf _floatdisf _fixunsdfsi _fixunssfsi _exit _eprintf
 # _udivmoddi4 too: even when the public div/mod helpers are excluded, libgcc2
 # still builds the standalone unsigned DImode core object unless it is named
 # explicitly here.  Exclude the generic unsigned SImode helpers too, because
-# the merged bare-runtime block provides public __udivsi3/__umodsi3 symbols.
+# the PDP-10 libgcc1 helper set provides public __udivsi3/__umodsi3 symbols.
 
 # libgcc2.c __main assumes hosted EH/ctor frame registration.  The bare
 # PDP-10 runtime supplies a no-op __main in libgcc1.s instead.
@@ -38,13 +38,18 @@ LIB2FUNCS_EXCLUDE = _floatdidf _floatdisf _fixunsdfsi _fixunssfsi _exit _eprintf
 # PDP-10 target does not define it, so requesting _exit produces an empty
 # assembly file, which DAS correctly refuses as an empty image.
 
-# Build the merged PDP-10 assembly runtime through GCC's libgcc1
-# mechanism so libgcc1.s is preprocessed and only the selected
-# PDP-10 bare-runtime block is assembled.  Do not list libgcc1.s
-# in LIB2FUNCS_EXTRA: that assembles the whole preprocessor-driven
-# file and exposes duplicate local labels from disabled sections.
+# Build the bare PDP-10 runtime through GCC's classic per-function libgcc1
+# mechanism.  Each LIB1ASMFUNCS name becomes a separate archive member, so a
+# reference to __main no longer drags every unrelated runtime helper into the
+# program.  Helpers that need one another are deliberately grouped because DAS
+# rejects unresolved symbols while producing these target objects.
 LIB1ASMSRC = pdp10/libgcc1.s
-LIB1ASMFUNCS = pdp10_bare_runtime
+LIB1ASMFUNCS = pdp10_bare_main pdp10_bare_divdi pdp10_bare_memmove \
+	pdp10_bare_memset pdp10_bare_adddf3 pdp10_bare_subdf3 \
+	pdp10_bare_muldf3 pdp10_bare_divdf3 pdp10_bare_negdf2 \
+	pdp10_bare_cmpdf2 pdp10_bare_floatsi \
+	pdp10_bare_floatunssisf pdp10_bare_fixsi \
+	pdp10_bare_udivsi3 pdp10_bare_umodsi3
 
 # DAS does not recognize GNU assembler-style CPP line markers.
 # Suppress them only for preprocessed libgcc assembly sources.

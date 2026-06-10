@@ -239,29 +239,23 @@ FUNC(flsidf):
 	HALT
 #endif
 
-
 /* DAIMOS/PDP-10 bare-target libgcc supplement.
 
-   This block was merged from the temporary libgcc-pdp10.s helper file so
-   the PDP-10 target has one libgcc assembly source.  It is emitted when
-   libgcc1.s is assembled as a LIB2FUNCS_EXTRA source by t-none; t-none does
-   not use libgcc1.s as a per-helper LIB1ASMSRC file.  Keep public bare
-   runtime helpers here until they are split into the classic L_xxx libgcc1
-   form or moved to a proper crt/libc runtime.  */
-#ifdef Lpdp10_bare_runtime
-; Extra weak-ish runtime stubs for smoke/semantic tests that reference libgcc
-; helpers not yet provided by the real DAIMON test support.
-;
-; Keep this file deliberately small.  It is test-harness runtime glue, not the
-; final DAIMON libc.
+   Keep each independently useful helper in a distinct LIB1ASMFUNCS object.
+   This lets the archive linker pull only helpers actually referenced by a
+   program.  The four DImode division/modulo entry points intentionally remain
+   together because they share the same substantial private 72-bit divider.  */
 
+#ifdef Lpdp10_bare_main
 ; GCC emits a call to __main at the start of main.  In full hosted GCC this
 ; supports language runtime initialization such as C++ constructors.  The bare
 ; PDP-10 semantic harness has no such runtime yet, so make it a no-op.
 	.globl	__main
 __main:
 	popj 17,
+#endif
 
+#ifdef Lpdp10_bare_divdi
 ; Full DImode division/modulo helpers for the bare semantic harness.
 ;
 ; ABI used by PDP-10 GCC DImode libcall lowering:
@@ -561,7 +555,9 @@ __p10_sub_borrow_done:
 	subi 7,1
 __p10_sub_done:
 	popj 17,
+#endif
 
+#ifdef Lpdp10_bare_memmove
 ; Minimal 9-bit byte-oriented memory routines for the bare semantic harness.
 ;
 ; Calling convention used by generated PDP-10 GCC code here:
@@ -598,7 +594,9 @@ memmove_loop:
 memmove_done:
 	move 1,4
 	popj 17,
+#endif
 
+#ifdef Lpdp10_bare_memset
 ; Minimal byte memset, useful for future aggregate/zero-fill tests.
 	.globl	memset
 memset:
@@ -613,69 +611,83 @@ memset_loop:
 memset_done:
 	move 1,4
 	popj 17,
+#endif
 
-; Minimal PDP-10 floating-point libgcc helpers for bare GCC semantic tests.
-;
-; GCC for this target emits libcalls for some KA10/PDP-6 double-float
-; operations.  The bare harness links all sources into one image, so these
-; names must be real definitions, not unresolved placeholders.
-;
-; ABI used by the current GCC backend:
-;   SF input/output: AC1
-;   DF lhs/result:   AC1:AC2
-;   DF rhs:          AC3:AC4
-;
-; These routines use the PDP-10 double-float opcodes already understood by
-; the simulator.  They are runtime support, not tests.
+#ifdef Lpdp10_bare_adddf3
 	.globl	__adddf3
-	.globl	__subdf3
-	.globl	__muldf3
-	.globl	__divdf3
-	.globl	__negdf2
-	.globl	__cmpdf2
-	.globl	__fixsfsi
-	.globl	__fixdfsi
-	.globl	__floatsisf
-	.globl	__floatsidf
-	.globl	__floatunssisf
-
 __adddf3:
 	; Avoid KA10 SIMH double-float op hangs in the bare harness.
 	; The current tests use small exact values, so high-word single-float
 	; arithmetic with a zero low word is enough to unmask GCC semantics.
-	movem 3,__p10_df_rhs
-	fadr 1,__p10_df_rhs
+	movem 3,__p10_adddf3_rhs
+	fadr 1,__p10_adddf3_rhs
 	setz 2,
 	popj 17,
 
+; Private scratch pair for this helper object.
+__p10_adddf3_rhs:
+	0
+	0
+#endif
+
+#ifdef Lpdp10_bare_subdf3
+	.globl	__subdf3
 __subdf3:
-	movem 3,__p10_df_rhs
-	fsbr 1,__p10_df_rhs
+	movem 3,__p10_subdf3_rhs
+	fsbr 1,__p10_subdf3_rhs
 	setz 2,
 	popj 17,
 
+; Private scratch pair for this helper object.
+__p10_subdf3_rhs:
+	0
+	0
+#endif
+
+#ifdef Lpdp10_bare_muldf3
+	.globl	__muldf3
 __muldf3:
-	movem 3,__p10_df_rhs
-	fmpr 1,__p10_df_rhs
+	movem 3,__p10_muldf3_rhs
+	fmpr 1,__p10_muldf3_rhs
 	setz 2,
 	popj 17,
 
+; Private scratch pair for this helper object.
+__p10_muldf3_rhs:
+	0
+	0
+#endif
+
+#ifdef Lpdp10_bare_divdf3
+	.globl	__divdf3
 __divdf3:
 	; KA10 SIMH currently hangs on DFDV in the bare-step harness.
 	; Use the single-float FDVR path for the high word and clear the low
 	; word.  This is sufficient for the current GCC semantic timeout rows,
 	; which only exercise small exactly representable values and integer
 	; casts/comparisons after division.
-	movem 3,__p10_df_rhs
-	fdvr 1,__p10_df_rhs
+	movem 3,__p10_divdf3_rhs
+	fdvr 1,__p10_divdf3_rhs
 	setz 2,
 	popj 17,
 
+; Private scratch pair for this helper object.
+__p10_divdf3_rhs:
+	0
+	0
+#endif
+
+#ifdef Lpdp10_bare_negdf2
+	.globl	__negdf2
 __negdf2:
 	movn 1,1
 	setz 2,
 	popj 17,
 
+#endif
+
+#ifdef Lpdp10_bare_cmpdf2
+	.globl	__cmpdf2
 ; Compare double floats in AC1:AC2 and AC3:AC4.
 ; Return -1, 0, or 1 in AC1.  The bare double model used here stores
 ; the value in the high single-float word and keeps the low word zero for
@@ -705,8 +717,13 @@ __cmpdf2_equal:
 ; Convert signed integer in AC1 to single float in AC1.
 ; Do this in software for PDP-6/KA10-class bare runs: FLTR is not reliable
 ; across the bundled simulators/profiles.  Build a normalized PDP-10 single
-; float word directly.  For a positive integer N, the mantissa is shifted
-; until bit 26 (octal 400000000) is set and the excess-0200 exponent is
+#endif
+
+#ifdef Lpdp10_bare_floatsi
+	.globl	__floatsisf
+; Convert signed integer in AC1 to single float in AC1.
+; Build a normalized PDP-10 single-float word directly.
+; The mantissa is shifted until bit 26 (octal 400000000) is set and the excess-0200 exponent is
 ; adjusted from the starting value 0233 (= 0201 + 26).
 __floatsisf:
 	jumpe 1,__floatsisf_zero
@@ -742,7 +759,10 @@ __floatsisf_done:
 __floatsisf_zero:
 	movei 1,0
 	popj 17,
+#endif
 
+#ifdef Lpdp10_bare_floatsi
+	.globl	__floatsidf
 ; Convert signed integer in AC1 to double float in AC1:AC2.
 ; The test runtime's double helpers use a single-float high word plus a zero
 ; low word for the exact small values exercised by these semantic rows.
@@ -751,6 +771,10 @@ __floatsidf:
 	setz 2,
 	popj 17,
 
+#endif
+
+#ifdef Lpdp10_bare_floatunssisf
+	.globl	__floatunssisf
 ; Convert unsigned integer in AC1 to single float in AC1.
 ; This mirrors the positive path of __floatsisf.  The full 36-bit unsigned
 ; range is normalized directly; there is no sign flag and no final negation.
@@ -781,16 +805,13 @@ __floatunssisf_zero:
 	movei 1,0
 	popj 17,
 
-; Scratch pair for double-float helpers.
-__p10_df_rhs:
-	0
-	0
+#endif
 
-
+#ifdef Lpdp10_bare_fixsi
+	.globl	__fixsfsi
 ; Convert single float in AC1 to signed integer in AC1.
-; PDP-6/KA10 have no FIX instruction.  Decode the PDP-10 single-float word
-; directly and truncate toward zero.  This handles the normal finite values
-; used by the semantic tests and avoids the old inline MUL/TSC sequence, which
+; Decode the PDP-10 single-float word directly and truncate toward zero.
+; This handles the normal finite values used by the semantic tests and avoids the old inline MUL/TSC sequence, which
 ; produced zero for negative fractional inputs in the bare harness.
 __fixsfsi:
 	move 2,1		; work copy
@@ -815,6 +836,10 @@ __fixsfsi_zero:
 	movei 1,0
 	popj 17,
 
+#endif
+
+#ifdef Lpdp10_bare_fixsi
+	.globl	__fixdfsi
 ; Convert double float in AC1:AC2 to signed integer in AC1.
 ; For the current PDP-6/KA10 semantic tests this mirrors the compiler's
 ; single-float-to-int expansion and uses the high word of the double value.
@@ -824,8 +849,11 @@ __fixdfsi:
 	; decoder so negative fractional values truncate toward zero correctly.
 	jrst __fixsfsi
 
-; Unsigned SImode division/modulo helpers.
-;
+#endif
+
+#ifdef Lpdp10_bare_udivsi3
+	.globl	__udivsi3
+; Unsigned SImode division helper.
 ; These are adapted from the original PDP-10 libgcc1.s KCC-derived sequences,
 ; but are kept here as plain GAS/deposit-script assembly so the bare
 ; pdp10-dec-none runtime archive supplies the public symbols directly.
@@ -836,9 +864,6 @@ __fixdfsi:
 ;
 ; Division by zero is undefined by C.  Keep the helper deterministic for
 ; direct runtime probes: return zero.
-	.globl	__udivsi3
-	.globl	__umodsi3
-
 __udivsi3:
 	jumpn 2,__p10_udivsi3_nonzero
 	setz 1,
@@ -867,7 +892,11 @@ __p10_udivsi3_idiv:
 	idiv 1,3
 __p10_udivsi3_done:
 	popj 17,
+#endif
 
+#ifdef Lpdp10_bare_umodsi3
+	.globl	__umodsi3
+; Unsigned SImode modulo helper.
 __umodsi3:
 	jumpn 2,__p10_umodsi3_nonzero
 	setz 1,
@@ -898,6 +927,7 @@ __p10_umodsi3_done:
 	move 1,2
 	popj 17,
 #endif
+
 
 	SECTION_END
 
