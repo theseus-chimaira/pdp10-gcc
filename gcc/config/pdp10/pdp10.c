@@ -650,6 +650,9 @@ pdp10_override_options ()
   if (target_tune == 0)
     target_tune = TARGET_CPU_DEFAULT & CPU_MASK;
 
+  if (TARGET_ITS && !(TARGET_KA10 || TARGET_KL10 || TARGET_KS10))
+    error ("-mits requires -march=ka10, -march=kl10, or -march=ks10");
+
   if ((target_flags & OPT_EXTENDED)
       && (target_flags & OPT_UNEXTENDED))
     fprintf (stderr,

@@ -18,13 +18,11 @@
 
 ## Target Variants
 
-- [ ] Add orthogonal ITS target selection for KA10, KL10, and KS10.  The
-  variant must preserve the existing CPU backend while enabling ITS-specific
-  instruction availability such as `CIRC`.
-- [ ] Add orthogonal BBN/TENEX target selection for KA10, including `JSYS`
-  availability.
-- [ ] Define target preprocessor macros for the ITS and BBN variants so system
-  code can select the correct monitor/CPU interface without inventing separate
-  base CPU families.
-- [ ] Add focused target-variant tests for valid/invalid CPU combinations and
-  instruction gating.
+- [x] Add orthogonal ITS target selection for KA10, KL10, and KS10.
+- [x] Define `__PDP10_ITS__` and `TARGET_ITS` for ITS-targeted source.
+- [x] Provide direct raw-pair `CIRC` access through `<pdp10-its.h>` without
+  introducing a GCC builtin.
+- [x] Add focused GCC target regression coverage for ITS `CIRC`.
+
+`CIRC` is not a normal DImode rotate.  Keep it explicit: it operates on two
+raw adjacent AC words whose ends circulate in opposite directions.

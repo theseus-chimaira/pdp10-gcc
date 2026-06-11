@@ -156,6 +156,7 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 %{mlong-long-72bit:-D__LONG_LONG_72BIT__=1} \
 %{!mlong-long-72bit:-D__LONG_LONG_71BIT__=1} \
 %{mgfloat:-D__PDP10_GFLOAT__=1} \
+%{mits:-D__PDP10_ITS__=1 -DTARGET_ITS=1} \
 "
 
 /* Default CPP architecture macro for builds that do not pass -march/-mcpu.
@@ -247,6 +248,7 @@ extern int target_model;
 #define OPT_PDP6_FLOAT	0x00800000	/* Placeholder: user requested PDP-6 FP. */
 #define OPT_KA10_FLOAT	0x01000000	/* Placeholder: user requested KA10 FP. */
 #define OPT_NO_FLOAT	0x02000000	/* Placeholder: user requested no FP. */
+#define OPT_ITS		0x04000000	/* ITS processor variant. */
 #define ASM_TAB		0x00010000	/* Tab between opcode and operands.  */
 #define ASM_UPPER	0x00020000	/* Upper-case opcodes.  */
 #define ASM_INDENT_SKIPPED 0x00040000	/* Indent skiped insns.  */
@@ -266,6 +268,7 @@ extern int target_model;
 #define TARGET_PDP6_FLOAT	(target_flags & OPT_PDP6_FLOAT)
 #define TARGET_KA10_FLOAT	(target_flags & OPT_KA10_FLOAT)
 #define TARGET_EXPLICIT_NO_FLOAT (target_flags & OPT_NO_FLOAT)
+#define TARGET_ITS	(target_flags & OPT_ITS)
 /* Floating-point code generation is intentionally not part of the
    DAIMOS PDP-6/KA10 baseline yet.  These option bits are placeholders
    for future, machine-specific FP work and are not used by the machine
@@ -315,6 +318,7 @@ extern int target_model;
   { "pdp6-float",  OPT_PDP6_FLOAT, "Request future PDP-6 floating point" }, \
   { "ka10-float",  OPT_KA10_FLOAT, "Request future KA10 floating point" }, \
   { "no-float",    OPT_NO_FLOAT,    "Request no floating point"		}, \
+  { "its",         OPT_ITS,         "Enable the ITS processor variant"	}, \
   { "string",	    CPU_STRING,	    "Use string instructions"		}, \
   { "no-string",   -CPU_STRING,	    "Don't use string instructions"	}, \
   { "long-long-71bit", CPU_71BIT | OPT_LONG_LONG_71BIT, "Use 71-bit long long" }, \
