@@ -23,6 +23,3 @@
 - [x] Provide direct raw-pair `CIRC` access through `<pdp10-its.h>` without
   introducing a GCC builtin.
 - [x] Add focused GCC target regression coverage for ITS `CIRC`.
-
-`CIRC` is not a normal DImode rotate.  Keep it explicit: it operates on two
-raw adjacent AC words whose ends circulate in opposite directions.
