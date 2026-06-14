@@ -3,7 +3,11 @@
 #define CONCAT2(a, b)	a ## b
 #define FUNC(x)		CONCAT1 (UNDERSCORE, x)
 #define L(x)		CONCAT2 (LABEL_PREFIX, x)
+#ifdef PDP10_DOBJ
+#define GLOBAL(x)	.globl x
+#else
 #define GLOBAL(x)	ENTRY x
+#endif
 #define RETURN		POPJ 17,
 #define SECTION_RO(x)	.PSECT x/ronly
 #define SECTION_RW(x)	.PSECT x/rwrite
@@ -216,47 +220,47 @@ FUNC(ledf2):
 #endif
 
 #ifdef L_fixsfsi
-	GLOBAL(FUNC(fxsfsi))
-FUNC(fxsfsi):
+	GLOBAL(FUNC(fixsfsi))
+FUNC(fixsfsi):
 	HALT
 #endif
 
 #ifdef L_fixdfsi
-	GLOBAL(FUNC(fxdfsi))
-FUNC(fxdfsi):
+	GLOBAL(FUNC(fixdfsi))
+FUNC(fixdfsi):
 	HALT
 #endif
 
 #ifdef L_floatsisf
-	GLOBAL(FUNC(flsisf))
-FUNC(flsisf):
+	GLOBAL(FUNC(floatsisf))
+FUNC(floatsisf):
 	HALT
 #endif
 
 #ifdef L_floatsidf
-	GLOBAL(FUNC(flsidf))
-FUNC(flsidf):
+	GLOBAL(FUNC(floatsidf))
+FUNC(floatsidf):
 	HALT
 #endif
 
-/* DAIMOS/PDP-10 bare-target libgcc supplement.
+/* DAIMOS/PDP-10 freestanding libgcc supplement.
 
    Keep each independently useful helper in a distinct LIB1ASMFUNCS object.
    This lets the archive linker pull only helpers actually referenced by a
    program.  The four DImode division/modulo entry points intentionally remain
    together because they share the same substantial private 72-bit divider.  */
 
-#ifdef Lpdp10_bare_main
+#ifdef L_main
 ; GCC emits a call to __main at the start of main.  In full hosted GCC this
-; supports language runtime initialization such as C++ constructors.  The bare
-; PDP-10 semantic harness has no such runtime yet, so make it a no-op.
-	.globl	__main
-__main:
+; supports language runtime initialization such as C++ constructors.  The
+; freestanding PDP-10 target has no such runtime yet, so make it a no-op.
+	GLOBAL(FUNC(main))
+FUNC(main):
 	popj 17,
 #endif
 
-#ifdef Lpdp10_bare_divdi
-; Full DImode division/modulo helpers for the bare semantic harness.
+#ifdef L_divdi3
+; Full DImode division/modulo helpers for the freestanding runtime.
 ;
 ; ABI used by PDP-10 GCC DImode libcall lowering:
 ;   input numerator:   AC1 = high word, AC2 = low word
@@ -554,377 +558,6 @@ __p10_sub_borrow_done:
 	jumpe 14,__p10_sub_done
 	subi 7,1
 __p10_sub_done:
-	popj 17,
-#endif
-
-#ifdef Lpdp10_bare_memmove
-; Minimal 9-bit byte-oriented memory routines for the bare semantic harness.
-;
-; Calling convention used by generated PDP-10 GCC code here:
-;   AC1 = destination byte pointer
-;   AC2 = source byte pointer / fill byte
-;   AC3 = byte count, in C storage units (9-bit bytes for this target)
-;   return AC1 = original destination pointer
-;
-; These routines intentionally operate on PDP-10 byte pointers using LDB/DPB
-; and IBP.  GCC-generated code for BLKmode struct-return currently emits a
-; call like:
-;   TLO 1,331100
-;   TLO 2,331100
-;   MOVEI 3,100
-;   PUSHJ 17,memmove
-; for a 64-byte / 16-word aggregate.  Without this symbol, the harness linker
-; may resolve memmove to zero and the simulator wanders into low-core soup.
-;
-; memmove is currently forward-copy only.  That is sufficient for the current
-; struct-return and non-overlap semantic reducers.  Add a backward-overlap path
-; before blessing true overlapping memmove semantics.
-	.globl	memcpy
-	.globl	memmove
-memcpy:
-memmove:
-	move 4,1		; preserve return value
-	jumpe 3,memmove_done
-memmove_loop:
-	ldb 5,2
-	dpb 5,1
-	ibp 2
-	ibp 1
-	sojg 3,memmove_loop
-memmove_done:
-	move 1,4
-	popj 17,
-#endif
-
-#ifdef Lpdp10_bare_memset
-; Minimal byte memset, useful for future aggregate/zero-fill tests.
-	.globl	memset
-memset:
-	move 4,1		; preserve return value
-	move 5,2
-	andi 5,777		; byte value is 9 bits in this harness
-	jumpe 3,memset_done
-memset_loop:
-	dpb 5,1
-	ibp 1
-	sojg 3,memset_loop
-memset_done:
-	move 1,4
-	popj 17,
-#endif
-
-#ifdef Lpdp10_bare_adddf3
-	.globl	__adddf3
-__adddf3:
-	; Avoid KA10 SIMH double-float op hangs in the bare harness.
-	; The current tests use small exact values, so high-word single-float
-	; arithmetic with a zero low word is enough to unmask GCC semantics.
-	movem 3,__p10_adddf3_rhs
-	fadr 1,__p10_adddf3_rhs
-	setz 2,
-	popj 17,
-
-; Private scratch pair for this helper object.
-__p10_adddf3_rhs:
-	0
-	0
-#endif
-
-#ifdef Lpdp10_bare_subdf3
-	.globl	__subdf3
-__subdf3:
-	movem 3,__p10_subdf3_rhs
-	fsbr 1,__p10_subdf3_rhs
-	setz 2,
-	popj 17,
-
-; Private scratch pair for this helper object.
-__p10_subdf3_rhs:
-	0
-	0
-#endif
-
-#ifdef Lpdp10_bare_muldf3
-	.globl	__muldf3
-__muldf3:
-	movem 3,__p10_muldf3_rhs
-	fmpr 1,__p10_muldf3_rhs
-	setz 2,
-	popj 17,
-
-; Private scratch pair for this helper object.
-__p10_muldf3_rhs:
-	0
-	0
-#endif
-
-#ifdef Lpdp10_bare_divdf3
-	.globl	__divdf3
-__divdf3:
-	; KA10 SIMH currently hangs on DFDV in the bare-step harness.
-	; Use the single-float FDVR path for the high word and clear the low
-	; word.  This is sufficient for the current GCC semantic timeout rows,
-	; which only exercise small exactly representable values and integer
-	; casts/comparisons after division.
-	movem 3,__p10_divdf3_rhs
-	fdvr 1,__p10_divdf3_rhs
-	setz 2,
-	popj 17,
-
-; Private scratch pair for this helper object.
-__p10_divdf3_rhs:
-	0
-	0
-#endif
-
-#ifdef Lpdp10_bare_negdf2
-	.globl	__negdf2
-__negdf2:
-	movn 1,1
-	setz 2,
-	popj 17,
-
-#endif
-
-#ifdef Lpdp10_bare_cmpdf2
-	.globl	__cmpdf2
-; Compare double floats in AC1:AC2 and AC3:AC4.
-; Return -1, 0, or 1 in AC1.  The bare double model used here stores
-; the value in the high single-float word and keeps the low word zero for
-; computed values.  Low-word tie checks keep exact equality working for
-; constants that still carry a nonzero low D-float word.
-__cmpdf2:
-	camn 1,3
-	 jrst __cmpdf2_hi_equal
-	camg 1,3
-	 jrst __cmpdf2_less
-	movei 1,1
-	popj 17,
-__cmpdf2_hi_equal:
-	camn 2,4
-	 jrst __cmpdf2_equal
-	camg 2,4
-	 jrst __cmpdf2_less
-	movei 1,1
-	popj 17,
-__cmpdf2_less:
-	seto 1,
-	popj 17,
-__cmpdf2_equal:
-	movei 1,0
-	popj 17,
-
-; Convert signed integer in AC1 to single float in AC1.
-; Do this in software for PDP-6/KA10-class bare runs: FLTR is not reliable
-; across the bundled simulators/profiles.  Build a normalized PDP-10 single
-#endif
-
-#ifdef Lpdp10_bare_floatsi
-	.globl	__floatsisf
-; Convert signed integer in AC1 to single float in AC1.
-; Build a normalized PDP-10 single-float word directly.
-; The mantissa is shifted until bit 26 (octal 400000000) is set and the excess-0200 exponent is
-; adjusted from the starting value 0233 (= 0201 + 26).
-__floatsisf:
-	jumpe 1,__floatsisf_zero
-	movei 5,0
-	jumpge 1,__floatsisf_abs
-	movei 5,1
-	movn 1,1
-__floatsisf_abs:
-	move 2,1
-	movei 3,233
-__floatsisf_rnorm:
-	caml 2,[1000000000]
-	 jrst __floatsisf_rshift
-	jrst __floatsisf_ltest
-__floatsisf_rshift:
-	lsh 2,-1
-	addi 3,1
-	jrst __floatsisf_rnorm
-__floatsisf_ltest:
-	caml 2,[400000000]
-	 jrst __floatsisf_pack
-	lsh 2,1
-	subi 3,1
-	jrst __floatsisf_ltest
-__floatsisf_pack:
-	lsh 3,33
-	move 1,2
-	ior 1,3
-	jumpe 5,__floatsisf_done
-	movn 1,1
-__floatsisf_done:
-	popj 17,
-__floatsisf_zero:
-	movei 1,0
-	popj 17,
-#endif
-
-#ifdef Lpdp10_bare_floatsi
-	.globl	__floatsidf
-; Convert signed integer in AC1 to double float in AC1:AC2.
-; The test runtime's double helpers use a single-float high word plus a zero
-; low word for the exact small values exercised by these semantic rows.
-__floatsidf:
-	pushj 17,__floatsisf
-	setz 2,
-	popj 17,
-
-#endif
-
-#ifdef Lpdp10_bare_floatunssisf
-	.globl	__floatunssisf
-; Convert unsigned integer in AC1 to single float in AC1.
-; This mirrors the positive path of __floatsisf.  The full 36-bit unsigned
-; range is normalized directly; there is no sign flag and no final negation.
-__floatunssisf:
-	jumpe 1,__floatunssisf_zero
-	move 2,1
-	movei 3,233
-__floatunssisf_rnorm:
-	tlne 2,777000		; any bits above the normalized mantissa
-	 jrst __floatunssisf_rshift
-	jrst __floatunssisf_ltest
-__floatunssisf_rshift:
-	lsh 2,-1
-	addi 3,1
-	jrst __floatunssisf_rnorm
-__floatunssisf_ltest:
-	tlne 2,400		; normalized mantissa bit is set
-	 jrst __floatunssisf_pack
-	lsh 2,1
-	subi 3,1
-	jrst __floatunssisf_ltest
-__floatunssisf_pack:
-	lsh 3,33
-	move 1,2
-	ior 1,3
-	popj 17,
-__floatunssisf_zero:
-	movei 1,0
-	popj 17,
-
-#endif
-
-#ifdef Lpdp10_bare_fixsi
-	.globl	__fixsfsi
-; Convert single float in AC1 to signed integer in AC1.
-; Decode the PDP-10 single-float word directly and truncate toward zero.
-; This handles the normal finite values used by the semantic tests and avoids the old inline MUL/TSC sequence, which
-; produced zero for negative fractional inputs in the bare harness.
-__fixsfsi:
-	move 2,1		; work copy
-	movei 5,0		; sign flag
-	jumpge 2,__fixsfsi_abs
-	movei 5,1
-	movm 2,2		; absolute PDP-10 float word
-__fixsfsi_abs:
-	move 3,2
-	lsh 3,-33		; exponent field
-	subi 3,200		; unbiased exponent
-	jumple 3,__fixsfsi_zero
-	tlz 2,777000		; keep 27-bit mantissa/fraction
-	subi 3,33		; shift = exponent - 27
-	lsh 2,(3)
-	move 1,2
-	jumpe 5,__fixsfsi_done
-	movn 1,1
-__fixsfsi_done:
-	popj 17,
-__fixsfsi_zero:
-	movei 1,0
-	popj 17,
-
-#endif
-
-#ifdef Lpdp10_bare_fixsi
-	.globl	__fixdfsi
-; Convert double float in AC1:AC2 to signed integer in AC1.
-; For the current PDP-6/KA10 semantic tests this mirrors the compiler's
-; single-float-to-int expansion and uses the high word of the double value.
-__fixdfsi:
-	; The bare double helpers keep the value in AC1 as a PDP-10 single
-	; float high word and clear AC2.  Reuse the tested single-float
-	; decoder so negative fractional values truncate toward zero correctly.
-	jrst __fixsfsi
-
-#endif
-
-#ifdef Lpdp10_bare_udivsi3
-	.globl	__udivsi3
-; Unsigned SImode division helper.
-; These are adapted from the original PDP-10 libgcc1.s KCC-derived sequences,
-; but are kept here as plain GAS/deposit-script assembly so the bare
-; pdp10-dec-none runtime archive supplies the public symbols directly.
-;
-; ABI:
-;   __udivsi3: AC1 = numerator, AC2 = denominator, returns quotient in AC1
-;   __umodsi3: AC1 = numerator, AC2 = denominator, returns remainder in AC1
-;
-; Division by zero is undefined by C.  Keep the helper deterministic for
-; direct runtime probes: return zero.
-__udivsi3:
-	jumpn 2,__p10_udivsi3_nonzero
-	setz 1,
-	popj 17,
-__p10_udivsi3_nonzero:
-	skipge 3,2
-	 jrst __p10_udivsi3_denneg
-	jumpge 1,__p10_udivsi3_idiv
-	caig 3,1
-	 jrst __p10_udivsi3_small
-	move 2,1
-	movei 1,1
-	div 1,3
-	popj 17,
-__p10_udivsi3_denneg:
-	move 2,1
-	movei 1,0
-	jumpge 2,__p10_udivsi3_done
-	camge 2,3
-	 popj 17,
-	sub 2,3
-	aoja 1,__p10_udivsi3_done
-__p10_udivsi3_small:
-	tdza 2,2
-__p10_udivsi3_idiv:
-	idiv 1,3
-__p10_udivsi3_done:
-	popj 17,
-#endif
-
-#ifdef Lpdp10_bare_umodsi3
-	.globl	__umodsi3
-; Unsigned SImode modulo helper.
-__umodsi3:
-	jumpn 2,__p10_umodsi3_nonzero
-	setz 1,
-	popj 17,
-__p10_umodsi3_nonzero:
-	skipge 3,2
-	 jrst __p10_umodsi3_denneg
-	jumpge 1,__p10_umodsi3_idiv
-	caig 3,1
-	 jrst __p10_umodsi3_small
-	move 2,1
-	movei 1,1
-	div 1,3
-	jrst __p10_umodsi3_done
-__p10_umodsi3_denneg:
-	move 2,1
-	movei 1,0
-	jumpge 2,__p10_umodsi3_done
-	camge 2,3
-	 jrst __p10_umodsi3_done
-	sub 2,3
-	aoja 1,__p10_umodsi3_done
-__p10_umodsi3_small:
-	tdza 2,2
-__p10_umodsi3_idiv:
-	idiv 1,3
-__p10_umodsi3_done:
-	move 1,2
 	popj 17,
 #endif
 

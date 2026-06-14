@@ -2709,7 +2709,7 @@ pdp10-*-its*)
 	float_format=pdp10
 	;;
 pdp10-*-none*)
-	tm_file="pdp10/gas.h $tm_file"
+	tm_file="pdp10/gas.h pdp10/none.h $tm_file"
 	tmake_file=pdp10/t-none
 	float_format=pdp10
 	;;

@@ -5,7 +5,7 @@
 # no real dynamic loader, and PDP-6/166-safe code should run upward on
 # later PDP-10-class machines.
 
-TARGET_LIBGCC2_CFLAGS = -fomit-frame-pointer -DUNDERSCORE=. -Dinhibit_libc -march=base -mtune=166 -munextended -mno-string -mlong-long-71bit
+TARGET_LIBGCC2_CFLAGS = -fomit-frame-pointer -DUNDERSCORE=__ -Dinhibit_libc -march=base -mtune=166 -munextended -mno-string -mlong-long-71bit
 LIBGCC2_DEBUG_CFLAGS = -g0
 
 # Early DAIMOS baseline has no floating-point runtime yet.  Do not build
@@ -38,26 +38,25 @@ LIB2FUNCS_EXCLUDE = _floatdidf _floatdisf _fixunsdfsi _fixunssfsi _exit _eprintf
 # PDP-10 target does not define it, so requesting _exit produces an empty
 # assembly file, which DAS correctly refuses as an empty image.
 
-# Build the bare PDP-10 runtime through GCC's classic per-function libgcc1
-# mechanism.  Each LIB1ASMFUNCS name becomes a separate archive member, so a
-# reference to __main no longer drags every unrelated runtime helper into the
-# program.  Helpers that need one another are deliberately grouped because DAS
-# rejects unresolved symbols while producing these target objects.
+# Build the freestanding PDP-10 runtime through GCC's classic per-function
+# libgcc1 mechanism.  Canonical GCC helper names are separate DOBJ members;
+# DARC/DLINK provide normal archive extraction, so helpers no longer need
+# bare-only ownership names merely to avoid local-label collisions.
 LIB1ASMSRC = pdp10/libgcc1.s
-LIB1ASMFUNCS = pdp10_bare_main pdp10_bare_divdi pdp10_bare_memmove \
-	pdp10_bare_memset pdp10_bare_adddf3 pdp10_bare_subdf3 \
-	pdp10_bare_muldf3 pdp10_bare_divdf3 pdp10_bare_negdf2 \
-	pdp10_bare_cmpdf2 pdp10_bare_floatsi \
-	pdp10_bare_floatunssisf pdp10_bare_fixsi \
-	pdp10_bare_udivsi3 pdp10_bare_umodsi3
+LIB1ASMFUNCS = _main _divdi3 _udivsi3 _umodsi3
 
 # DAS does not recognize GNU assembler-style CPP line markers.
 # Suppress them only for preprocessed libgcc assembly sources.
-LIB1ASM_CFLAGS = -Wp,-P
+LIB1ASM_CFLAGS = -Wp,-P -DPDP10_DOBJ
 LIB2ASM_CFLAGS = -Wp,-P
 
 # Provide a real public abort symbol for freestanding pdp10-dec-none users.
 LIB2FUNCS_EXTRA = $(srcdir)/config/pdp10/abort.asm
+
+# DOBJ objects are archived directly as DARC1.  DARC carries its symbol index
+# by construction, so there is no target ranlib pass.
+AR_CREATE_FOR_TARGET = pdp10-dec-none-darc -o
+RANLIB_TEST_FOR_TARGET = false
 
 # No EH unwinder objects for the C-only bare target yet.
 LIB2ADDEH =
