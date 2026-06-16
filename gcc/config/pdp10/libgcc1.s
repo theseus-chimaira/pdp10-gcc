@@ -183,6 +183,34 @@ FUNC(divdf3):
 	HALT
 #endif
 
+#ifdef L_cmpdf2
+; Three-way comparison of canonical D-format doubles.  Compare the signed
+; high words first.  If they are equal, AC2 and AC4 have the same copied
+; sign bit, so ordinary signed comparison gives the correct continuation
+; ordering as well.
+	GLOBAL(FUNC(cmpdf2))
+FUNC(cmpdf2):
+	CAMN 1,3
+	 JRST %Lcmpdf_low
+	CAMGE 1,3
+	 JRST %Lcmpdf_less
+	JRST %Lcmpdf_greater
+%Lcmpdf_low:
+	CAMN 2,4
+	 JRST %Lcmpdf_equal
+	CAMGE 2,4
+	 JRST %Lcmpdf_less
+%Lcmpdf_greater:
+	MOVEI 1,1
+	RETURN
+%Lcmpdf_less:
+	SETO 1,
+	RETURN
+%Lcmpdf_equal:
+	SETZ 1,
+	RETURN
+#endif
+
 #ifdef L_eqdf2
 	GLOBAL(FUNC(eqdf2))
 FUNC(eqdf2):
@@ -220,27 +248,192 @@ FUNC(ledf2):
 #endif
 
 #ifdef L_fixsfsi
+; Convert PDP-10 single floating to signed SImode, truncating toward zero.
+; AC1 is both the argument and result.  AC5/AC6 are call-clobbered scratch.
 	GLOBAL(FUNC(fixsfsi))
 FUNC(fixsfsi):
-	HALT
+	MOVE 5,1
+	HLRE 6,1
+	ASH 6,-011
+	JUMPGE 6,%Lfixsf_pos
+	MOVNS 1
+	TRC 6,-01
+%Lfixsf_pos:
+	TLZ 1,0777000
+	ASH 1,-0233(6)
+	JUMPGE 5,%Lfixsf_done
+	MOVNS 1
+%Lfixsf_done:
+	RETURN
 #endif
 
 #ifdef L_fixdfsi
+; Convert canonical PDP-10 D-format double in AC1/AC2 to signed SImode.
+; D-format is a 71-bit two's-complement value: AC2 bit 35 copies the
+; sign and the remaining 35 bits continue the fraction.
 	GLOBAL(FUNC(fixdfsi))
 FUNC(fixdfsi):
-	HALT
+	MOVE 5,1
+	JUMPGE 5,%Lfixdf_mag
+; Form the positive 71-bit magnitude without using DMOVN, which is absent
+; on the PDP-6/KA10 baseline.
+	SETCA 1,1
+	SETCA 2,2
+	TLZ 2,0400000
+	ADDI 2,1
+	TLNN 2,0400000
+	 JRST %Lfixdf_nocarry
+	TLZ 2,0400000
+	AOJA 1,%Lfixdf_mag
+%Lfixdf_nocarry:
+	TLZ 2,0400000
+%Lfixdf_mag:
+; Extract k = exponent - 0201.  Values smaller than one truncate to zero.
+	MOVE 6,1
+	LSH 6,-033
+	ANDI 6,0377
+	SUBI 6,0201
+	JUMPGE 6,%Lfixdf_nonfrac
+	SETZ 1,
+	RETURN
+%Lfixdf_nonfrac:
+	CAIG 6,032
+	 JRST %Lfixdf_highonly
+; k > 26: combine the 27 high fraction bits with up to eight continuation
+; bits from AC2.
+	MOVE 7,6
+	SUBI 7,032
+	AND 1,[0777777777]
+	LSH 1,0(7)
+	MOVEI 4,043
+	SUB 4,7
+	MOVN 4,4
+	MOVE 3,2
+	LSH 3,0(4)
+	IOR 1,3
+	JRST %Lfixdf_sign
+%Lfixdf_highonly:
+	AND 1,[0777777777]
+	MOVEI 7,032
+	SUB 7,6
+	MOVN 7,7
+	LSH 1,0(7)
+%Lfixdf_sign:
+	JUMPGE 5,%Lfixdf_done
+	MOVNS 1
+%Lfixdf_done:
+	RETURN
 #endif
 
 #ifdef L_floatsisf
+; Convert signed SImode to PDP-10 single floating.  FSC exists on the
+; PDP-6/KA10 baseline; make a positive magnitude, scale it by 2^233
+; (octal), then restore the floating sign.
 	GLOBAL(FUNC(floatsisf))
 FUNC(floatsisf):
-	HALT
+	MOVE 5,1
+	JUMPGE 5,%Lflts_pos
+	MOVNS 1
+%Lflts_pos:
+	FSC 1,0233
+	JUMPGE 5,%Lflts_done
+	MOVNS 1
+%Lflts_done:
+	RETURN
+#endif
+
+#ifdef L_floatunssisf
+; Convert unsigned SImode to PDP-10 single floating without FLTR.
+; The full 36-bit unsigned case needs nine bits shifted out before FSC;
+; compensate the exponent after scaling.  This is the established
+; PDP-6/KA10 sequence and also runs on later processors.
+	GLOBAL(FUNC(floatunssisf))
+FUNC(floatunssisf):
+	TLNN 1,0777000
+	 JRST %Luflts_small
+	LSH 1,-011
+	FSC 1,0233
+	FSC 1,011
+	RETURN
+%Luflts_small:
+	FSC 1,0233
+	RETURN
 #endif
 
 #ifdef L_floatsidf
+; Convert signed SImode in AC1 to canonical PDP-10 D-format double in
+; AC1/AC2.  Build the 27+35 fraction explicitly so no floating instruction
+; newer than the PDP-6 baseline is required.
 	GLOBAL(FUNC(floatsidf))
 FUNC(floatsidf):
-	HALT
+	JUMPN 1,%Lfltd_nonzero
+	SETZ 2,
+	RETURN
+%Lfltd_nonzero:
+	MOVE 4,1
+; -2^35 has no positive SImode magnitude; its D-format representation is
+; exact and unique, so handle it directly.
+	CAMN 1,[0400000000000]
+	 JRST %Lfltd_min
+	JUMPGE 1,%Lfltd_absdone
+	MOVNS 1
+%Lfltd_absdone:
+; Find k=floor(log2(magnitude)).  Code size and RAM are more important than
+; a large leading-zero table; at most 34 iterations are required.
+	MOVE 5,1
+	MOVEI 6,042
+%Lfltd_scan:
+	TLNE 5,0200000
+	 JRST %Lfltd_found
+	LSH 5,1
+	SOJA 6,%Lfltd_scan
+%Lfltd_found:
+	CAIG 6,032
+	 JRST %Lfltd_small
+; k > 26.  Keep the top 27 fraction bits in AC1 and place the remaining
+; low bits at the top of AC2's 35-bit continuation field.
+	MOVE 7,6
+	SUBI 7,032
+	MOVE 3,1
+	MOVN 5,7
+	LSH 1,0(5)
+	MOVEI 5,043
+	SUB 5,7
+	LSH 3,0(5)
+	TLZ 3,0400000
+	MOVE 2,3
+	JRST %Lfltd_exponent
+%Lfltd_small:
+	MOVEI 5,032
+	SUB 5,6
+	LSH 1,0(5)
+	SETZ 2,
+%Lfltd_exponent:
+	MOVEI 5,0201
+	ADD 5,6
+	LSH 5,033
+	IOR 1,5
+	JUMPGE 4,%Lfltd_done
+; Negate the 71-bit D-format fraction and copy the resulting high sign into
+; AC2 bit 35.
+	SETCA 1,1
+	SETCA 2,2
+	TLZ 2,0400000
+	ADDI 2,1
+	TLNN 2,0400000
+	 JRST %Lfltd_neg_nocarry
+	TLZ 2,0400000
+	AOJA 1,%Lfltd_neg_sign
+%Lfltd_neg_nocarry:
+	TLZ 2,0400000
+%Lfltd_neg_sign:
+	TLO 2,0400000
+%Lfltd_done:
+	RETURN
+%Lfltd_min:
+	MOVE 1,[0533400000000]
+	MOVE 2,[0400000000000]
+	RETURN
 #endif
 
 /* DAIMOS/PDP-10 freestanding libgcc supplement.

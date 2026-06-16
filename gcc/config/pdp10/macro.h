@@ -77,7 +77,7 @@ do {							\
   REAL_VALUE_TO_TARGET_DOUBLE ((VALUE), l);		\
   high = (((((HOST_WIDE_INT)l[0]) & 0xffffffffUL) << 4)	\
 	  + (HOST_WIDE_INT)((l[1] >> 28) & 0xfUL));	\
-  low = ((((HOST_WIDE_INT)l[1] << 8) & 0xfffffffUL)	\
+  low = ((((HOST_WIDE_INT)l[1] << 8) & ((~(unsigned HOST_WIDE_INT)0) >> (HOST_BITS_PER_WIDE_INT - 36)))	\
 	 + (HOST_WIDE_INT)((l[2] >> 24) & 0xffUL));	\
   fprintf ((STREAM), "\tEXP %llo,%llo\n", high, low);	\
 } while (0)

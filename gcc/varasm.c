@@ -2278,7 +2278,8 @@ assemble_real (d, mode, align)
 	    REAL_VALUE_TO_TARGET_DOUBLE (d, data);
 	    word0 = ((HOST_WIDE_INT) data[0] << 4)
 	      + (((unsigned long) data[1] >> 28) & 0xfUL);
-	    word1 = (((HOST_WIDE_INT) data[1] << 8) & 0xfffffffUL)
+	    word1 = (((HOST_WIDE_INT) ((unsigned long) data[1]
+				       & 0x0fffffffUL)) << 8)
 	      + (((unsigned long) data[2] >> 24) & 0xffUL);
 	    assemble_integer (GEN_INT (word0), 4, align, 1);
 	    assemble_integer (GEN_INT (word1), 4, nalign, 1);

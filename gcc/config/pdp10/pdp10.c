@@ -2663,7 +2663,7 @@ pdp10_print_operand (stream, x, code)
 
 	  if (code != 'A')
 	    {
-	      z = ((HWINT (y[1]) << 8) & 0xfffffffUL)
+	      z = ((HWINT (y[1]) << 8) & (HOST_WIDE_INT) PDP10_WORD36_MASK)
 		+ HWINT (((y[2] >> 24) & 0xffUL));
 	      pdp10_print_unsigned (stream, z);
 	    }
@@ -10720,7 +10720,7 @@ pdp10_expand_dmove (destination, source)
 
 	  high = (((HOST_WIDE_INT)y[0] << 4)
 		  + (HOST_WIDE_INT)((y[1] >> 28) & 0xfUL));
-	  low = ((((HOST_WIDE_INT)y[1] << 8) & 0xfffffffUL)
+	  low = ((((HOST_WIDE_INT)y[1] << 8) & (HOST_WIDE_INT) PDP10_WORD36_MASK)
 		 + (HOST_WIDE_INT)((y[2] >> 24) & 0xffUL));
 	}
 
@@ -10795,7 +10795,7 @@ pdp10_expand_move_4 (destination, source)
 
 	  high = (((HOST_WIDE_INT)y[0] << 4)
 		  + (HOST_WIDE_INT)((y[1] >> 28) & 0xfUL));
-	  low = ((((HOST_WIDE_INT)y[1] << 8) & 0xfffffffUL)
+	  low = ((((HOST_WIDE_INT)y[1] << 8) & (HOST_WIDE_INT) PDP10_WORD36_MASK)
 		 + (HOST_WIDE_INT)((y[2] >> 24) & 0xffUL));
 	}
 
