@@ -8,9 +8,10 @@
 TARGET_LIBGCC2_CFLAGS = -fomit-frame-pointer -DUNDERSCORE=__ -Dinhibit_libc -march=base -mtune=166 -munextended -mno-string -mlong-long-71bit
 LIBGCC2_DEBUG_CFLAGS = -g0
 
-# Early DAIMOS baseline has no floating-point runtime yet.  Do not build
-# libgcc2 floating conversion helpers; they would require target FP codegen
-# and assembler FP opcode support which are deliberately deferred.
+# Keep generic libgcc2 floating conversions that are not yet implemented
+# out of this freestanding runtime.  PDP-10-specific SF/DF conversions and
+# comparisons are supplied by libgcc1.s; DF add/sub are supplied by the
+# baseline-safe C89 software implementation below.
 LIB2FUNCS_EXCLUDE = _floatdidf _floatdisf _fixunsdfsi _fixunssfsi _exit _eprintf \
   _bb _fixunsdfdi _fixdfdi _fixunssfdi _fixsfdi _fixxfdi _fixunsxfdi _floatdixf \
   _fixunsxfsi _fixtfdi _fixunstfdi _floatditf __main _trampoline _divdi3 _moddi3 \
@@ -51,7 +52,7 @@ LIB1ASM_CFLAGS = -Wp,-P -DPDP10_DOBJ
 LIB2ASM_CFLAGS = -Wp,-P
 
 # Provide a real public abort symbol for freestanding pdp10-dec-none users.
-LIB2FUNCS_EXTRA = $(srcdir)/config/pdp10/abort.asm
+LIB2FUNCS_EXTRA = $(srcdir)/config/pdp10/abort.asm $(srcdir)/config/pdp10/pdp10-softdf.c
 
 # DOBJ objects are archived directly as DARC1.  DARC carries its symbol index
 # by construction, so there is no target ranlib pass.
