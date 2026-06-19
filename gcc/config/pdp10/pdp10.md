@@ -207,14 +207,14 @@
 ;;	; loop
 ;;	jumple 3,.+5
 ;;	 lshc 1,-1
-;;	 tlne 1,200000
-;;	  tlo 1,400000
+;;	 tlne 1,0200000
+;;	  tlo 1,0400000
 ;;	 sojg 3,.-3
 ;;
 ;;	; only works if n <= 70
-;;	tlnn 1,400000
+;;	tlnn 1,0400000
 ;;	 tdza 4,4
-;;	  movsi 4,400000
+;;	  movsi 4,0400000
 ;;	movei 5,0
 ;;	ashc 4,3
 ;;	lsh 5,1
@@ -228,7 +228,7 @@
 ;;	tlne 1,mask1
 ;;	 tlo 1,mask2
 ;;
-;;	skipge 1	; or cail 1,0 or jumpge 1,.+2 or tlne 1,400000
+;;	skipge 1	; or cail 1,0 or jumpge 1,.+2 or tlne 1,0400000
 ;;	 iori 2,<2^n-1>
 ;;	rotc 1,-n
 ;;
@@ -237,21 +237,21 @@
 ;;	jfcl .+1	; multiply AC1 by AC3
 ;;	mul 1,3
 ;;	lsh 2,1
-;;	jov [movsi 1,200000
+;;	jov [movsi 1,0200000
 ;;	     jrst .+4]
 ;;	lshc 1,-1
-;;	tlne 1,200000
-;;	 tlo 1,400000	; result in AC1 and AC2
+;;	tlne 1,0200000
+;;	 tlo 1,0400000	; result in AC1 and AC2
 ;;
 ;;	mul 1,3
 ;;	lsh 2,1
-;;	jumpe 2,[cam 1,[400000000000]
+;;	jumpe 2,[cam 1,[0400000000000]
 ;;	          jrst .+1
-;;	         movsi 1,200000
+;;	         movsi 1,0200000
 ;;	         jrst .+4]
 ;;	lshc 1,-1
-;;	tlne 1,200000
-;;	 tlo 1,400000	; result in AC1 and AC2
+;;	tlne 1,0200000
+;;	 tlo 1,0400000	; result in AC1 and AC2
 ;;
 ;;	...
 ;;	lshc 1,-1
@@ -265,12 +265,12 @@
 ;;
 ;;	jfcl .+1	; multiply AC1 by AC3
 ;;	mul 1,3
-;;	jov [movsi 1,200000
+;;	jov [movsi 1,0200000
 ;;	     movei 2,0
 ;;	     jrst .+5]
 ;;	trne 1,1
-;;	 tloa 2,400000
-;;	  tlz 2,400000
+;;	 tloa 2,0400000
+;;	  tlz 2,0400000
 ;;	ash 1,-1	; result in AC1 and AC2
 ;;
 ;;	 377777,,777777 ^ 2		 =  177777,,777777 000000,,000001
@@ -288,7 +288,7 @@
 ;;
 ;;	jfcl .+1	; multiply AC1 by AC2
 ;;	mulm 2,1
-;;	jov [movsi 1,200000
+;;	jov [movsi 1,0200000
 ;;	     jrst .+2]
 ;;	ash 1,-1	; result in AC1
 ;;
@@ -310,7 +310,7 @@
 ;;	lsh 4,1
 ;;	lshc 3,1
 ;;	trne 2,1
-;;	 tlo 3,400000	; result in AC3 and AC4
+;;	 tlo 3,0400000	; result in AC3 and AC4
 ;;
 ;;	dmul 1,3
 ;;	lsh 4,1
@@ -639,7 +639,7 @@
         (zero_extend:SI
 	 (match_operand:QI 1 "pdp10_maybe_volatile_memory_operand" "m")))]
   "pdp10_scalar_mem_p (operands[1])"
-  "move %0,%W1\;andi %0,777")
+  "move %0,%W1\;andi %0,0777")
 ; (define_insn ""
 ;   [(set (match_operand:SI 0 "register_operand" "=r")
 ; 	(and:SI
@@ -655,7 +655,7 @@
 		    (match_operand 2 "const_int_operand" "")]
 		   UNSPEC_ZERO_EXTEND))]
   "pdp10_scalar_mem_p (operands[1])"
-  "move %0,%W1\;andi %0,777")
+  "move %0,%W1\;andi %0,0777")
 
 ;; Store scalar chars using MOVEM.
 (define_insn ""
@@ -1294,9 +1294,9 @@
             return "";
           }
 	if (which_alternative == 0)
-	  return "ildb %0,%1\;trne %0,400\;%_orcmi %0,777";
+	  return "ildb %0,%1\;trne %0,0400\;%_orcmi %0,0777";
 	else
-	  return "ldb %0,%1\;trne %0,400\;%_orcmi %0,777";
+	  return "ldb %0,%1\;trne %0,0400\;%_orcmi %0,0777";
       }
   }
   [(set_attr "length" "3")
@@ -2073,14 +2073,14 @@
   [(set (match_operand:DI 0 "register_operand" "=r")
         (sign_extend:DI (match_operand:SI 1 "register_operand" "r")))]
   "TARGET_71BIT"
-  "move %Z0,%1\;move %0,%1\;ash %0,-43"
+  "move %Z0,%1\;move %0,%1\;ash %0,-043"
   [(set_attr "length" "3")])
 
 (define_insn "zero_extendsidi2"
   [(set (match_operand:DI 0 "register_operand" "=r")
         (zero_extend:DI (match_operand:SI 1 "register_operand" "r")))]
   "TARGET_71BIT"
-  "move %Z0,%1\;move %0,%1\;lsh %0,-43\;tlz %Z0,400000"
+  "move %Z0,%1\;move %0,%1\;lsh %0,-043\;tlz %Z0,0400000"
   [(set_attr "length" "4")])
 
 (define_expand "movdi"
@@ -2386,7 +2386,7 @@
 			 (match_operand:SI 2 "reg_or_mem_operand" "rm"))
 		(const_int SIGNBIT)))]
   ""
-  "add %0,%2\;tlc %0,400000")
+  "add %0,%2\;tlc %0,0400000")
 
 ;; Calculate the truth value of unsigned addition carry tests with ADD
 ;; and JCRY0.  Generic DImode addition lowering commonly tests carry as
@@ -2490,14 +2490,14 @@
 	(lt:SI (match_operand:DF 1 "register_operand" "0")
 	       (match_operand:DF 2 "immediate_operand" "R")))]
   ""
-  "lsh %0,-43")
+  "lsh %0,-043")
 
 (define_insn "*sgedf"
   [(set (match_operand:SI 0 "register_operand" "=r")
 	(ge:SI (match_operand:DF 1 "register_operand" "0")
 	       (match_operand:DF 2 "immediate_operand" "R")))]
   ""
-  "lsh %0,-43\;xori %0,1"
+  "lsh %0,-043\;xori %0,1"
   [(set_attr "length" "2")])
 
 ;; (define_expand "cmovsi6" ...)
@@ -2919,7 +2919,7 @@
 		    (match_operand:SI 1 "register_operand" "r")]
 		   UNSPEC_MULSI_LOW))]
   ""
-  "trne %1,1\;%_tloa %0,400000\;%_%_tlz %0,400000"
+  "trne %1,1\;%_tloa %0,0400000\;%_%_tlz %0,0400000"
   [(set_attr "length" "3")])
 
 (define_insn "*imulsi3_fast_signed_low"
@@ -3017,7 +3017,7 @@
 	   (sign_extend:DI (match_operand:SI 2 "register_operand" "r")))
 	  (const_int 36))))]
   "0"
-  "jfcl .+1\;mulm %2,%0\;jov [movsi %0,200000\;%_%_%_%_%_jrst .+2]\;ash %0,-1"
+  "jfcl .+1\;mulm %2,%0\;jov [movsi %0,0200000\;%_%_%_%_%_jrst .+2]\;ash %0,-1"
   [(set_attr "length" "4")])
 
 (define_insn "*smulsi3_highpart_71"
@@ -3110,7 +3110,7 @@
 ;; KA10/PDP-6-class 71-bit DImode multiply.  The hardware MUL result
 ;; is not already in the backend's normalized 71-bit DImode storage shape:
 ;; for example, low-limb 2^34 * 2 comes back from MUL as 1,,0 while
-;; adddi3's canonical value for 2^35 is 0,,400000000000.  Normalize the
+;; adddi3's canonical value for 2^35 is 0,,0400000000000.  Normalize the
 ;; low-limb MUL result before adding the cross terms.  This mirrors the
 ;; existing raw72 MUL canonicalization step, but keeps the default 71-bit
 ;; arithmetic path away from the raw 72-bit multiply pattern.
@@ -3122,9 +3122,9 @@
   "TARGET_71BIT && !TARGET_KI10up"
   {
     if (TARGET_166)
-      return "move %0,%Z1\;mul %0,%Z2\;trne %0,1\;tloa %Z0,400000\;tlz %Z0,400000\;ash %0,-1\;tlnn %Z1,400000\;jrst .+3\;jumpl %1,.+2\;add %0,%Z2\;tlnn %Z2,400000\;jrst .+3\;jumpl %2,.+2\;add %0,%Z1\;jumpge %1,.+2\;add %0,%Z2\;jumpge %2,.+2\;add %0,%Z1\;move %3,%1\;move %Z3,%2\;imul %Z3,%Z1\;add %0,%Z3\;imul %3,%Z2\;add %0,%3";
+      return "move %0,%Z1\;mul %0,%Z2\;trne %0,1\;tloa %Z0,0400000\;tlz %Z0,0400000\;ash %0,-1\;tlnn %Z1,0400000\;jrst .+3\;jumpl %1,.+2\;add %0,%Z2\;tlnn %Z2,0400000\;jrst .+3\;jumpl %2,.+2\;add %0,%Z1\;jumpge %1,.+2\;add %0,%Z2\;jumpge %2,.+2\;add %0,%Z1\;move %3,%1\;move %Z3,%2\;imul %Z3,%Z1\;add %0,%Z3\;imul %3,%Z2\;add %0,%3";
 
-    return "move %0,%Z1\;mul %0,%Z2\;trne %0,1\;tloa %Z0,400000\;tlz %Z0,400000\;ash %0,-1\;jumpge %1,.+2\;add %0,%Z2\;jumpge %2,.+2\;add %0,%Z1\;move %3,%1\;move %Z3,%2\;imul %Z3,%Z1\;add %0,%Z3\;imul %3,%Z2\;add %0,%3";
+    return "move %0,%Z1\;mul %0,%Z2\;trne %0,1\;tloa %Z0,0400000\;tlz %Z0,0400000\;ash %0,-1\;jumpge %1,.+2\;add %0,%Z2\;jumpge %2,.+2\;add %0,%Z1\;move %3,%1\;move %Z3,%2\;imul %Z3,%Z1\;add %0,%Z3\;imul %3,%Z2\;add %0,%3";
   }
   [(set_attr "length" "16")])
 
@@ -3154,7 +3154,7 @@
 		 (match_operand:DI 2 "register_operand" "r")))
    (clobber (match_scratch:DI 3 "=&r"))]
   "!TARGET_71BIT"
-  "move %0,%Z1\;mul %0,%Z2\;came %Z1,[400000000000]\;jrst .+6\;came %Z2,[400000000000]\;jrst .+4\;move %0,[200000000000]\;movei %Z0,0\;jrst .+9\;trne %0,1\;tloa %Z0,400000\;tlz %Z0,400000\;ash %0,-1\;tlne %Z1,400000\;add %0,%Z2\;tlne %Z2,400000\;add %0,%Z1\;move %3,%1\;mul %3,%Z2\;trne %3,1\;tloa %Z3,400000\;tlz %Z3,400000\;add %0,%Z3\;move %3,%Z1\;mul %3,%2\;trne %3,1\;tloa %Z3,400000\;tlz %Z3,400000\;add %0,%Z3"
+  "move %0,%Z1\;mul %0,%Z2\;came %Z1,[0400000000000]\;jrst .+6\;came %Z2,[0400000000000]\;jrst .+4\;move %0,[0200000000000]\;movei %Z0,0\;jrst .+9\;trne %0,1\;tloa %Z0,0400000\;tlz %Z0,0400000\;ash %0,-1\;tlne %Z1,0400000\;add %0,%Z2\;tlne %Z2,0400000\;add %0,%Z1\;move %3,%1\;mul %3,%Z2\;trne %3,1\;tloa %Z3,0400000\;tlz %Z3,0400000\;add %0,%Z3\;move %3,%Z1\;mul %3,%2\;trne %3,1\;tloa %Z3,0400000\;tlz %Z3,0400000\;add %0,%Z3"
   [(set_attr "length" "29")])
 
 (define_insn "TRNE_TLO"
@@ -3163,7 +3163,7 @@
 		    (match_operand:SI 2 "register_operand" "r")]
 		   UNSPEC_TRNE_TLO))]
   ""
-  "trne %2,1\;%_tlo %0,400000"
+  "trne %2,1\;%_tlo %0,0400000"
   [(set_attr "length" "2")])
 
 (define_expand "mulditi3"
@@ -3376,7 +3376,7 @@
         (umod:SI (match_dup 1) (match_dup 2)))
    (clobber (match_scratch:SI 3 "=&r"))]
   ""
-  "jumpge %2,.+14\;move %0,%1\;tlc %0,400000\;move %3,%2\;tlc %3,400000\;camge %0,%3\;jrst .+5\;movei %0,1\;move %Z0,%1\;sub %Z0,%2\;jrst .+7\;movei %0,0\;move %Z0,%1\;jrst .+4\;move %Z0,%1\;setz %0,\;div %0,%2"
+  "jumpge %2,.+14\;move %0,%1\;tlc %0,0400000\;move %3,%2\;tlc %3,0400000\;camge %0,%3\;jrst .+5\;movei %0,1\;move %Z0,%1\;sub %Z0,%2\;jrst .+7\;movei %0,0\;move %Z0,%1\;jrst .+4\;move %Z0,%1\;setz %0,\;div %0,%2"
   [(set_attr "length" "17")])
 
 (define_expand "udivsi3"
@@ -3544,15 +3544,15 @@
 	(neg:DI (match_operand:DI 1 "reg_or_mem_operand" "0,ro")))]
   "TARGET_71BIT && !TARGET_KI10up"
   "@
-   tlz %Z0,400000\;setca %0,\;jumpe %Z0,[aoja %0,.+2]\;%_movn %Z0,%Z0\;tlz %Z0,400000\;tlne %0,400000\;%_tlo %Z0,400000
-   setcm %0,%1\;move %Z0,%Z1\;tlz %Z0,400000\;jumpe %Z0,[aoja %0,.+2]\;%_movn %Z0,%Z0\;tlz %Z0,400000\;tlne %0,400000\;%_tlo %Z0,400000"
+   tlz %Z0,0400000\;setca %0,\;jumpe %Z0,[aoja %0,.+2]\;%_movn %Z0,%Z0\;tlz %Z0,0400000\;tlne %0,0400000\;%_tlo %Z0,0400000
+   setcm %0,%1\;move %Z0,%Z1\;tlz %Z0,0400000\;jumpe %Z0,[aoja %0,.+2]\;%_movn %Z0,%Z0\;tlz %Z0,0400000\;tlne %0,0400000\;%_tlo %Z0,0400000"
   [(set_attr "length" "7,8")])
 
 (define_insn "*DMOVN"
   [(set (match_operand:DI 0 "register_operand" "=r")
 	(neg:DI (match_operand:DI 1 "reg_or_mem_operand" "rm")))]
   "TARGET_71BIT && TARGET_KI10up"
-  "dmovn %0,%1\;tlne %0,400000\;%_tlo %Z0,400000"
+  "dmovn %0,%1\;tlne %0,0400000\;%_tlo %Z0,0400000"
   [(set_attr "length" "3")])
 
 (define_insn "abssi2"
@@ -3731,7 +3731,7 @@
     if (zero_extended_p (operands[0], 27, insn))
       return "";
     else
-      return "andi %0,777%; zero_extendqisi2";
+      return "andi %0,0777%; zero_extendqisi2";
   })
 
 (define_insn "zero_extendhisi2"
@@ -3808,7 +3808,7 @@
     if (sign_extended_p (operands[0], 27, insn))
       return "";
     else if (zero_extended_p (operands[0], 27, insn))
-      return "trne %0,400\;%_orcmi %0,777";
+      return "trne %0,0400\;%_orcmi %0,0777";
     else
       return "lsh %0,033\;ash %0,-033";
   }
@@ -3857,7 +3857,7 @@
   [(set (match_operand:QI 0 "register_operand" "=r")
 	(truncate:QI (match_operand:SI 1 "register_operand" "0")))]
   ""
-  "andi %0,777%; truncsiqi2")
+  "andi %0,0777%; truncsiqi2")
 
 (define_insn "truncsihi2"
   [(set (match_operand:HI 0 "register_operand" "=r")
@@ -4164,7 +4164,7 @@
       }
     /*else if (GET_CODE (operands[2]) == CONST_INT
 	     && INTVAL (operands[2]) == -1)
-      return "ashc %0,-1\;tlze %0,400000\;tlz %Z0,400000";*/
+      return "ashc %0,-1\;tlze %0,0400000\;tlz %Z0,0400000";*/
     else if (GET_CODE (operands[2]) == CONST_INT
 	     && (n = INTVAL (operands[2])) >= -18)
       {
@@ -4172,7 +4172,7 @@
 	static char insn[100];
 
 	snprintf (insn, sizeof insn,
-		  "ashc %%0,%%2\;tlze %%0,%o\;tlz %%Z0,400000",
+		  "ashc %%0,%%2\;tlze %%0,%o\;tlz %%Z0,0400000",
 		  mask);
 	return insn;
       }
@@ -4321,7 +4321,7 @@
 		    n < 18 ? "tlne %%0,%o" : "trne %%0,%o",
 		    0400000 >> (n < 18 ? n: n - 18));
 	  output_asm_insn (insn, operands);
-          return "%_tloa %0,400000\;%_%_tlz %0,400000\;ashc %0,%2";
+          return "%_tloa %0,0400000\;%_%_tlz %0,0400000\;ashc %0,%2";
 	}
       case 5:
         output_asm_insn (asms[which_alternative], operands);
@@ -4330,7 +4330,7 @@
         abort ();
       }
 
-    return "tlne %0,400000\;%_tlo %Z0,400000";
+    return "tlne %0,0400000\;%_tlo %Z0,0400000";
   }
   [(set (attr "length")
 	(if_then_else (match_operand 2 "const_int_operand" "")
@@ -4354,7 +4354,7 @@
 		   (plus:SI (match_operand:SI 2 "register_operand" "x")
 			    (match_operand:SI 3 "immediate_operand" "K"))))]
   "TARGET_71BIT"
-  "lsh %Z0,1\;lshc %0,%3(%2)\;lsh %Z0,-1\;tlne %0,400000\;%_tlo %Z0,400000"
+  "lsh %Z0,1\;lshc %0,%3(%2)\;lsh %Z0,-1\;tlne %0,0400000\;%_tlo %Z0,0400000"
   [(set_attr "length" "5")])
 
 (define_expand "ashrdi3"
@@ -4447,7 +4447,7 @@
 	(ashiftrt:DI (match_operand:DI 1 "register_operand" "0")
 		     (const_int 36)))]
   "!TARGET_71BIT"
-  "move %Z0,%0\;ash %0,-43"
+  "move %Z0,%0\;ash %0,-043"
   [(set_attr "length" "2")])
 
 (define_insn "sign_extension_di"
@@ -4457,11 +4457,11 @@
   "!TARGET_71BIT"
   {
     if (which_alternative == 0)
-      return "ash %0,-43\;move %Z0,%0";
+      return "ash %0,-043\;move %Z0,%0";
     else if (REGNO (operands[0]) + 1 == REGNO (operands[1]))
-      return "ash %Z0,-43\;move %0,%Z0";
+      return "ash %Z0,-043\;move %0,%Z0";
     else
-      return "move %0,%1\;ash %0,-43\;move %Z0,%0";
+      return "move %0,%1\;ash %0,-043\;move %Z0,%0";
   }
   [(set_attr "length" "2,3")])
 
@@ -5496,13 +5496,13 @@
   [(set (match_operand:SF 0 "register_operand" "=r")
 	(unsigned_float:SF (match_operand:QI 1 "register_operand" "0")))]
   ""
-  "fsc %0,233")
+  "fsc %0,0233")
 
 (define_insn "floatunshisf2"
   [(set (match_operand:SF 0 "register_operand" "=r")
 	(unsigned_float:SF (match_operand:HI 1 "register_operand" "0")))]
   ""
-  "fsc %0,233")
+  "fsc %0,0233")
 
 (define_insn "floatsisf2"
   [(set (match_operand:SF 0 "register_operand" "=r")
@@ -5544,14 +5544,14 @@
   [(set (match_operand:DF 0 "register_operand" "=r")
 	(unsigned_float:DF (match_operand:QI 1 "register_operand" "0")))]
   "!TARGET_GFLOAT"
-  "fsc %0,233\;movei %Z0,0"
+  "fsc %0,0233\;movei %Z0,0"
   [(set_attr "length" "2")])
 
 (define_insn "floatunshidf2"
   [(set (match_operand:DF 0 "register_operand" "=r")
 	(unsigned_float:DF (match_operand:HI 1 "register_operand" "0")))]
   "!TARGET_GFLOAT"
-  "fsc %0,233\;movei %Z0,0"
+  "fsc %0,0233\;movei %Z0,0"
   [(set_attr "length" "2")])
 
 (define_expand "floatsidf2"
