@@ -55,6 +55,7 @@ LIB2ASM_CFLAGS = -Wp,-P
 LIB2FUNCS_EXTRA = $(srcdir)/config/pdp10/abort.asm \
 	$(srcdir)/config/pdp10/pdp10-softdf.c \
 	$(srcdir)/config/pdp10/pdp10-softdf-mul.c \
+	$(srcdir)/config/pdp10/pdp10-softdf-div.c
 
 # DOBJ objects are archived directly as DARC1.  DARC carries its symbol index
 # by construction, so there is no target ranlib pass.
