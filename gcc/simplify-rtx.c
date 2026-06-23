@@ -2275,7 +2275,15 @@ simplify_subreg (outermode, op, innermode, byte)
 	 Later it we should move all simplification code here and rewrite
 	 GEN_LOWPART_IF_POSSIBLE, GEN_HIGHPART, OPERAND_SUBWORD and friends
 	 using SIMPLIFY_SUBREG.  */
-      if (subreg_lowpart_offset (outermode, innermode) == byte)
+      if (subreg_lowpart_offset (outermode, innermode) == byte
+	  /* A SUBREG between integer and floating modes is a bit
+	     reinterpretation, not a numeric conversion.  In particular,
+	     gen_lowpart_if_possible may turn an integer CONST_DOUBLE into
+	     a floating CONST_DOUBLE with the same numeric value rather than
+	     preserving its object representation.  Leave such constants as
+	     SUBREGs so the target can move the raw bits unchanged.  */
+	  && ((GET_MODE_CLASS (outermode) == MODE_FLOAT)
+	      == (GET_MODE_CLASS (innermode) == MODE_FLOAT)))
 	{
 	  rtx new = gen_lowpart_if_possible (outermode, op);
 	  if (new)
