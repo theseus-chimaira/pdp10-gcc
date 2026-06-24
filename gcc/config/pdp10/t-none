@@ -54,6 +54,7 @@ LIB2ASM_CFLAGS = -Wp,-P
 # Provide a real public abort symbol for freestanding pdp10-dec-none users.
 LIB2FUNCS_EXTRA = $(srcdir)/config/pdp10/abort.asm \
 	$(srcdir)/config/pdp10/pdp10-softdf.c \
+	$(srcdir)/config/pdp10/pdp10-softdf-neg.c \
 	$(srcdir)/config/pdp10/pdp10-softdf-mul.c \
 	$(srcdir)/config/pdp10/pdp10-softdf-div.c
 

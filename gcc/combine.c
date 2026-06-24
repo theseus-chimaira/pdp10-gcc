@@ -9884,7 +9884,11 @@ gen_lowpart_for_combine (mode, x)
 #if REAL_BITS_PER_UNIT == 9
       return adjust_address_nv (x, mode, offset);
 #else
-      /* PDP-10.  */
+      /* PDP-10 subword memory accesses use a ZERO_EXTRACT wrapper.
+         Word-sized and wider modes are directly addressable and must not
+         be wrapped: doing so would create a negative SUBREG byte offset.  */
+      if (GET_MODE_SIZE (mode) >= UNITS_PER_WORD)
+	return adjust_address_nv (x, mode, offset);
       return
 	gen_rtx_SUBREG
 	(mode,

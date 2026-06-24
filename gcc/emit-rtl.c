@@ -1299,11 +1299,20 @@ constant_subword (op, offset, mode)
 	  return GEN_INT (val);
 	}
 #if HOST_BITS_PER_WIDE_INT >= 64
-      else if (BITS_PER_WORD == 36 && offset == 0)
+      else if (BITS_PER_WORD == 36 && offset <= 1)
 	{
-	  val = k[0];
-	  val = (((val & 0xffffffff) ^ 0x80000000) - 0x80000000) << 4;
-	  val |= (HOST_WIDE_INT) (k[1] >> 28) & 0xf;
+	  if (offset == 0)
+	    {
+	      val = k[0];
+	      val = (((val & 0xffffffff) ^ 0x80000000) - 0x80000000) << 4;
+	      val |= (HOST_WIDE_INT) (k[1] >> 28) & 0xf;
+	    }
+	  else
+	    {
+	      val = ((HOST_WIDE_INT) k[1] << 8) & ((((HOST_WIDE_INT) 1) << 36) - 1);
+	      val |= (HOST_WIDE_INT) (k[2] >> 24) & 0xff;
+	      val = trunc_int_for_mode (val, SImode);
+	    }
 	  return GEN_INT (val);
 	}
       else if (BITS_PER_WORD >= 64 && offset == 0)
@@ -1915,7 +1924,8 @@ change_address (memref1, mode, addr)
 		     mmode);
 
   new = mem;
-  if (GET_CODE (memref1) == SUBREG
+  if (GET_MODE_SIZE (mmode) < UNITS_PER_WORD
+      && GET_CODE (memref1) == SUBREG
       && GET_CODE (SUBREG_REG (memref1)) == ZERO_EXTRACT)
     new = gen_rtx_SUBREG (mmode,
 			  gen_rtx_ZERO_EXTRACT (SImode,
@@ -1994,7 +2004,8 @@ adjust_address_1 (_memref, mode, offset, validate, adjust)
   MEM_ATTRS (new) = get_mem_attrs (MEM_ALIAS_SET (memref), MEM_EXPR (memref),
 				   memoffset, size, memalign, GET_MODE (new));
 
-  if (GET_CODE (_memref) == SUBREG
+  if (GET_MODE_SIZE (mode) < UNITS_PER_WORD
+      && GET_CODE (_memref) == SUBREG
       && GET_CODE (SUBREG_REG (_memref)) == ZERO_EXTRACT)
     {
       PUT_MODE (new, SImode);
