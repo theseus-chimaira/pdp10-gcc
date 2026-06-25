@@ -44,7 +44,9 @@ LIB2FUNCS_EXCLUDE = _floatdidf _floatdisf _fixunsdfsi _fixunssfsi _exit _eprintf
 # DARC/DLINK provide normal archive extraction, so helpers no longer need
 # bare-only ownership names merely to avoid local-label collisions.
 LIB1ASMSRC = pdp10/libgcc1.s
-LIB1ASMFUNCS = _main _divdi3 _udivsi3 _umodsi3 _fixsfsi _fixdfsi _floatsisf _floatsidf _floatunssisf _cmpdf2
+LIB1ASMFUNCS = _main _divdi3 _udivsi3 _umodsi3 _fixsfsi _fixdfsi \
+	_floatsisf _floatsidf _floatunssisf _cmpdf2 \
+	BADL6 BADL7 BADL8 BADL9 BADLH BADX6 BADX7 BADX8 BADXH
 
 # DAS does not recognize GNU assembler-style CPP line markers.
 # Suppress them only for preprocessed libgcc assembly sources.
