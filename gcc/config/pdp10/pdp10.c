@@ -159,6 +159,13 @@ typedef unsigned long long pdp10_word36;
  ((SIZE) == 6 || (SIZE) == 7 || (SIZE) == 8 || (SIZE) == 9 \
   || (SIZE) == 16 || (SIZE) == 18)
 
+/* One-word global byte-pointer selectors exist only for the architectural
+   byte sizes below.  Exact 16-bit bytes are supported by the language and
+   local P,S pointers, but require the non-OWGBP representation.  */
+#define VALID_OWGBP_SELECTOR_BYTE_SIZE_P(SIZE) \
+ ((SIZE) == 6 || (SIZE) == 7 || (SIZE) == 8 || (SIZE) == 9 \
+  || (SIZE) == 18)
+
 /* Special pseudo byte index used when taking the address of a
    standalone scalar object stored right-justified in a full PDP-10 word.
    It is not a canonical array byte.  */
@@ -1024,7 +1031,7 @@ pdp10_data_padding (decl, x)
       o = BITS_PER_WORD / bytesize - 1;
     }
 
-  if (TARGET_EXTENDED)
+  if (TARGET_EXTENDED && VALID_OWGBP_SELECTOR_BYTE_SIZE_P (bytesize))
     {
       ps = ps_base_for_bytesize (bytesize) + o;
       ps <<= 6;
@@ -2875,7 +2882,7 @@ print_byte_pointer (stream, x, size, pos)
     {
       /* Need a global byte pointer.  */
 
-      if (VALID_OWGBP_BYTE_SIZE_P (size) && (pos % size == 0))
+      if (VALID_OWGBP_SELECTOR_BYTE_SIZE_P (size) && (pos % size == 0))
 	{
 	  /* Output a one-word global byte pointer.  */
 
@@ -15421,7 +15428,9 @@ pdp10_convert_pointer (exp, op0, target, mod, stack, not_null)
 	  if (modifier == EXPAND_INITIALIZER)
 	    return NULL_RTX;
 	}
-      else if (!TARGET_EXTENDED)
+      else if (!TARGET_EXTENDED
+               || !VALID_OWGBP_SELECTOR_BYTE_SIZE_P (from)
+               || !VALID_OWGBP_SELECTOR_BYTE_SIZE_P (to))
 	{
 	  ps = (offset >> 24) & 07777;
 	  addr = offset & ADDRESS_MASK;
@@ -15473,7 +15482,9 @@ pdp10_convert_pointer (exp, op0, target, mod, stack, not_null)
 
   maybe_warn_about_pointer_conversion (exp, from, to);
 
-  if (TARGET_EXTENDED)
+  if (TARGET_EXTENDED
+      && (from == 36 || VALID_OWGBP_SELECTOR_BYTE_SIZE_P (from))
+      && (to == 36 || VALID_OWGBP_SELECTOR_BYTE_SIZE_P (to)))
     op0 = convert_global_pointer (op0, from, to, byte);
   else
     {
@@ -15569,7 +15580,9 @@ pdp10_convert_ptr (exp, op0, target, from, to, not_null)
 
       if (pdp10_decompose_symbolic_word36 (op0, &base, &offset))
 	{
-	  if (!TARGET_EXTENDED)
+	  if (!TARGET_EXTENDED
+              || !VALID_OWGBP_SELECTOR_BYTE_SIZE_P (from)
+              || !VALID_OWGBP_SELECTOR_BYTE_SIZE_P (to))
 	    {
 	      ps = (offset >> 24) & 07777;
 	      addr = offset & ADDRESS_MASK;
@@ -15616,7 +15629,9 @@ pdp10_convert_ptr (exp, op0, target, from, to, not_null)
 
   maybe_warn_about_pointer_conversion (exp, from, to);
 
-  if (TARGET_EXTENDED)
+  if (TARGET_EXTENDED
+      && (from == 36 || VALID_OWGBP_SELECTOR_BYTE_SIZE_P (from))
+      && (to == 36 || VALID_OWGBP_SELECTOR_BYTE_SIZE_P (to)))
     op0 = convert_global_pointer (op0, from, to, byte);
   else
     op0 = convert_local_pointer (op0, from, to, byte);
