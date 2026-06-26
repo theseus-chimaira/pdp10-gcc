@@ -618,6 +618,14 @@ pdp10_override_options ()
     }
 #endif
 
+  /* The generic post-reload register renamer does not know about PDP-10
+     instructions whose named AC also denotes consecutive ACs.  Renaming one
+     member of such an allocation can invalidate reload's liveness model and
+     has produced both wrong code and verify_local_live_at_start ICEs.
+     Keep this pass disabled until those consecutive-AC constraints are fully
+     represented in RTL.  */
+  flag_rename_registers = 0;
+
   /* -mcpu is short for both -march and -mtune.  */
   if (pdp10_cpu)
     {
