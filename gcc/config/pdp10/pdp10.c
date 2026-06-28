@@ -6596,8 +6596,7 @@ pdp10_assemble_integer (x, size, aligned_p)
   if (aligned_p
       && size == 4
       && (pdp10_const_byte_pointer_p (x)
-	  || (!TARGET_EXTENDED
-	      && pdp10_decompose_symbolic_constant (x, &base, &offset))))
+	  || pdp10_decompose_symbolic_constant (x, &base, &offset)))
     {
       pdp10_output_byte (asm_out_file, NULL_RTX, 0);
 
@@ -14294,7 +14293,9 @@ pdp10_initializer_byte_pointer (exp)
   if (!logical_bitptr
       && byte_pos + (pdp10_word36) bytesize > BITS_PER_WORD)
     return NULL_RTX;
-  if (!logical_bitptr && TARGET_EXTENDED && byte_pos % bytesize != 0)
+  if (!logical_bitptr && TARGET_EXTENDED
+      && VALID_OWGBP_SELECTOR_BYTE_SIZE_P (bytesize)
+      && byte_pos % bytesize != 0)
     return NULL_RTX;
   word_offset = bitpos / BITS_PER_WORD;
   base_rtx = expand_expr (base_tree, NULL_RTX, VOIDmode,
@@ -14321,11 +14322,13 @@ pdp10_initializer_byte_pointer (exp)
 
   if (logical_bitptr)
     ps = ((BITS_PER_WORD - byte_pos - 1) << 6) + 1;
-  else if (TARGET_EXTENDED)
+  else if (TARGET_EXTENDED && VALID_OWGBP_SELECTOR_BYTE_SIZE_P (bytesize))
     ps = ps_base_for_bytesize (bytesize) + byte_pos / bytesize;
   else
     ps = ((BITS_PER_WORD - byte_pos - bytesize) << 6) + bytesize;
-  encoded = (((pdp10_word36) ps) << (TARGET_EXTENDED ? 30 : 24));
+  encoded = (((pdp10_word36) ps)
+             << (TARGET_EXTENDED
+                 && VALID_OWGBP_SELECTOR_BYTE_SIZE_P (bytesize) ? 30 : 24));
   encoded = (encoded + word_offset) & PDP10_WORD36_MASK;
   offset_rtx = pdp10_gen_word36_constant (encoded);
   return gen_rtx_CONST (Pmode, gen_rtx_PLUS (Pmode, base_addr, offset_rtx));
@@ -14562,9 +14565,6 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
   int ps;
   int logical_bitptr = 0;
 
-  if (TARGET_EXTENDED)
-    return NULL_RTX;
-
   if (exp == NULL_TREE)
     return NULL_RTX;
 
@@ -14581,6 +14581,8 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
 
   bytesize = pdp10_normalize_pointer_bytesize (bytesize);
   if (!VALID_OWGBP_BYTE_SIZE_P (bytesize) || bytesize >= BITS_PER_WORD)
+    return NULL_RTX;
+  if (TARGET_EXTENDED && VALID_OWGBP_SELECTOR_BYTE_SIZE_P (bytesize))
     return NULL_RTX;
 
   if (TREE_CODE (object) == COMPONENT_REF

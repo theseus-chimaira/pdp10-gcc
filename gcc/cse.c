@@ -3749,56 +3749,92 @@ fold_rtx (x, insn)
 					 GEN_INT (pos));
 	      }
 
-	    ps = (offset >> 30) & 077;
+	    /* Extended-mode code can still contain local P,S byte pointers.
+	       This is required for exact16 and logical packed-bit pointers, and
+	       also occurs when a local pointer is deliberately retained across a
+	       conversion boundary.  First try the one-word global selector.  If
+	       it is not one of the architecturally defined selectors, decode the
+	       same constant as a local P,S pointer instead.  CSE is an
+	       optimization; an unrecognized encoding must be left alone rather
+	       than aborting the compiler.  */
+	    {
+	      HOST_WIDE_INT raw_offset = offset;
+	      HOST_WIDE_INT global_offset;
+	      int global_ps = (raw_offset >> 30) & 077;
+	      int global_ok = 1;
 
-	    offset &= 07777777777;
-	    offset ^= 04000000000;
-	    offset -= 04000000000;
+	      global_offset = raw_offset & 07777777777;
+	      global_offset ^= 04000000000;
+	      global_offset -= 04000000000;
+	      ps = global_ps + (global_offset < 0 ? 1 : 0);
+	      switch (ps)
+		{
+		case 0:
+		  return x;
+		case 046:
+		case 047:
+		case 050:
+		case 051:
+		case 052:
+		case 053:
+		  size = 6;
+		  b = 046;
+		  break;
+		case 062:
+		case 063:
+		case 064:
+		case 065:
+		case 066:
+		  size = 7;
+		  b = 062;
+		  break;
+		case 055:
+		case 056:
+		case 057:
+		case 060:
+		  size = 8;
+		  b = 055;
+		  break;
+		case 070:
+		case 071:
+		case 072:
+		case 073:
+		  size = 9;
+		  b = 070;
+		  break;
+		case 075:
+		case 076:
+		  size = 18;
+		  b = 075;
+		  break;
+		default:
+		  global_ok = 0;
+		  break;
+		}
 
-	    if (offset < 0)
-	      ps++;
+	      if (!global_ok)
+		{
+		  HOST_WIDE_INT word_offset;
+		  int local_ps = (raw_offset >> 24) & 07777;
+		  int local_size = local_ps & 077;
 
-	    switch (ps)
-	      {
-	      case 0:
-		return x;
-	      case 046:
-	      case 047:
-	      case 050:
-	      case 051:
-	      case 052:
-	      case 053:
-		size = 6;
-		b = 046;
-		break;
-	      case 062:
-	      case 063:
-	      case 064:
-	      case 065:
-	      case 066:
-		size = 7;
-		b = 062;
-		break;
-	      case 055:
-	      case 056:
-	      case 057:
-	      case 060:
-		size = 8;
-		b = 055;
-		break;
-	      case 070:
-	      case 071:
-	      case 072:
-	      case 073:
-		b = 070;
-		break;
-	      case 075:
-	      case 076:
-		b = 075;
-		break;
-	      default:
-		abort ();
-	      }
+		  if (local_ps == 0 || local_size <= 0 || local_size > 36)
+		    return x;
+		  pos = 36 - local_size - (local_ps >> 6);
+		  if (pos < 0 || pos + local_size > 36)
+		    return x;
+
+		  word_offset = raw_offset & 0777777;
+		  word_offset ^= 0400000;
+		  word_offset -= 0400000;
+		  return gen_rtx_ZERO_EXTRACT
+		    (SImode,
+		     gen_rtx_MEM (SImode, plus_constant (base, word_offset)),
+		     GEN_INT (local_size), GEN_INT (pos));
+		}
+
+	      offset = global_offset;
+	    }
 
 	    pos = size * (ps - b);
 	    return gen_rtx_ZERO_EXTRACT (SImode,
