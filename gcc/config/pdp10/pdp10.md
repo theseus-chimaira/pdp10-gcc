@@ -1967,7 +1967,13 @@
   [(set (match_operand:SI 0 "nonimmediate_operand" "")
         (match_operand:SI 1 "general_operand" ""))]
   ""
-  "if (GET_CODE (operands[0]) == ZERO_EXTRACT)
+  "/* Keep CONST_INT values canonical for the target's 36-bit SImode.
+     Front-end pointer construction can produce the correct 36-bit bit
+     pattern as a positive HOST_WIDE_INT (for example 0700000000000).
+     Reload expects the sign-extended SImode representation instead.  */
+   if (GET_CODE (operands[1]) == CONST_INT)
+     operands[1] = GEN_INT (trunc_int_for_mode (INTVAL (operands[1]), SImode));
+   if (GET_CODE (operands[0]) == ZERO_EXTRACT)
      operands[1] = force_reg (SImode, operands[1]);")
 
 ;; Special version using SKIPA to load a full-word constant.  This may
