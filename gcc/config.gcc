@@ -3619,8 +3619,11 @@ pdp10-*-*)
 		xkl10)
 			target_cpu_default="CPU_KL10|CPU_EXTENDED";
 			;;
-		xxkl1 | xxkl-1 | x)
+		xxkl1 | xxkl-1)
 			target_cpu_default="CPU_XKL1|CPU_EXTENDED|CPU_71BIT";
+			;;
+		x)
+			target_cpu_default="CPU_166";
 			;;
 		xxkl2 | xxkl-2)
 			target_cpu_default="CPU_XKL2|CPU_EXTENDED|CPU_71BIT";
