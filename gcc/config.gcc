@@ -3606,6 +3606,7 @@ mips*-*-*)
 	fi
 	;;
 pdp10-*-*)
+	tmake_file="${tmake_file} pdp10/t-pdp10"
 	case "x$with_cpu" in
 		xka10)
 			target_cpu_default="CPU_KA10";

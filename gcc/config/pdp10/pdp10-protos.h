@@ -305,6 +305,7 @@ extern tree	char9_unsigned_type_node;
   ((void) pdp10_build_machine_types (), char7_unsigned_type_node)
 
 extern void     pdp10_build_machine_types PARAMS ((void));
+extern tree     pdp10_char6_type_decl_v1 PARAMS ((void));
 extern void     pdp10_asm_output_align PARAMS ((FILE *, int));
 
 #endif /* GCC_PDP10_PROTOS_H */

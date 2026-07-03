@@ -79,6 +79,7 @@ static tree digest_init			PARAMS ((tree, tree, int));
 #define PDP10_STRING_CST_9BIT_P(NODE) TREE_LANG_FLAG_1 (NODE)
 #endif
 static HOST_WIDE_INT pdp10_string_cst_logical_length PARAMS ((tree));
+static tree pdp10_char6_string_v1 PARAMS ((tree));
 static void pdp10_complete_array_type_from_string PARAMS ((tree, tree));
 static tree pdp10_asm_string PARAMS ((tree));
 static void pdp10_normalize_asm_operands PARAMS ((tree));
@@ -3972,6 +3973,14 @@ build_c_cast (type, expr)
       if (type == void_type_node)
 	return build1 (CONVERT_EXPR, type, value);
 
+#ifdef __PDP10_H__
+      if (TREE_CODE (value) == STRING_CST
+          && TREE_CODE (type) == POINTER_TYPE
+          && TREE_CODE (TREE_TYPE (type)) == INTEGER_TYPE
+          && TYPE_PRECISION (TREE_TYPE (type)) == 6)
+        value = pdp10_char6_string_v1 (value);
+#endif
+
       /* Convert functions and arrays to pointers,
 	 but don't convert any other types.  */
       value = default_function_array_conversion (value);
@@ -4315,6 +4324,14 @@ convert_for_assignment (type, rhs, errtype, fundecl, funname, parmnum)
      whose value is 0 to count as a null pointer constant.  */
   if (TREE_CODE (rhs) == NON_LVALUE_EXPR)
     rhs = TREE_OPERAND (rhs, 0);
+
+#ifdef __PDP10_H__
+  if (TREE_CODE (rhs) == STRING_CST
+      && codel == POINTER_TYPE
+      && TREE_CODE (TREE_TYPE (type)) == INTEGER_TYPE
+      && TYPE_PRECISION (TREE_TYPE (type)) == 6)
+    rhs = pdp10_char6_string_v1 (rhs);
+#endif
 
   if (TREE_CODE (TREE_TYPE (rhs)) == ARRAY_TYPE
       || TREE_CODE (TREE_TYPE (rhs)) == FUNCTION_TYPE)
@@ -4985,6 +5002,53 @@ pdp10_string_cst_logical_length (str)
    static uchar9 a[] = "..." is given twice the required object size when
    the string literal uses the PDP-10 two-host-byte representation.  */
 
+static tree
+pdp10_char6_string_v1 (str)
+     tree str;
+{
+  const unsigned char *p;
+  HOST_WIDE_INT len, i;
+  int host_unit;
+  char *buf;
+  tree out;
+
+  if (str == NULL_TREE || TREE_CODE (str) != STRING_CST)
+    return str;
+  if (TREE_CHAIN (str))
+    str = combine_strings (str);
+  if (TYPE_PRECISION (TREE_TYPE (TREE_TYPE (str))) == 6)
+    return str;
+
+  len = pdp10_string_cst_logical_length (str);
+  host_unit = PDP10_STRING_CST_9BIT_P (str) ? 2 : 1;
+  p = (const unsigned char *) TREE_STRING_POINTER (str);
+  buf = (char *) alloca (len ? len : 1);
+
+  for (i = 0; i < len; i++)
+    {
+      int c;
+      if (host_unit == 2)
+        {
+          c = (p[0] << 8) | p[1];
+          p += 2;
+        }
+      else
+        c = *p++;
+      if (c != 0)
+        c = TOUPPER (c) - 040;
+      buf[i] = c;
+    }
+
+  out = build_string (len, buf);
+  TREE_TYPE (out)
+    = build_array_type (char6_unsigned_type_node,
+                        build_index_type (build_int_2 (len - 1, 0)));
+  TREE_CONSTANT (out) = 1;
+  TREE_READONLY (out) = TREE_READONLY (str);
+  TREE_STATIC (out) = 1;
+  return out;
+}
+
 static void
 pdp10_complete_array_type_from_string (type, str)
      tree type, str;
@@ -5113,6 +5177,11 @@ digest_init (type, init, require_constant)
   if (code == ARRAY_TYPE)
     {
       tree typ1 = TYPE_MAIN_VARIANT (TREE_TYPE (type));
+      if (inside_init && TREE_CODE (inside_init) == STRING_CST
+          && TREE_CODE (typ1) == INTEGER_TYPE
+          && TYPE_PRECISION (typ1) == 6)
+        inside_init = pdp10_char6_string_v1 (inside_init);
+
       if ((typ1 == char_type_node
 	   || typ1 == signed_char_type_node
 	   || typ1 == unsigned_char_type_node

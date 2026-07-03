@@ -3661,6 +3661,18 @@ pdp10_build_machine_types ()
   done = 1;
 }
 
+tree
+pdp10_char6_type_decl_v1 ()
+{
+  tree decl;
+
+  pdp10_build_machine_types ();
+  decl = build_decl (TYPE_DECL, get_identifier ("char6"),
+                     char6_unsigned_type_node);
+  layout_byte_decl (decl);
+  return decl;
+}
+
 /* Initialize the type in TYPE.  The new type will be suitable as a
    byte of PRECISION bits pointed to by a PDP-10 global byte pointer,
    and will be unsigned if UNSIGNEDP is nonzero.  */

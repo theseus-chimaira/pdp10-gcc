@@ -12,3 +12,20 @@ indicate indirect addressing, 4 bits to specify an index register, and
 18 bits to specify an address or offset.  The first version of the
 architecture was limited to a virtual address space of 256K words; a
 later version extended this to a maximum of 1G words.
+
+PDP-10 C extension: char6
+------------------------
+
+The PDP-10 C front end provides `char6` as an unsigned 6-bit character
+type.  Its pointers use the target's ordinary 6-bit PDP-10 byte-pointer
+machinery.  When a string literal initializes a char6 array, is assigned
+to a char6 pointer, or is explicitly cast to char6 *, the literal is
+encoded using traditional PDP-10 SIXBIT rules: alphabetic characters are
+uppercased and each non-NUL character is stored as its character code
+minus octal 040.
+
+<pdp10-sixbit.h> provides the traditional convenience spelling:
+
+    SIXBIT("ABC123")
+
+which reads the first six char6 elements as one 36-bit int word.

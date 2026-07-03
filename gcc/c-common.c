@@ -2741,6 +2741,9 @@ c_common_nodes_and_builtins ()
     TREE_TYPE (identifier_global_value (get_identifier (SIZE_TYPE)));
   signed_size_type_node = c_common_signed_type (c_size_type_node);
   set_sizetype (c_size_type_node);
+#ifdef __PDP10_H__
+  (*lang_hooks.decls.pushdecl) (pdp10_char6_type_decl_v1 ());
+#endif
 
   build_common_tree_nodes_2 (flag_short_double);
 

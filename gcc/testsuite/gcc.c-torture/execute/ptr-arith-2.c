@@ -1,5 +1,4 @@
 #ifdef __pdp10__
-typedef unsigned char6 __attribute__ ((size (6)));
 typedef unsigned char7 __attribute__ ((size (7)));
 typedef unsigned char8 __attribute__ ((size (8)));
 #define DO(F) F (char6, 12) F (char7, 10) F (char8, 8) F (char, 8) F (short, 4)

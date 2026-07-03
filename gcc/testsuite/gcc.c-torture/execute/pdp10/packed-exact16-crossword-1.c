@@ -1,4 +1,3 @@
-typedef int char6 __attribute__ ((size (6)));
 typedef int char9 __attribute__ ((size (9)));
 typedef int short18 __attribute__ ((size (18)));
 typedef unsigned uchar8 __attribute__ ((size (8)));
