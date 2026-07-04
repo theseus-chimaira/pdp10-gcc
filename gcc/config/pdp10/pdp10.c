@@ -13205,6 +13205,20 @@ pdp10_expand_folded_ptr_sum (mode, target, exp)
         x = convert_to_mode (SImode, x, 0);
       if (!register_operand (x, SImode))
         x = force_reg (SImode, x);
+
+      /* For ordinary word pointers the folded integer offsets are expressed
+         in PDP-10 word addresses, while expand_subtract_pointers() below
+         returns storage units.  Convert the integer terms to the same unit
+         before combining them.  The middle end will subsequently divide by
+         TYPE_SIZE_UNIT to obtain the C element count.  */
+      if (WORD_TYPE_P (TREE_TYPE (TREE_TYPE (terms.ptr_terms[0]))))
+        {
+          rtx scaled = gen_reg_rtx (SImode);
+          emit_insn (gen_ashlsi3_pointer
+                     (scaled, x, GEN_INT (2)));
+          x = scaled;
+        }
+
       emit_insn (gen_addsi3 (acc, acc, x));
     }
 
@@ -16073,10 +16087,38 @@ void pdp10_md_array_offset (tree exp, tree index, tree unit_size,
 	 past the stack slot.  Constant aggregate subscripts still use the
 	 BIT_OFFSET path below, and non-word-sized arrays keep the byte or
 	 halfword handling already used for scalar arrays.  */
-      if ((TREE_CODE (elem_type) == RECORD_TYPE
-	   || TREE_CODE (elem_type) == UNION_TYPE)
-	  && tree_low_cst (unit_size, 1) >= UNITS_PER_WORD
-	  && (tree_low_cst (unit_size, 1) % UNITS_PER_WORD) == 0)
+      if (!host_integerp (unit_size, 1))
+        {
+          tree address_type = elem_type;
+          int byte_size;
+
+          /* For a multidimensional VLA, ELEM_TYPE is itself an array type.
+             The PDP-10 address unit is selected by the ultimate scalar
+             element, not by the row aggregate.  */
+          while (TREE_CODE (address_type) == ARRAY_TYPE)
+            address_type = TREE_TYPE (address_type);
+          byte_size = pdp10_normalize_pointer_bytesize
+            (pdp10_bytesize (address_type));
+
+          /* A VLA row has a runtime element size.  Do not feed that tree to
+             tree_low_cst.  Convert GCC's 9-bit storage-unit count to the
+             address units used by the PDP-10 pointer representation selected
+             for the row's ultimate element type.  */
+          if (byte_size >= BITS_PER_WORD)
+            unit_size = size_binop (TRUNC_DIV_EXPR,
+                                    unit_size,
+                                    convert (sizetype,
+                                             build_int_2 (UNITS_PER_WORD, 0)));
+          else if (byte_size == 18)
+            unit_size = size_binop (TRUNC_DIV_EXPR,
+                                    unit_size,
+                                    convert (sizetype,
+                                             build_int_2 (2, 0)));
+        }
+      else if ((TREE_CODE (elem_type) == RECORD_TYPE
+	        || TREE_CODE (elem_type) == UNION_TYPE)
+	       && tree_low_cst (unit_size, 1) >= UNITS_PER_WORD
+	       && (tree_low_cst (unit_size, 1) % UNITS_PER_WORD) == 0)
 	unit_size = size_binop (TRUNC_DIV_EXPR,
 				unit_size,
 				convert (sizetype,
