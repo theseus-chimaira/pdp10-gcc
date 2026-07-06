@@ -202,6 +202,7 @@ static int	pdp10_decompose_symbolic_constant PARAMS ((rtx x, rtx *basep,
 static int	pdp10_decompose_symbolic_word36 PARAMS ((rtx x, rtx *basep,
 					   pdp10_word36 *offsetp));
 static int	pdp10_const_word36_byte_pointer_p PARAMS ((rtx x));
+static int	pdp10_const_logical_bit_pointer_p PARAMS ((rtx x));
 static int	pdp10_reg_likely_byte_pointer_p PARAMS ((rtx reg, rtx insn));
 int	pdp10_const_double_0_operand PARAMS ((rtx op, enum machine_mode mode));
 static int	pdp10_qi_mem_logical_offset PARAMS ((rtx mem, HOST_WIDE_INT *offp, int *unsignedp));
@@ -3222,6 +3223,32 @@ pdp10_const_word36_byte_pointer_p (x)
   ps = TARGET_EXTENDED ? ((offset >> 30) & 077)
     : ((offset >> 24) & 07777);
   return ps != 0;
+}
+
+/* Return nonzero if X is the internal local S=1 byte-pointer form used
+   for a logical exact-width pointer into a non-byte-aligned packed object.
+   This representation is deliberately local even on extended targets: the
+   one-bit selector carries the exact bit position which an architectural
+   16-bit byte pointer cannot represent.  */
+static int
+pdp10_const_logical_bit_pointer_p (x)
+     rtx x;
+{
+  rtx base;
+  pdp10_word36 offset;
+  int ps;
+  int p;
+  int s;
+
+  if (!pdp10_decompose_symbolic_word36 (x, &base, &offset)
+      || base == NULL_RTX)
+    return 0;
+
+  ps = (offset >> 24) & 07777;
+  if (ps >= 04600 || decode_ps (ps, &p, &s) != 0)
+    return 0;
+
+  return s == 1 && p >= 0 && p < BITS_PER_WORD;
 }
 
 static void
@@ -7927,6 +7954,7 @@ pdp10_output_maybe_bitptr_hi (operands, sign_extend)
   rtx addr;
   rtx ptrsrc;
   int ptrsrc_word = 0;
+  int known_logical_bitptr = 0;
   rtx reg;
   int scratchno;
   rtx scratch;
@@ -7950,6 +7978,11 @@ pdp10_output_maybe_bitptr_hi (operands, sign_extend)
       ptrsrc = gen_rtx_MEM (SImode, XEXP (addr, 0));
       ptrsrc_word = 1;
     }
+  else if (CONSTANT_P (addr) && pdp10_const_logical_bit_pointer_p (addr))
+    {
+      ptrsrc = addr;
+      known_logical_bitptr = 1;
+    }
   else
     return NULL;
 
@@ -7970,15 +8003,27 @@ pdp10_output_maybe_bitptr_hi (operands, sign_extend)
       output_asm_insn ("push 017,%W1", ops);
       output_asm_insn ("move %0,%W1", ops);
     }
+  else if (known_logical_bitptr)
+    {
+      /* A literal byte pointer needs memory-literal syntax in a MOVE.
+         Materialize it in the saved scratch AC before pushing the pointer
+         word used by the bit-stream loop.  */
+      output_asm_insn ("move %0,[%1]", ops);
+      output_asm_insn ("push 017,%0", ops);
+    }
   else
     {
       output_asm_insn ("push 017,%1", ops);
       output_asm_insn ("move %0,%1", ops);
     }
-  output_asm_insn ("lsh %0,-030", ops);
-  output_asm_insn ("andi %0,077", ops);
-  output_asm_insn ("caie %0,1", ops);
-  fprintf (asm_out_file, "\tJRST\t%s\n", l_native + 1);
+
+  if (!known_logical_bitptr)
+    {
+      output_asm_insn ("lsh %0,-030", ops);
+      output_asm_insn ("andi %0,077", ops);
+      output_asm_insn ("caie %0,1", ops);
+      fprintf (asm_out_file, "\tJRST\t%s\n", l_native + 1);
+    }
 
   if (!store)
     {
@@ -8023,6 +8068,9 @@ pdp10_output_maybe_bitptr_hi (operands, sign_extend)
   ops[0] = scratch;
   output_asm_insn ("sub 017,[1,,1]", ops);
   output_asm_insn ("pop 017,%0", ops);
+  if (known_logical_bitptr)
+    return "";
+
   fprintf (asm_out_file, "\tJRST\t%s\n", l_done + 1);
   ASM_OUTPUT_INTERNAL_LABEL (asm_out_file, "BPN", n);
   ops[0] = scratch;
@@ -8826,7 +8874,7 @@ output_bitfield_move (stream, insn, store, sign, reg, x, len, pos)
       && VALID_OWGBP_BYTE_SIZE_P (len)
       && pos + len <= BITS_PER_WORD)
     {
-      rtx ops[3];
+      rtx ops[4];
       rtx scratch = gen_rtx_REG (SImode, 0);
       rtx addr = XEXP (x, 0);
       HOST_WIDE_INT wordoff = 0;
@@ -8843,13 +8891,13 @@ output_bitfield_move (stream, insn, store, sign, reg, x, len, pos)
       ops[0] = reg;
       ops[1] = addr;
       ops[2] = scratch;
+      ops[3] = GEN_INT (wordoff);
 
       output_asm_insn ("hrrz %2,%1", ops);
+      /* Route the effective-address offset through the target operand printer
+         so DAS receives explicit octal syntax.  */
       if (wordoff != 0)
-        {
-          sprintf (buf, "addi %%2,%ld", (long) wordoff);
-          output_asm_insn (buf, ops);
-        }
+        output_asm_insn ("addi %2,%3", ops);
       sprintf (buf, "tlo %%2,%#o", ps << 6);
       output_asm_insn (buf, ops);
       output_asm_insn (store ? "dpb %0,%2" : "ldb %0,%2", ops);
@@ -11981,8 +12029,51 @@ pdp10_expand_addbp3 (type, target, op0, op1)
 
   /* ushort16 pointers are self-describing at the KCC/GCC ABI boundary:
      native objects use S=16, while non-byte-aligned packed arrays decay to
-     a continuous S=1 logical pointer.  Select the physical element stride
-     from the runtime S field.  */
+     a continuous S=1 logical pointer.  A constant S=1 pointer is already
+     known to use the logical representation, so scale an exact16 element
+     step to sixteen one-bit pointer positions before generic byte-pointer
+     lowering can mistake it for one architectural 16-bit byte.  */
+  if (byte_size == 16
+      && CONSTANT_P (op0)
+      && pdp10_const_logical_bit_pointer_p (op0))
+    {
+      rtx scaled;
+
+      if (!target || !register_operand (target, Pmode)
+          || reg_overlap_mentioned_p (target, op1))
+        target = gen_reg_rtx (Pmode);
+
+      if (GET_CODE (op1) == CONST_INT)
+        scaled = GEN_INT (INTVAL (op1) * byte_size);
+      else
+        {
+          if (!register_operand (op1, Pmode))
+            op1 = force_reg (Pmode, op1);
+          scaled = gen_reg_rtx (Pmode);
+          emit_insn (gen_mulsi3 (scaled, op1, GEN_INT (byte_size)));
+        }
+
+      {
+        rtx adjusted = gen_rtx_ADJBP (Pmode, op0, scaled);
+
+        /* Fold constant logical-pointer adjustments before recog.  The
+           non-KL10 raw ADJBP fallback intentionally accepts register/memory
+           bases; a symbolic S=1 pointer is better represented by the exact
+           adjusted POINT constant.  */
+        if (GET_CODE (scaled) == CONST_INT)
+          {
+            rtx folded = pdp10_simplify_unspec (adjusted, NULL_RTX);
+            if (folded != NULL_RTX)
+              return folded;
+          }
+
+        emit_insn (gen_rtx_SET (VOIDmode, target, adjusted));
+      }
+      return target;
+    }
+
+  /* For a reloaded pointer the representation is only known at run time.
+     Inspect S and select the physical element stride accordingly.  */
   if (byte_size == 16 && !CONSTANT_P (op0))
     {
       rtx selector = gen_reg_rtx (Pmode);
@@ -12003,11 +12094,11 @@ pdp10_expand_addbp3 (type, target, op0, op1)
                                 native_label);
 
       if (GET_CODE (op1) == CONST_INT)
-        scaled = GEN_INT (INTVAL (op1) * 18);
+        scaled = GEN_INT (INTVAL (op1) * byte_size);
       else
         {
           scaled = gen_reg_rtx (Pmode);
-          emit_insn (gen_mulsi3 (scaled, op1, GEN_INT (18)));
+          emit_insn (gen_mulsi3 (scaled, op1, GEN_INT (byte_size)));
         }
       if (!register_operand (scaled, Pmode) && GET_CODE (scaled) != CONST_INT)
         scaled = force_reg (Pmode, scaled);
@@ -15932,7 +16023,10 @@ adjust_ps (ps, adjust)
 
       s = ps & 077;
 
-      if (!VALID_OWGBP_BYTE_SIZE_P (s))
+      /* S=1 is the backend's logical packed exact-width pointer.  It is
+         not a C-visible architectural byte size, but constant ADJBP folding
+         must still be able to advance it by bit positions.  */
+      if (s != 1 && !VALID_OWGBP_BYTE_SIZE_P (s))
 	return -1;
 
       byte_pos = BITS_PER_WORD - p - s;

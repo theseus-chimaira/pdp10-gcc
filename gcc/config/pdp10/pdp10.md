@@ -2642,33 +2642,46 @@
 	 (match_operand:SI 3 "const_int_operand" "n,n")))]
   ""
   {
-    static char buf[128];
     HOST_WIDE_INT n;
 
     n = INTVAL (operands[2]) + INTVAL (operands[3]);
+
+    /* Keep synthesized instruction constants on the normal operand-printing
+       path.  DAS effective-address fields are octal by default.  */
     if (which_alternative == 0)
       {
 	if (pdp10_const_ok_for_letter_p (n, 'I'))
-	  sprintf (buf, "addi %%0,%ld", (long) n);
+	  {
+	    operands[2] = GEN_INT (n);
+	    return "addi %0,%2";
+	  }
 	else if (pdp10_const_ok_for_letter_p (n, 'J'))
-	  sprintf (buf, "subi %%0,%ld", (long) -n);
-	else
-	  sprintf (buf, "add %%0,[%ld]", (long) n);
+	  {
+	    operands[2] = GEN_INT (-n);
+	    return "subi %0,%2";
+	  }
+	operands[2] = GEN_INT (n);
+	return "add %0,[%2]";
       }
-    else
+
+    if (pdp10_const_ok_for_letter_p (n, 'S'))
       {
-	if (pdp10_const_ok_for_letter_p (n, 'S'))
-	  sprintf (buf, TARGET_EXTENDED ? "xmovei %%0,%ld(%%1)"
-					  : "movei %%0,%ld(%%1)",
-		   (long) n);
-	else if (pdp10_const_ok_for_letter_p (n, 'I'))
-	  sprintf (buf, "move %%0,%%1\;addi %%0,%ld", (long) n);
-	else if (pdp10_const_ok_for_letter_p (n, 'J'))
-	  sprintf (buf, "move %%0,%%1\;subi %%0,%ld", (long) -n);
-	else
-	  sprintf (buf, "move %%0,%%1\;add %%0,[%ld]", (long) n);
+	operands[2] = GEN_INT (n);
+	return TARGET_EXTENDED ? "xmovei %0,%2(%1)" : "movei %0,%2(%1)";
       }
-    return buf;
+    else if (pdp10_const_ok_for_letter_p (n, 'I'))
+      {
+	operands[2] = GEN_INT (n);
+	return "move %0,%1\;addi %0,%2";
+      }
+    else if (pdp10_const_ok_for_letter_p (n, 'J'))
+      {
+	operands[2] = GEN_INT (-n);
+	return "move %0,%1\;subi %0,%2";
+      }
+
+    operands[2] = GEN_INT (n);
+    return "move %0,%1\;add %0,[%2]";
   }
   [(set_attr "length" "2,2")])
 
@@ -5816,14 +5829,13 @@
   {
     static char buf[4096];
     long n = (long) INTVAL (operands[2]);
-    const char *move = which_alternative == 0 ? "" : "move %0,%1\;";
 
+    /* Use %2 for loop counts so the target operand printer, rather than host
+       decimal sprintf formatting, owns assembler radix syntax.  */
     if (which_alternative == 2)
       {
 	if (n > 0)
-	  sprintf (buf,
-		   "push 17,0\;movei 0,%ld\;ibp %0\;sojg 0,.-1\;pop 17,0",
-		   n);
+	  return "push 17,0\;movei 0,%2\;ibp %0\;sojg 0,.-1\;pop 17,0";
 	else
 	  {
 	    char *bp = buf;
@@ -5843,19 +5855,19 @@
 			"\;pop 17,0\;pop 17,0");
 		bp += strlen (bp);
 	      }
+	    return buf;
 	  }
-	return buf;
       }
 
     if (n > 0)
-      sprintf (buf,
-	       "%spush 17,0\;movei 0,%ld\;ibp %0\;sojg 0,.-1\;pop 17,0",
-	       move, n);
-    else
-      sprintf (buf,
-	       "%spush 17,0\;movei 0,%ld\;push 17,0\;push 17,%0\;push 17,0\;subi %0,1\;movem %0,(17)\;ibp %0\;came %0,-1(17)\;jrst .-3\;move %0,(17)\;pop 17,0\;pop 17,0\;sosle (17)\;jrst .-11\;pop 17,0\;pop 17,0",
-	       move, -n);
-    return buf;
+      return which_alternative == 0
+	? "push 17,0\;movei 0,%2\;ibp %0\;sojg 0,.-1\;pop 17,0"
+	: "move %0,%1\;push 17,0\;movei 0,%2\;ibp %0\;sojg 0,.-1\;pop 17,0";
+
+    operands[2] = GEN_INT (-n);
+    return which_alternative == 0
+      ? "push 17,0\;movei 0,%2\;push 17,0\;push 17,%0\;push 17,0\;subi %0,1\;movem %0,(17)\;ibp %0\;came %0,-1(17)\;jrst .-3\;move %0,(17)\;pop 17,0\;pop 17,0\;sosle (17)\;jrst .-11\;pop 17,0\;pop 17,0"
+      : "move %0,%1\;push 17,0\;movei 0,%2\;push 17,0\;push 17,%0\;push 17,0\;subi %0,1\;movem %0,(17)\;ibp %0\;came %0,-1(17)\;jrst .-3\;move %0,(17)\;pop 17,0\;pop 17,0\;sosle (17)\;jrst .-11\;pop 17,0\;pop 17,0";
   }
   [(set_attr "length" "17,18,160")
    ;; This is a multi-instruction ADJBP emulation, not a real IBP

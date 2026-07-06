@@ -19,9 +19,9 @@ pdp10_oct_43 (void)
   return 43;
 }
 
-/* DAS interprets unprefixed integer literals as decimal.  PDP-10 GCC
-   emits assembler integer operands in octal, so values containing only
-   decimal digits still require an explicit leading zero.  */
+/* DAS interprets instruction effective-address integer literals as octal by
+   default.  PDP-10 GCC therefore emits assembler integer operands as explicit
+   octal values, including the leading zero.  */
 /* { dg-final { scan-assembler "movei[ \\t]+1,042" } } */
 /* { dg-final { scan-assembler "movei[ \\t]+1,043" } } */
 /* { dg-final { scan-assembler "movei[ \\t]+1,053" } } */
