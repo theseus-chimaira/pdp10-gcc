@@ -4917,6 +4917,16 @@ pdp10_frame_address_p (x)
     case ADDRESSOF:
       if (GET_CODE (XEXP (x, 0)) == MEM)
 	return pdp10_frame_address_p (XEXP (XEXP (x, 0), 0));
+
+      /* ADDRESSOF of a register pseudo denotes an automatic object that
+	 GCC has kept in a pseudo until the addressof pass assigns its stack
+	 slot.  Treat it as frame-based now: burying the ADDRESSOF inside a
+	 PDP-10 literal byte-pointer CONST prevents the addressof/frame
+	 elimination passes from rewriting it and eventually leaks <fp> into
+	 final assembly.  */
+      if (GET_CODE (XEXP (x, 0)) == REG)
+	return 1;
+
       return pdp10_frame_address_p (XEXP (x, 0));
 
     case PLUS:
