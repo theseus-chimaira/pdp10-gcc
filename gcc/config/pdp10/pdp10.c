@@ -6778,11 +6778,24 @@ pdp10_output_cbranch (insn, ops, alternative, float_p)
 
   asms = float_p ? sf_asms : si_asms;
 
-  /* ADDRESS: unextended code can store the symbol in the immediate
-     field.  */
+  /* In unextended mode a plain symbol plus a small word offset fits in
+     CAI's 18-bit immediate field.  A PDP-10 byte-pointer constant does not:
+     its P/S selector occupies the left half, and forcing such a CONST into
+     CAI silently discards those bits.  Keep byte-pointer and other wide
+     symbolic constants on the CAM-through-literal path.  */
   if (!float_p && alternative == 3 && !TARGET_EXTENDED
       && GET_CODE (operands[2]) == CONST)
-    alternative = 2;
+    {
+      rtx x = XEXP (operands[2], 0);
+      if (GET_CODE (x) == PLUS
+          && ((GET_CODE (XEXP (x, 0)) == SYMBOL_REF
+               && GET_CODE (XEXP (x, 1)) == CONST_INT
+               && pdp10_const_ok_for_letter_p (INTVAL (XEXP (x, 1)), 'I'))
+              || (GET_CODE (XEXP (x, 1)) == SYMBOL_REF
+                  && GET_CODE (XEXP (x, 0)) == CONST_INT
+                  && pdp10_const_ok_for_letter_p (INTVAL (XEXP (x, 0)), 'I'))))
+        alternative = 2;
+    }
 
   if (get_attr_length (insn) == 1)
     return asms[alternative];
