@@ -4118,7 +4118,7 @@
 	 (match_operand:SI 1 "register_operand" "0")
 	 (neg:SI (plus:SI (match_operand:SI 2 "register_operand" "x")
 			  (match_operand:SI 3 "const_int_operand" "K")))))]
-  ""
+  "GET_CODE (operands[2]) != SUBREG"
   "lsh %0,%3(%2)")
 
 (define_insn "real_ashldi3"
