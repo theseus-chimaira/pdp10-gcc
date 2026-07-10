@@ -9400,6 +9400,21 @@ pdp10_output_lshiftrt_memory (insn, operands)
     }
 
   if (GET_CODE (mem) == MEM
+      && INTVAL (operands[2]) == 27
+      && REG_P (XEXP (mem, 0))
+      && MEM_ALIGN (mem) >= BITS_PER_WORD
+      && !pdp10_reg_likely_byte_pointer_p (XEXP (mem, 0), insn))
+    {
+      /* Reload can canonicalize a zero_extract of the first packed byte in
+         a word to (lshiftrt:SI (mem:SI REG) 27).  At that point REG is the
+         already-adjusted word address; MEM_OFFSET still names the original
+         C storage-unit displacement and must not be applied a second time.
+         The RTL operation itself unambiguously selects bits 0..8.  */
+      return output_bitfield_move (asm_out_file, insn, 0, 0, operands[0],
+                                   mem, BITS_PER_UNIT, 0);
+    }
+
+  if (GET_CODE (mem) == MEM
       && INTVAL (operands[2]) == 27)
     {
       HOST_WIDE_INT byteoff;
