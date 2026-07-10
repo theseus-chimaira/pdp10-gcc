@@ -4376,6 +4376,10 @@ expand_assignment (to, from, want_value, suggest_reg)
 	rtx word = single_component_in_word_p (to, to_rtx, &bitpos1);
 	if (word && bitsize < BITS_PER_WORD
 #if REAL_BITS_PER_UNIT == 36
+	    /* PDP-10 bit-fields can share a 36-bit word even when the generic
+	       byte-based overlap test above reports this component as isolated.
+	       A whole-word store would then clobber the neighbouring field.  */
+	    && ! DECL_BIT_FIELD (TREE_OPERAND (to, 1))
 	    /* PDP-10: single_component_in_word_p returns the containing
 	       36-bit word and leaves BITPOS1 as the field position within
 	       that word.  The direct-store shortcut below shifts the value
