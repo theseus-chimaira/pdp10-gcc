@@ -441,7 +441,7 @@ FUNC(floatsidf):
    Keep each independently useful helper in a distinct LIB1ASMFUNCS object.
    This lets the archive linker pull only helpers actually referenced by a
    program.  The four DImode division/modulo entry points intentionally remain
-   together because they share the same substantial private 72-bit divider.  */
+   together because they share the same substantial private 71-bit divider.  */
 
 #ifdef L_main
 ; GCC emits a call to __main at the start of main.  In full hosted GCC this
@@ -470,7 +470,7 @@ FUNC(main):
 ;   13    boolean flag
 ;   14    borrow flag
 ;
-; The core is a correctness-first unsigned 72-bit binary long divider.
+; The core is a correctness-first unsigned 71-bit binary long divider.
 ; Signed wrappers convert operands to absolute values, call the unsigned core,
 ; and re-apply C signs to quotient/remainder.  It uses only PDP-6/KA10 base
 ; instructions and no extended addressing.
@@ -492,266 +492,265 @@ FUNC(main):
 	.globl	__umoddi3
 
 __udivdi3:
-	push 17,5
-	push 17,6
-	push 17,7
-	push 17,10
-	push 17,11
-	push 17,12
-	push 17,13
-	push 17,14
-	pushj 17,__p10_udivmoddi4
-	pop 17,14
-	pop 17,13
-	pop 17,12
-	pop 17,11
-	pop 17,10
-	pop 17,7
-	pop 17,6
-	pop 17,5
-	popj 17,
+	push 017,5
+	push 017,6
+	push 017,7
+	push 017,010
+	push 017,011
+	push 017,012
+	push 017,013
+	push 017,014
+	pushj 017,__p010_udivmoddi4
+	pop 017,014
+	pop 017,013
+	pop 017,012
+	pop 017,011
+	pop 017,010
+	pop 017,7
+	pop 017,6
+	pop 017,5
+	popj 017,
 
 __umoddi3:
-	push 17,5
-	push 17,6
-	push 17,7
-	push 17,10
-	push 17,11
-	push 17,12
-	push 17,13
-	push 17,14
-	pushj 17,__p10_udivmoddi4
+	push 017,5
+	push 017,6
+	push 017,7
+	push 017,010
+	push 017,011
+	push 017,012
+	push 017,013
+	push 017,014
+	pushj 017,__p010_udivmoddi4
 	move 1,3
 	move 2,4
-	pop 17,14
-	pop 17,13
-	pop 17,12
-	pop 17,11
-	pop 17,10
-	pop 17,7
-	pop 17,6
-	pop 17,5
-	popj 17,
+	pop 017,014
+	pop 017,013
+	pop 017,012
+	pop 017,011
+	pop 017,010
+	pop 017,7
+	pop 017,6
+	pop 017,5
+	popj 017,
 
 __divdi3:
-	push 17,5
-	push 17,6
-	push 17,7
-	push 17,10
-	push 17,11
-	push 17,12
-	push 17,13
-	push 17,14
-	setz 13,
-	tlne 1,400000
-	 pushj 17,__p10_abs_num_q
-	tlne 3,400000
-	 pushj 17,__p10_abs_den_q
-	push 17,13
-	pushj 17,__p10_udivmoddi4
-	pop 17,13
-	jumpe 13,__p10_div_restore
-	pushj 17,__p10_neg_12
-__p10_div_restore:
-	pop 17,14
-	pop 17,13
-	pop 17,12
-	pop 17,11
-	pop 17,10
-	pop 17,7
-	pop 17,6
-	pop 17,5
-	popj 17,
+	push 017,5
+	push 017,6
+	push 017,7
+	push 017,010
+	push 017,011
+	push 017,012
+	push 017,013
+	push 017,014
+	setz 013,
+	and 2,[0377777777777]
+	and 4,[0377777777777]
+	tlne 1,0400000
+	 pushj 017,__p010_abs_num_q
+	tlne 3,0400000
+	 pushj 017,__p010_abs_den_q
+	push 017,013
+	pushj 017,__p010_udivmoddi4
+	pop 017,013
+	jumpe 013,__p010_div_signcopy
+	pushj 017,__p010_neg_012
+__p010_div_signcopy:
+	pushj 017,__p010_signcopy_012
+	pop 017,014
+	pop 017,013
+	pop 017,012
+	pop 017,011
+	pop 017,010
+	pop 017,7
+	pop 017,6
+	pop 017,5
+	popj 017,
 
 __moddi3:
-	push 17,5
-	push 17,6
-	push 17,7
-	push 17,10
-	push 17,11
-	push 17,12
-	push 17,13
-	push 17,14
-	setz 13,
-	tlne 1,400000
-	 pushj 17,__p10_abs_num_r
-	tlne 3,400000
-	 pushj 17,__p10_abs_den_r
-	push 17,13
-	pushj 17,__p10_udivmoddi4
-	pop 17,13
+	push 017,5
+	push 017,6
+	push 017,7
+	push 017,010
+	push 017,011
+	push 017,012
+	push 017,013
+	push 017,014
+	setz 013,
+	and 2,[0377777777777]
+	and 4,[0377777777777]
+	tlne 1,0400000
+	 pushj 017,__p010_abs_num_r
+	tlne 3,0400000
+	 pushj 017,__p010_abs_den_r
+	push 017,013
+	pushj 017,__p010_udivmoddi4
+	pop 017,013
 	move 1,3
 	move 2,4
-	jumpe 13,__p10_mod_restore
-	pushj 17,__p10_neg_12
-__p10_mod_restore:
-	pop 17,14
-	pop 17,13
-	pop 17,12
-	pop 17,11
-	pop 17,10
-	pop 17,7
-	pop 17,6
-	pop 17,5
-	popj 17,
+	jumpe 013,__p010_mod_signcopy
+	pushj 017,__p010_neg_012
+__p010_mod_signcopy:
+	pushj 017,__p010_signcopy_012
+	pop 017,014
+	pop 017,013
+	pop 017,012
+	pop 017,011
+	pop 017,010
+	pop 017,7
+	pop 017,6
+	pop 017,5
+	popj 017,
 
-; Negate AC1:AC2 as a 72-bit two's-complement pair.
-__p10_neg_12:
-	setca 1,
-	setca 2,
-	addi 2,1
-	jumpn 2,__p10_neg_12_done
-	addi 1,1
-__p10_neg_12_done:
-	popj 17,
+; Negate AC1:AC2 as one PDP-010 DImode value: 36 high bits + 35 low bits.
+__p010_neg_012:
+	movn 1,1
+	skipe 2
+	 subi 1,1
+	movn 2,2
+	and 2,[0377777777777]
+	popj 017,
 
-; Negate AC3:AC4 as a 72-bit two's-complement pair.
-__p10_neg_34:
-	setca 3,
-	setca 4,
-	addi 4,1
-	jumpn 4,__p10_neg_34_done
-	addi 3,1
-__p10_neg_34_done:
-	popj 17,
+; Negate AC3:AC4 as one PDP-010 DImode value: 36 high bits + 35 low bits.
+__p010_neg_34:
+	movn 3,3
+	skipe 4
+	 subi 3,1
+	movn 4,4
+	and 4,[0377777777777]
+	popj 017,
 
-__p10_abs_num_q:
-	movei 13,1
-	pushj 17,__p10_neg_12
-	popj 17,
+; Restore GCC's external signed-DImode representation in AC1:AC2.
+; Bit 35 of the low word duplicates the sign of the high word.
+__p010_signcopy_012:
+	tlz 2,0400000
+	tlne 1,0400000
+	 tlo 2,0400000
+	popj 017,
 
-__p10_abs_den_q:
-	xori 13,1
-	pushj 17,__p10_neg_34
-	popj 17,
+__p010_abs_num_q:
+	movei 013,1
+	pushj 017,__p010_neg_012
+	popj 017,
 
-__p10_abs_num_r:
-	movei 13,1
-	pushj 17,__p10_neg_12
-	popj 17,
+__p010_abs_den_q:
+	xori 013,1
+	pushj 017,__p010_neg_34
+	popj 017,
 
-__p10_abs_den_r:
-	pushj 17,__p10_neg_34
-	popj 17,
+__p010_abs_num_r:
+	movei 013,1
+	pushj 017,__p010_neg_012
+	popj 017,
 
-; Unsigned divide AC1:AC2 by AC3:AC4.
-; Returns quotient in AC1:AC2 and remainder in AC3:AC4.
-__p10_udivmoddi4:
-	; Division by zero is undefined in C.  Keep harness behavior benign and
-	; deterministic: return zero quotient and zero remainder.
-	move 12,3
-	ior 12,4
-	jumpn 12,__p10_udivmod_nonzero
+__p010_abs_den_r:
+	pushj 017,__p010_neg_34
+	popj 017,
+
+; Unsigned divide AC1:AC2 by AC3:AC4 as 71-bit values.
+; Each pair is 36 high bits + 35 low bits.  Returns quotient in AC1:AC2
+; and remainder in AC3:AC4, both with low bit 35 clear.
+__p010_udivmoddi4:
+	and 2,[0377777777777]
+	and 4,[0377777777777]
+	move 012,3
+	ior 012,4
+	jumpn 012,__p010_udivmod_nonzero
 	setz 1,
 	setz 2,
 	setz 3,
 	setz 4,
-	popj 17,
+	popj 017,
 
-__p10_udivmod_nonzero:
+__p010_udivmod_nonzero:
 	setz 5,             ; quotient high
-	setz 6,             ; quotient low
+	setz 6,             ; quotient low35
 	setz 7,             ; remainder high
-	setz 10,            ; remainder low
-	movei 11,110        ; 72 bits, octal 110
+	setz 010,            ; remainder low35
+	movei 011,0107       ; 71 bits, octal 107
 
-__p10_udivmod_loop:
-	; quotient <<= 1
-	lshc 5,1
+__p010_udivmod_loop:
+	; quotient <<= 1 across a 36+35-bit pair
+	move 012,6
+	lsh 012,-042
+	andi 012,1
+	lsh 6,1
+	and 6,[0377777777777]
+	lsh 5,1
+	ior 5,012
+	and 5,[0777777777777]
 
-	; remainder <<= 1, then pull next numerator MSB into remainder bit 0
-	setz 13,
-	tlne 1,400000
-	 movei 13,1
-	lshc 7,1
-	jumpe 13,__p10_udivmod_no_inbit
-	addi 10,1
-__p10_udivmod_no_inbit:
+	; Capture numerator MSB, then numerator <<= 1 across 36+35 bits.
+	move 013,1
+	lsh 013,-043
+	andi 013,1
+	move 012,2
+	lsh 012,-042
+	andi 012,1
+	lsh 2,1
+	and 2,[0377777777777]
+	lsh 1,1
+	ior 1,012
+	and 1,[0777777777777]
 
-	; numerator <<= 1
-	lshc 1,1
+	; remainder = (remainder << 1) | numerator_msb
+	move 012,010
+	lsh 012,-042
+	andi 012,1
+	lsh 010,1
+	and 010,[0377777777777]
+	ior 010,013
+	lsh 7,1
+	ior 7,012
+	and 7,[0777777777777]
 
-	; if remainder >= denominator, subtract denominator and set quotient bit.
-	pushj 17,__p10_cmp_7_10_ge_3_4
-	jumpe 13,__p10_udivmod_no_sub
-	pushj 17,__p10_sub_7_10_3_4
-	addi 6,1
-__p10_udivmod_no_sub:
-	sojg 11,__p10_udivmod_loop
+	; if remainder >= denominator, subtract and set quotient bit.
+	pushj 017,__p010_cmp_7_010_ge_3_4
+	jumpe 013,__p010_udivmod_no_sub
+	pushj 017,__p010_sub_7_010_3_4
+	iori 6,1
+__p010_udivmod_no_sub:
+	sojg 011,__p010_udivmod_loop
 
 	move 1,5
 	move 2,6
 	move 3,7
-	move 4,10
-	popj 17,
+	move 4,010
+	popj 017,
 
-; Set AC13 = 1 iff unsigned AC7:AC10 >= unsigned AC3:AC4, else 0.
-__p10_cmp_7_10_ge_3_4:
-	; Compare high words as unsigned 36-bit quantities.
-	move 12,7
-	xor 12,3
-	tlne 12,400000
-	 jrst __p10_cmp_hi_sign_diff
-	camg 7,3
-	 jrst __p10_cmp_hi_not_gt
-	movei 13,1
-	popj 17,
-__p10_cmp_hi_not_gt:
-	camn 7,3
-	 jrst __p10_cmp_low_words
-	jrst __p10_cmp_false
-__p10_cmp_low_words:
-	; High words equal: compare low words unsigned.
-	move 12,10
-	xor 12,4
-	tlne 12,400000
-	 jrst __p10_cmp_lo_sign_diff
-	camge 10,4
-	 jrst __p10_cmp_false
-	movei 13,1
-	popj 17,
-__p10_cmp_hi_sign_diff:
-	tlne 7,400000
-	 jrst __p10_cmp_true
-	jrst __p10_cmp_false
-__p10_cmp_lo_sign_diff:
-	tlne 10,400000
-	 jrst __p10_cmp_true
-	jrst __p10_cmp_false
-__p10_cmp_true:
-	movei 13,1
-	popj 17,
-__p10_cmp_false:
-	setz 13,
-	popj 17,
+; Set AC013 = 1 iff unsigned 71-bit AC7:AC010 >= AC3:AC4.
+__p010_cmp_7_010_ge_3_4:
+	; Compare high words unsigned by biasing their sign bits.
+	move 012,7
+	tlc 012,0400000
+	move 013,3
+	tlc 013,0400000
+	caml 012,013
+	 jrst __p010_cmp_hi_ge
+	setz 013,
+	popj 017,
+__p010_cmp_hi_ge:
+	came 012,013
+	 jrst __p010_cmp_true
+	; Low words are 35-bit nonnegative quantities.
+	caml 010,4
+	 jrst __p010_cmp_true
+	setz 013,
+	popj 017,
+__p010_cmp_true:
+	movei 013,1
+	popj 017,
 
-; AC7:AC10 -= AC3:AC4, treating both as unsigned 72-bit pairs.
-; Caller guarantees AC7:AC10 >= AC3:AC4.
-__p10_sub_7_10_3_4:
-	setz 14,
-	; Borrow from low word if unsigned AC10 < unsigned AC4.
-	move 12,10
-	xor 12,4
-	tlne 12,400000
-	 jrst __p10_sub_lo_sign_diff
-	caml 10,4
-	 jrst __p10_sub_no_borrow
-	movei 14,1
-	jrst __p10_sub_borrow_done
-__p10_sub_lo_sign_diff:
-	tlne 10,400000
-	 jrst __p10_sub_no_borrow
-	movei 14,1
-	jrst __p10_sub_borrow_done
-__p10_sub_no_borrow:
-	setz 14,
-__p10_sub_borrow_done:
-	sub 10,4
-	sub 7,3
-	jumpe 14,__p10_sub_done
+; AC7:AC010 -= AC3:AC4 as unsigned 71-bit pairs.
+__p010_sub_7_010_3_4:
+	sub 010,4
+	jumpge 010,__p010_sub_no_borrow
+	add 010,[0400000000000]
 	subi 7,1
-__p10_sub_done:
-	popj 17,
+__p010_sub_no_borrow:
+	sub 7,3
+	and 010,[0377777777777]
+	and 7,[0777777777777]
+	popj 017,
 #endif
 
 
