@@ -306,7 +306,9 @@ pdp10_split_integer_double (x, word0p, word1p)
 
   if (GET_CODE (x) == CONST_INT)
     {
-      word0 = ((unsigned HOST_WIDE_INT) INTVAL (x) >> 36) & WORD_MASK;
+      /* Shift while signed so a negative host-sized constant keeps the
+         sign bits required by the high PDP-10 word.  */
+      word0 = (unsigned HOST_WIDE_INT) (INTVAL (x) >> 36) & WORD_MASK;
       word1 = (unsigned HOST_WIDE_INT) INTVAL (x) & WORD_MASK;
     }
   else if (GET_CODE (x) == CONST_DOUBLE && GET_MODE (x) == VOIDmode)
