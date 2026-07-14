@@ -9207,7 +9207,7 @@ pdp10_output_ashiftrt_memory (insn, operands)
         }
     }
 
-  return "move %0,%1\n\tash %0,-33";
+  return "move %0,%1\n\tash %0,-033";
 }
 
 /* Return nonzero when MEM is one of the 9-bit storage-unit fragments
