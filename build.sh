@@ -505,6 +505,37 @@ else
 	fi
 fi
 
+# GCC searches its private exec directory for the assembler before PATH.
+# Install a relative assembler link there so a relocated PDP10_PREFIX remains
+# self-contained even though GCC 3.2 records --with-as as an absolute path.
+# Without this link, relocating local.tar.gz can make the driver fall through
+# to the host program named "as", which may assemble PDP-10 output incorrectly
+# or fail only after compilation.
+GCC_EXEC_DIR="$PREFIX/lib/gcc-lib/$TARGET/3.2"
+GCC_AS_LINK="$GCC_EXEC_DIR/as"
+GCC_AS_TARGET="../../../../bin/$TARGET-as"
+
+if [ "$INSTALL_WITH_PRIV" = yes ]; then
+	privileged_command ln -sfn "$GCC_AS_TARGET" "$GCC_AS_LINK"
+else
+	ln -sfn "$GCC_AS_TARGET" "$GCC_AS_LINK"
+fi
+
+# Verify the driver resolves "as" inside the installed prefix.  This tests the
+# same lookup path used by normal -c compilations and prevents host-as fallback.
+RESOLVED_AS=`"$PREFIX/bin/$TARGET-gcc" -print-prog-name=as`
+if [ ! -x "$RESOLVED_AS" ]; then
+	echo "error: installed GCC cannot resolve target assembler: $RESOLVED_AS" >&2
+	exit 1
+fi
+case "$RESOLVED_AS" in
+	"$PREFIX"/*) : ;;
+	*)
+		echo "error: installed GCC resolved assembler outside prefix: $RESOLVED_AS" >&2
+		exit 1
+		;;
+esac
+
 if [ "$INSTALL_WITH_PRIV" = yes ]; then
 	privileged_command mkdir -p "$PREFIX/share/gcc-pdp10/config/pdp10"
 	privileged_command cp "$SRC/gcc/config/pdp10/libgcc1.s" "$PREFIX/share/gcc-pdp10/config/pdp10/libgcc1.s"
