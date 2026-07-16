@@ -536,12 +536,32 @@ case "$RESOLVED_AS" in
 		;;
 esac
 
+# GCC searches the target tooldir before falling back to the host PATH.
+# Keep the assembler there so an installed toolchain remains relocatable even
+# when configure recorded an absolute --with-as path.
+if [ "$AS" = "$PREFIX/bin/$TARGET-as" ]; then
+	TARGET_AS_LINK="../../bin/$TARGET-as"
+else
+	TARGET_AS_LINK="$AS"
+fi
+if [ "$INSTALL_WITH_PRIV" = yes ]; then
+	privileged_command ln -sf "$TARGET_AS_LINK" "$PREFIX/$TARGET/bin/as"
+else
+	ln -sf "$TARGET_AS_LINK" "$PREFIX/$TARGET/bin/as"
+fi
+
 if [ "$INSTALL_WITH_PRIV" = yes ]; then
 	privileged_command mkdir -p "$PREFIX/share/gcc-pdp10/config/pdp10"
 	privileged_command cp "$SRC/gcc/config/pdp10/libgcc1.s" "$PREFIX/share/gcc-pdp10/config/pdp10/libgcc1.s"
 else
 	mkdir -p "$PREFIX/share/gcc-pdp10/config/pdp10"
 	cp "$SRC/gcc/config/pdp10/libgcc1.s" "$PREFIX/share/gcc-pdp10/config/pdp10/libgcc1.s"
+fi
+
+INSTALLED_AS=`"$PREFIX/bin/$TARGET-gcc" -print-prog-name=as`
+if [ ! -x "$INSTALLED_AS" ]; then
+	echo "error: installed GCC cannot find target assembler: $INSTALLED_AS" >&2
+	exit 1
 fi
 
 echo "==> installed cc1"
