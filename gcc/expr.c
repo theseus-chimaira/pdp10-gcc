@@ -8462,7 +8462,16 @@ expand_expr (exp, target, tmode, modifier)
 		    || bitpos % BITS_PER_UNIT != 0)
 		  abort ();
 
+#if REAL_BITS_PER_UNIT != 36
 		op0 = adjust_address (op0, VOIDmode, bitpos / BITS_PER_UNIT);
+#else
+		/* PDP-10 memory addresses are 36-bit word addresses even though
+		   generic C storage units are 9 bits.  A BLKmode COMPONENT_REF
+		   therefore advances by whole words, not C storage units.  */
+		if (bitpos % BITS_PER_WORD != 0)
+		  abort ();
+		op0 = adjust_address (op0, VOIDmode, bitpos / BITS_PER_WORD);
+#endif
 		if (target == 0)
 		  target = assign_temp (type, 0, 1, 1);
 
