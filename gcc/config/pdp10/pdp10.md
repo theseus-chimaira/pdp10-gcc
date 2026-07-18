@@ -3395,7 +3395,7 @@
         (umod:SI (match_dup 1) (match_dup 2)))
    (clobber (match_scratch:SI 3 "=&r"))]
   ""
-  "jumpge %2,.+14\;move %0,%1\;tlc %0,0400000\;move %3,%2\;tlc %3,0400000\;camge %0,%3\;jrst .+5\;movei %0,1\;move %Z0,%1\;sub %Z0,%2\;jrst .+7\;movei %0,0\;move %Z0,%1\;jrst .+4\;move %Z0,%1\;setz %0,\;div %0,%2"
+  "jumpge %2,.+16\;move %0,%1\;tlc %0,0400000\;move %3,%2\;tlc %3,0400000\;camge %0,%3\;jrst .+5\;movei %0,1\;move %Z0,%1\;sub %Z0,%2\;jrst .+7\;movei %0,0\;move %Z0,%1\;jrst .+4\;move %Z0,%1\;setz %0,\;div %0,%2"
   [(set_attr "length" "17")])
 
 (define_expand "udivsi3"
