@@ -7020,10 +7020,10 @@ pdp10_output_movdi (insn, operands, which_alternative, have_dmove)
       if (have_dmove)
 	{
 	  if (unused & 1)
-	    return "movni %Z0,%n1";
+	    return "movni %Z0,%N1";
 	  if (unused & 2)
 	    return "seto %0,";
-	  return "seto %0,\n\tmovni %Z0,%n1";
+	  return "seto %0,\n\tmovni %Z0,%N1";
 	}
       else if (TARGET_71BIT && !TARGET_KI10up)
 	{
@@ -7046,10 +7046,10 @@ pdp10_output_movdi (insn, operands, which_alternative, have_dmove)
       else
 	{
 	  if (unused & 1)
-	    return "movni %Z0,%n1";
+	    return "movni %Z0,%N1";
 	  if (unused & 2)
 	    return "seto %0,";
-	  return "seto %0,\n\tmovni %Z0,%n1";
+	  return "seto %0,\n\tmovni %Z0,%N1";
 	}
 
     case 4:
