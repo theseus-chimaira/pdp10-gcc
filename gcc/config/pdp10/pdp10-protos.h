@@ -197,6 +197,7 @@ extern const char *
 extern int	pdp10_expand_dmove PARAMS ((rtx destination, rtx source));
 extern int	pdp10_expand_move_4 PARAMS ((rtx destination, rtx source));
 extern int	pdp10_expand_movstrsi PARAMS ((rtx *operands));
+extern int	pdp10_expand_memmove_words PARAMS ((rtx destination, rtx source, rtx length));
 extern int	pdp10_word_address_plus_one_p PARAMS ((rtx first,
 						      rtx second));
 extern int	pdp10_normalize_blt_source_p PARAMS ((rtx src, rtx dest,

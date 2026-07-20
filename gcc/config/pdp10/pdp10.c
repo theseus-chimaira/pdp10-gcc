@@ -213,6 +213,11 @@ static int	pdp10_dynamic_ref_base_bitpos PARAMS ((tree exp, tree *basep,
                                                    pdp10_word36 *bitposp));
 static void	pdp10_print_raw_word36_constant PARAMS ((FILE *stream, rtx x));
 static int	pdp10_frame_address_p PARAMS ((rtx x));
+static void	pdp10_emit_ibp1 PARAMS ((rtx op0, rtx op1));
+static void	emit_cmp_and_jump_insn_1 PARAMS ((rtx x, rtx y,
+					  enum machine_mode mode,
+					  enum rtx_code comparison,
+					  int unsignedp, rtx label));
 static rtx	pdp10_output_unwrap_address PARAMS ((rtx x));
 static rtx	pdp10_output_add_address_offset PARAMS ((rtx x,
 						       HOST_WIDE_INT offset));
@@ -11254,6 +11259,79 @@ expand_blt (destination, source, length)
   return 1;
 }
 
+/* Expand an overlap-safe move of a constant whole-word block.
+
+   Forward BLT is safe when DESTINATION is below SOURCE, or when the two
+   ranges do not overlap.  If DESTINATION begins inside the source range,
+   copy backward one word at a time.  This is the struct-return memmove
+   case emitted by GCC when returning *pointer into the hidden result block.
+   Keep this target-side so ordinary freestanding code does not acquire an
+   otherwise unnecessary libc memmove dependency.  */
+int
+pdp10_expand_memmove_words (destination, source, length)
+     rtx destination;
+     rtx source;
+     rtx length;
+{
+  HOST_WIDE_INT words;
+  rtx dst;
+  rtx src;
+  rtx src_end;
+  rtx count;
+  rtx temp;
+  rtx forward_label;
+  rtx backward_loop;
+  rtx done_label;
+
+  if (GET_CODE (length) != CONST_INT
+      || INTVAL (length) < 0
+      || INTVAL (length) % UNITS_PER_WORD != 0)
+    return 0;
+
+  words = INTVAL (length) / UNITS_PER_WORD;
+  if (words == 0)
+    return 1;
+
+  dst = gen_reg_rtx (Pmode);
+  src = gen_reg_rtx (Pmode);
+  src_end = gen_reg_rtx (Pmode);
+  emit_move_insn (dst, destination);
+  emit_move_insn (src, source);
+  emit_insn (gen_addsi3 (src_end, src, GEN_INT (words)));
+
+  forward_label = gen_label_rtx ();
+  done_label = gen_label_rtx ();
+
+  /* Unsigned address ordering is the correct comparison for PDP-10 word
+     addresses.  */
+  emit_cmp_and_jump_insn_1 (dst, src, Pmode, LEU, 1, forward_label);
+  emit_cmp_and_jump_insn_1 (dst, src_end, Pmode, GEU, 1, forward_label);
+
+  /* Overlap with dst > src: start at the last word and walk backward.  */
+  emit_insn (gen_addsi3 (dst, dst, GEN_INT (words - 1)));
+  emit_insn (gen_addsi3 (src, src, GEN_INT (words - 1)));
+  count = gen_reg_rtx (SImode);
+  temp = gen_reg_rtx (SImode);
+  emit_move_insn (count, GEN_INT (words));
+  backward_loop = gen_label_rtx ();
+  emit_label (backward_loop);
+  emit_move_insn (temp, gen_rtx_MEM (SImode, src));
+  emit_move_insn (gen_rtx_MEM (SImode, dst), temp);
+  emit_insn (gen_addsi3 (src, src, constm1_rtx));
+  emit_insn (gen_addsi3 (dst, dst, constm1_rtx));
+  emit_insn (gen_addsi3 (count, count, constm1_rtx));
+  emit_cmp_and_jump_insn_1 (count, CONST0_RTX (SImode), SImode, NE, 0,
+                            backward_loop);
+  emit_jump_insn (gen_jump (done_label));
+  emit_barrier ();
+
+  emit_label (forward_label);
+  if (!expand_blt (dst, src, length))
+    abort ();
+  emit_label (done_label);
+  return 1;
+}
+
 /* Try to emit instructions to XBLT a memory block of LENGTH storage
    units from SOURCE to DESTINATION.  Return nonzero on success.  */
 static int
@@ -11368,6 +11446,65 @@ expand_movslj (destination, source, length)
 }
 #endif
 
+/* Copy a constant number of 9-bit C storage units using native byte
+   pointers.  This is the packed-object counterpart to BLT: BLT is only
+   correct for whole-word-aligned blocks, while a packed BLKmode object may
+   start or end inside a 36-bit word.  */
+static int
+expand_byte_copy (destination, source, length)
+     rtx destination;
+     rtx source;
+     rtx length;
+{
+  HOST_WIDE_INT n;
+  rtx dst;
+  rtx src;
+  rtx count;
+  rtx value;
+  rtx srcmem;
+  rtx dstmem;
+  rtx loop;
+
+  if (GET_CODE (length) != CONST_INT)
+    return 0;
+
+  n = INTVAL (length);
+  if (n < 0)
+    return 0;
+  if (n == 0)
+    return 1;
+
+  /* Always copy the incoming addresses to ordinary pseudos.  A BLKmode
+     stack object can arrive as virtual-stack-vars itself; modifying that
+     special virtual register with IBP makes virtual-register instantiation
+     invalid.  */
+  dst = gen_reg_rtx (Pmode);
+  src = gen_reg_rtx (Pmode);
+  emit_move_insn (dst, destination);
+  emit_move_insn (src, source);
+  count = gen_reg_rtx (SImode);
+  value = gen_reg_rtx (SImode);
+  emit_move_insn (count, GEN_INT (n));
+
+  loop = gen_label_rtx ();
+  emit_label (loop);
+
+  srcmem = gen_rtx_MEM (QImode, src);
+  dstmem = gen_rtx_MEM (QImode, dst);
+  set_mem_align (srcmem, BITS_PER_UNIT);
+  set_mem_align (dstmem, BITS_PER_UNIT);
+  emit_move_insn (value, gen_rtx_ZERO_EXTEND (SImode, srcmem));
+  emit_move_insn (dstmem, gen_rtx_SUBREG (QImode, value, 3));
+
+  pdp10_emit_ibp1 (src, src);
+  pdp10_emit_ibp1 (dst, dst);
+  emit_insn (gen_addsi3 (count, count, constm1_rtx));
+  emit_cmp_and_jump_insn_1 (count, CONST0_RTX (SImode), SImode, NE, 0,
+                            loop);
+
+  return 1;
+}
+
 /* Emit instructions to copy a memory block.  Return nonzero on
    success.  */
 int
@@ -11391,8 +11528,18 @@ pdp10_expand_movstrsi (operands)
   raw_destination = operands[0];
   raw_source = operands[1];
 
-  if (GET_CODE (operands[3]) != CONST_INT
-      || INTVAL (operands[3]) != UNITS_PER_WORD)
+  if (GET_CODE (operands[3]) != CONST_INT)
+    return 0;
+
+  /* Subword-aligned BLKmode objects are represented by PDP-10 byte
+     pointers.  Preserve their exact first/last byte instead of falling back
+     to libc or rounding them to word addresses for BLT.  */
+  if (INTVAL (operands[3]) < UNITS_PER_WORD
+      || (GET_CODE (operands[2]) == CONST_INT
+          && INTVAL (operands[2]) % UNITS_PER_WORD != 0))
+    return expand_byte_copy (operands[0], operands[1], operands[2]);
+
+  if (INTVAL (operands[3]) != UNITS_PER_WORD)
     return 0;
 
   if (GET_CODE (operands[2]) == CONST_INT

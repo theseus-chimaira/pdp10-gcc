@@ -4549,6 +4549,21 @@ expand_assignment (to, from, want_value, suggest_reg)
       to_addr = XEXP (to_rtx, 0);
       from_addr = XEXP (from_rtx, 0);
 
+#if REAL_BITS_PER_UNIT == 36
+      /* Whole-word PDP-10 structure returns can be moved safely without a
+         hosted memmove.  The target expander selects forward BLT or a
+         backward word loop according to the run-time overlap direction.  */
+      if (pdp10_bytesize (TREE_TYPE (to)) == BITS_PER_WORD
+          && pdp10_bytesize (TREE_TYPE (from)) == BITS_PER_WORD
+          && pdp10_expand_memmove_words (to_addr, from_addr, size))
+        {
+          preserve_temp_slots (to_rtx);
+          free_temp_slots ();
+          pop_temp_slots ();
+          return want_value ? to_rtx : NULL_RTX;
+        }
+#endif
+
       /* PDP-10: convert pointer if necessary.  */
       if (pdp10_bytesize (TREE_TYPE (to)) != BITS_PER_UNIT)
 	to_addr = pdp10_convert_ptr (NULL_TREE, to_addr, NULL_RTX,
