@@ -2139,26 +2139,10 @@
   [(set_attr "length" "2,1,2,7,2,2,2")])
 
 
-;; Repair an already-split two-word register move whose destination pair
-;; overlaps the source pair upward by one register:
-;;
-;;   move D,S
-;;   move D+1,S+1
-;;
-;; with D == S+1.  The low-first order clobbers S+1 before the second move.
-;; This commonly appears when a DImode return in AC1,AC2 is copied into a
-;; DImode argument slot in AC2,AC3 on non-DMOVE machines.
-(define_peephole2
-  [(set (match_operand:SI 0 "register_operand" "")
-        (match_operand:SI 1 "register_operand" ""))
-   (set (match_operand:SI 2 "register_operand" "")
-        (match_operand:SI 3 "register_operand" ""))]
-  "REGNO (operands[0]) == REGNO (operands[1]) + 1
-   && REGNO (operands[2]) == REGNO (operands[0]) + 1
-   && REGNO (operands[3]) == REGNO (operands[0])"
-  [(set (match_dup 2) (match_dup 3))
-   (set (match_dup 0) (match_dup 1))])
-
+;; Overlapping DImode register pairs are handled by pdp10_output_movdi().
+;; Do not try to recognize an already split pair here: after splitting, two
+;; adjacent SImode moves are indistinguishable from independent scalar moves.
+;; Reordering the latter changes program semantics.
 
 (define_expand "movti"
   [(set (match_operand:TI 0 "nonimmediate_operand" "")
