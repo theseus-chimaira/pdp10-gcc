@@ -8110,7 +8110,15 @@ pdp10_output_maybe_bitptr_hi (operands, sign_extend)
   if (store)
     output_asm_insn ("dpb %1,%0", operands);
   else if (sign_extend)
-    output_asm_insn ("extend %0,[ldbe %1]", operands);
+    {
+      if (TARGET_XKL2)
+        output_asm_insn ("extend %0,[ldbe %1]", operands);
+      else
+        {
+          output_asm_insn ("ldb %0,%1", operands);
+          output_asm_insn ("hrre %0,%0", operands);
+        }
+    }
   else
     output_asm_insn ("ldb %0,%1", operands);
 
@@ -8141,8 +8149,15 @@ pdp10_output_movhi (operands, sign_extend)
     {
       if (store)
 	return "idpb %1,%0";
+      else if (!sign_extend)
+	return "ildb %0,%1";
+      else if (TARGET_XKL2)
+	return "extend %0,[ildbe %1]";
       else
-	return sign_extend ? "extend %0,[ildbe %1]" : "ildb %0,%1";
+	{
+	  output_asm_insn ("ildb %0,%1", operands);
+	  return "hrre %0,%0";
+	}
     }
   else if (address && GET_CODE (address) == POST_INC)
     {
@@ -8281,7 +8296,12 @@ pdp10_output_movhi (operands, sign_extend)
               output_asm_insn ("ldb %0,%0", ops);
               return "";
             }
-	  return sign_extend ? "extend %0,[ldbe %1]" : "ldb %0,%1";
+	  if (!sign_extend)
+	    return "ldb %0,%1";
+	  if (TARGET_XKL2)
+	    return "extend %0,[ldbe %1]";
+	  output_asm_insn ("ldb %0,%1", operands);
+	  return "hrre %0,%0";
         }
     }
 }
