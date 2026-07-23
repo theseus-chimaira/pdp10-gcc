@@ -102,9 +102,6 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 
 **********************************************************************/
 
-/* Only use single_push/single_pop when optimize_size ||
-   !TARGET_EXTENDED?  */
-
 /* Candidates for inlining once the code settles:
 
    pdp10_align_stack_pointer, const_ok_for_letter_p,
@@ -12926,7 +12923,7 @@ static void	expand_save_or_restore_return_address PARAMS ((int save,
 static void	expand_save_or_restore_regs PARAMS ((int save,
 						     int *clobbered,
 						     int clobbered_size,
-						     int single));
+						     int push_pop));
 static void	expand_set_up_frame_pointer PARAMS ((void));
 
 /* Return the number of clobbered registers that the current function
@@ -12992,14 +12989,14 @@ expand_save_or_restore_return_address (save, clobbered_size)
 
 /* Save or restore clobbered callee-saved registers.  SAVE is nonzero
    when saving, and zero when restoring.  CLOBBERED indicates
-   clobbered registers.  SINGLE is nonzero when a single PUSH or POP
-   instruction can be used.  */
+   clobbered registers.  PUSH_POP is nonzero when PUSH/POP instructions
+   should be used instead of fixed stack slots.  */
 static void
-expand_save_or_restore_regs (save, clobbered, clobbered_size, single)
+expand_save_or_restore_regs (save, clobbered, clobbered_size, push_pop)
      int save;
      int *clobbered;
      int clobbered_size;
-     int single;
+     int push_pop;
 {
   int fp_clobbered = 0;
   int go_back = 1;
@@ -13011,6 +13008,56 @@ expand_save_or_restore_regs (save, clobbered, clobbered_size, single)
 
   if (clobbered_size == 0)
     return;
+
+  /* On PDP-6/KA10, a pure callee-save frame of up to three words is
+     smaller with one PUSH/POP per register than with an explicit stack
+     adjustment plus MOVE/MOVEM pairs.  Save the hard frame pointer
+     first, as the fixed-slot path does, and restore in exact reverse
+     order.  */
+  if (push_pop)
+    {
+      rtx stack;
+
+      if (save)
+	{
+	  if (clobbered[HARD_FRAME_POINTER_REGNUM])
+	    {
+	      stack = gen_rtx_PRE_INC (Pmode, stack_pointer_rtx);
+	      emit_frame_insn
+		(gen_PUSH (gen_rtx_MEM (SImode, stack),
+			   gen_rtx_REG (SImode, HARD_FRAME_POINTER_REGNUM)));
+	    }
+
+	  for (i = 0; i < 16; i++)
+	    if (i != HARD_FRAME_POINTER_REGNUM && clobbered[i])
+	      {
+		stack = gen_rtx_PRE_INC (Pmode, stack_pointer_rtx);
+		emit_frame_insn
+		  (gen_PUSH (gen_rtx_MEM (SImode, stack),
+			     gen_rtx_REG (SImode, i)));
+	      }
+	}
+      else
+	{
+	  for (i = 15; i >= 0; i--)
+	    if (i != HARD_FRAME_POINTER_REGNUM && clobbered[i])
+	      {
+		stack = gen_rtx_POST_DEC (Pmode, stack_pointer_rtx);
+		emit_frame_insn
+		  (gen_POP (gen_rtx_REG (SImode, i),
+			    gen_rtx_MEM (SImode, stack)));
+	      }
+
+	  if (clobbered[HARD_FRAME_POINTER_REGNUM])
+	    {
+	      stack = gen_rtx_POST_DEC (Pmode, stack_pointer_rtx);
+	      emit_frame_insn
+		(gen_POP (gen_rtx_REG (SImode, HARD_FRAME_POINTER_REGNUM),
+			  gen_rtx_MEM (SImode, stack)));
+	    }
+	}
+      return;
+    }
 
   offset = -((current_function_outgoing_args_size +
 	      get_frame_size () +
@@ -13034,26 +13081,6 @@ expand_save_or_restore_regs (save, clobbered, clobbered_size, single)
       regs = 1;
       if (!clobbered[i])
 	continue;
-
-      /* If a single PUSH or POP instruction can be used, do so and
-	 return.  */
-      if (single && !TARGET_EXTENDED)
-	{
-	  rtx stack;
-	  if (save)
-	    {
-	      stack = gen_rtx_PRE_INC (Pmode, stack_pointer_rtx);
-	      emit_frame_insn (gen_PUSH (gen_rtx_MEM (SImode, stack),
-					 gen_rtx_REG (SImode, i)));
-	    }
-	  else
-	    {
-	      stack = gen_rtx_POST_DEC (Pmode, stack_pointer_rtx);
-	      emit_frame_insn (gen_POP (gen_rtx_REG (SImode, i),
-					gen_rtx_MEM (SImode, stack)));
-	    }
-	  return;
-	}
 
       /* Find a consecutive block of clobbered registers.
 
@@ -13182,29 +13209,34 @@ pdp10_expand_prologue ()
   int clobbered[FIRST_PSEUDO_REGISTER];
   int clobbered_size;
   int stack_adjust;
-  int single_push;
+  int push_pop;
 
   clobbered_size = clobbered_regs (clobbered);
 
-  /* If only one word is to be saved on stack, it can be stored with a
-     single PUSH instruction.  */
-  single_push =
-    clobbered_size == UNITS_PER_WORD
+  /* A one-word pure save frame always fits one PUSH.  At -Os, use
+     PUSH/POP for two- and three-word pure save frames on PDP-6/KA10 as
+     well; those CPUs have no doubleword move, so this saves exactly the
+     two explicit stack-adjust instructions.  */
+  push_pop =
+    clobbered_size > 0
+    && clobbered_size <= 3 * UNITS_PER_WORD
     && !TARGET_EXTENDED
     && current_function_outgoing_args_size == 0
     && current_function_pretend_args_size == 0
-    && get_frame_size () == 0;
+    && get_frame_size () == 0
+    && (clobbered_size == UNITS_PER_WORD
+	|| (optimize_size && MOVE_MAX == UNITS_PER_WORD));
 
   stack_adjust =
     current_function_outgoing_args_size
     + get_frame_size ()
     + clobbered_size
     + current_function_pretend_args_size;
-  if (!single_push && stack_adjust > 0)
+  if (!push_pop && stack_adjust > 0)
     emit_frame_insn (pdp10_gen_stack_adjust (GEN_INT (stack_adjust / 4)));
 
   expand_save_or_restore_return_address (SAVE, clobbered_size);
-  expand_save_or_restore_regs (SAVE, clobbered, clobbered_size, single_push);
+  expand_save_or_restore_regs (SAVE, clobbered, clobbered_size, push_pop);
   expand_set_up_frame_pointer ();
 }
 
@@ -13217,20 +13249,21 @@ pdp10_expand_epilogue (popj)
   int clobbered[FIRST_PSEUDO_REGISTER];
   int clobbered_size;
   int stack_adjust;
-  int single_pop;
+  int push_pop;
 
   clobbered_size = clobbered_regs (clobbered);
 
-  /* If only one word was saved on stack, it can be restored with a
-     single POP instruction.  */
-  single_pop =
-    clobbered_size == UNITS_PER_WORD
+  push_pop =
+    clobbered_size > 0
+    && clobbered_size <= 3 * UNITS_PER_WORD
     && !TARGET_EXTENDED
     && current_function_outgoing_args_size == 0
     && current_function_pretend_args_size == 0
-    && get_frame_size () == 0;
+    && get_frame_size () == 0
+    && (clobbered_size == UNITS_PER_WORD
+	|| (optimize_size && MOVE_MAX == UNITS_PER_WORD));
 
-  expand_save_or_restore_regs (RESTORE, clobbered, clobbered_size, single_pop);
+  expand_save_or_restore_regs (RESTORE, clobbered, clobbered_size, push_pop);
   expand_save_or_restore_return_address (RESTORE, clobbered_size);
 
   stack_adjust =
@@ -13238,7 +13271,7 @@ pdp10_expand_epilogue (popj)
     + get_frame_size ()
     + clobbered_size
     + current_function_pretend_args_size;
-  if (!single_pop && stack_adjust > 0)
+  if (!push_pop && stack_adjust > 0)
     emit_frame_insn (pdp10_gen_stack_adjust (GEN_INT (-stack_adjust / 4)));
 
   if (popj)
