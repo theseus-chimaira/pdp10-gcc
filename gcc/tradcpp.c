@@ -3602,7 +3602,7 @@ eval_if_expression (buf, length)
   HASHNODE *save_defined;
   int value;
 
-  save_defined = install (U"defined", -1, T_SPEC_DEFINED, -1);
+  save_defined = install ((const unsigned char *) "defined", -1, T_SPEC_DEFINED, -1);
   temp_obuf = expand_to_temp_buffer (buf, buf + length, 0);
   delete_macro (save_defined);	/* clean up special symbol */
 
