@@ -2326,4 +2326,12 @@ extern int pdp10_retregs;
 #define TARGET_SKIP_REGMOVE_PASS \
   (optimize_size && current_function_args_size > 0)
 
+/* Ordinary Pmode +/- 1 arithmetic on PDP-10 is word-address arithmetic.
+   QImode objects, however, are packed 9-bit bytes and advance with IBP/ADJBP.
+   Generic regmove must therefore not reinterpret an ordinary pointer add as
+   QImode PRE_INC/POST_INC: that changes a one-word displacement into a
+   one-byte displacement.  Explicit packed-byte increments are expanded by
+   the PDP-10 pointer machinery itself and do not require this fold.  */
+#define TARGET_AUTO_INC_DEC_OK(MODE, INCREMENT, PRE) ((MODE) != QImode)
+
 #endif /* __PDP10_H__ */

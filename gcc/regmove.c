@@ -46,6 +46,10 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #define TARGET_SKIP_REGMOVE_PASS 0
 #endif
 
+#ifndef TARGET_AUTO_INC_DEC_OK
+#define TARGET_AUTO_INC_DEC_OK(MODE, INCREMENT, PRE) 1
+#endif
+
 
 /* Turn STACK_GROWS_DOWNWARD into a boolean.  */
 #ifdef STACK_GROWS_DOWNWARD
@@ -118,7 +122,8 @@ try_auto_increment (insn, inc_insn, inc_insn_set, reg, increment, pre)
       if (use != 0 && use != (rtx) (size_t) 1)
 	{
 	  int size = GET_MODE_SIZE (GET_MODE (use));
-	  if (0
+	  if (TARGET_AUTO_INC_DEC_OK (GET_MODE (use), increment, pre)
+	      && (0
 	      || (HAVE_POST_INCREMENT
 		  && pre == 0 && (inc_code = POST_INC, increment == size))
 	      || (HAVE_PRE_INCREMENT
@@ -127,7 +132,7 @@ try_auto_increment (insn, inc_insn, inc_insn_set, reg, increment, pre)
 		  && pre == 0 && (inc_code = POST_DEC, increment == -size))
 	      || (HAVE_PRE_DECREMENT
 		  && pre == 1 && (inc_code = PRE_DEC, increment == -size))
-	  )
+	  ))
 	    {
 	      if (inc_insn_set)
 		validate_change
