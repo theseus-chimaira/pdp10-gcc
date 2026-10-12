@@ -1784,6 +1784,23 @@
   "INTVAL (operands[2]) != 16"
   "*return pdp10_output_extzv (insn, operands);")
 
+;; Extract a field in the second word of a double-word object.  GCC may
+;; retain DImode on a MEM after folding a packed bit-field reference; the
+;; ordinary extzv patterns only accept SI/QI MEMs.  Address the containing
+;; 36-bit word explicitly, retaining the same bit position within that word.
+;; The common nine-bit field at bit 63 is the low nine bits of word two.
+(define_insn_and_split "*extzv_di_mem_low9"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(zero_extract:SI (match_operand:DI 1 "memory_operand" "m")
+			 (const_int 9)
+			 (const_int 63)))]
+  ""
+  "#"
+  "!reload_completed"
+  [(set (match_dup 0)
+	(zero_extract:SI (match_dup 2) (const_int 9) (const_int 27)))]
+  "operands[2] = adjust_address (operands[1], SImode, UNITS_PER_WORD);")
+
 (define_insn "*move_dpb"
   [(set (match_operand:QI 0 "memory_operand" "=m")
 	(subreg:QI (zero_extract:SI (match_operand:SI 2 "memory_operand" "m")
@@ -2732,6 +2749,13 @@
        {
 	 if (!register_operand (operands[1], DImode))
 	   operands[1] = force_reg (DImode, operands[1]);
+	 /* A two-word source at a non-offsettable address cannot satisfy
+	    the 'o' constraint of adddi3_71_no_dadd.  Materialize it before
+	    emitting the machine insn, while preserving direct offsettable
+	    memory operands and their shorter ADD sequence.  */
+	 if (GET_CODE (operands[2]) == MEM
+	     && !offsettable_memref_p (operands[2]))
+	   operands[2] = force_reg (DImode, operands[2]);
 	 emit_insn (gen_adddi3_71_no_dadd (operands[0], operands[1],
 					    operands[2]));
 	 DONE;
