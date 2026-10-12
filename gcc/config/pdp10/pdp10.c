@@ -16449,6 +16449,29 @@ void pdp10_md_array_offset (tree exp, tree index, tree unit_size,
                                     convert (sizetype,
                                              build_int_2 (2, 0)));
         }
+      else if (TREE_CODE (elem_type) == ARRAY_TYPE)
+        {
+          tree scalar_type = elem_type;
+          int byte_size;
+
+          /* A fixed-size row in a multidimensional array has the same
+             address unit as its ultimate scalar element.  In particular,
+             char rows are indexed in 9-bit bytes, not whole words: a
+             103-character row advances by 103 bytes, not 103/4 words.
+             This must agree with the VLA-row calculation above.  */
+          while (TREE_CODE (scalar_type) == ARRAY_TYPE)
+            scalar_type = TREE_TYPE (scalar_type);
+          byte_size = pdp10_normalize_pointer_bytesize
+            (pdp10_bytesize (scalar_type));
+
+          if (byte_size >= BITS_PER_WORD)
+            unit_size = size_binop (TRUNC_DIV_EXPR, unit_size,
+                                    convert (sizetype,
+                                             build_int_2 (UNITS_PER_WORD, 0)));
+          else if (byte_size == 18)
+            unit_size = size_binop (TRUNC_DIV_EXPR, unit_size,
+                                    convert (sizetype, build_int_2 (2, 0)));
+        }
       else if ((TREE_CODE (elem_type) == RECORD_TYPE
 	        || TREE_CODE (elem_type) == UNION_TYPE)
 	       && tree_low_cst (unit_size, 1) >= UNITS_PER_WORD

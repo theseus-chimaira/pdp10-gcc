@@ -4091,6 +4091,11 @@ expand_assignment (to, from, want_value, suggest_reg)
 	     from the final ARRAY_REF index so p->r[0].b[i] stores byte i rather
 	     than word i * sizeof (r[0]).  */
 	  if (TREE_CODE (to) == ARRAY_REF
+	      /* This correction is for a byte array selected through a
+	         record field.  An ordinary nested array (a[i][j]) already
+	         has both indices in OFFSET: replacing it with the final
+	         index silently aliases every row to row zero.  */
+	      && TREE_CODE (TREE_OPERAND (to, 0)) == COMPONENT_REF
 	      && bitsize == BITS_PER_UNIT
 	      && pdp10_bytesize (TREE_TYPE (to)) == BITS_PER_UNIT
 	      && TREE_CODE (TREE_TYPE (TREE_OPERAND (to, 0))) == ARRAY_TYPE
