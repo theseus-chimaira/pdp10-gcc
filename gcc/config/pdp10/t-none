@@ -8,12 +8,13 @@
 TARGET_LIBGCC2_CFLAGS = -fomit-frame-pointer -DUNDERSCORE=__ -Dinhibit_libc -march=base -mtune=166 -munextended -mno-string -mlong-long-71bit
 LIBGCC2_DEBUG_CFLAGS = -g0
 
-# Keep generic libgcc2 floating conversions that are not yet implemented
-# out of this freestanding runtime.  PDP-10-specific SF/DF conversions and
-# comparisons are supplied by libgcc1.s; DF add/sub are supplied by the
-# baseline-safe C89 software implementation below.
-LIB2FUNCS_EXCLUDE = _floatdidf _floatdisf _fixunsdfsi _fixunssfsi _exit _eprintf \
-  _bb _fixunsdfdi _fixdfdi _fixunssfdi _fixsfdi _fixxfdi _fixunsxfdi _floatdixf \
+# PDP-10-specific SF/DF conversions and comparisons are supplied by
+# libgcc1.s.  Keep the generic double-word conversion entry points needed
+# by GCC-built native programs: __fixdfdi, __fixunsdfdi, __fixunsdfsi,
+# __floatdisf and __floatdidf.
+# Other unsupported hosted conversions remain excluded.
+LIB2FUNCS_EXCLUDE = _fixunssfsi _exit _eprintf \
+  _bb _fixunssfdi _fixsfdi _fixxfdi _fixunsxfdi _floatdixf \
   _fixunsxfsi _fixtfdi _fixunstfdi _floatditf __main _trampoline _divdi3 _moddi3 \
   _udivdi3 _umoddi3 _udivmoddi4 _udivsi3 _umodsi3
 
