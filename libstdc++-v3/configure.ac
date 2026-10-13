@@ -319,13 +319,15 @@ AC_SUBST(LIBSUPCXX_PICFLAGS)
 AC_CONFIG_FILES([Makefile \
     include/Makefile src/Makefile \
     libmath/Makefile libio/Makefile libsupc++/Makefile \
-    po/Makefile])
+    po/Makefile testsuite/Makefile mkcheck testsuite_flags])
 AC_CONFIG_COMMANDS([default],
 [if test -n "$CONFIG_FILES"; then
   ac_file=Makefile . ${glibcpp_basedir}/../config-ml.in
   grep '^MULTISUBDIR =' Makefile >> src/Makefile
   grep '^MULTISUBDIR =' Makefile >> libsupc++/Makefile
 fi
+chmod +x mkcheck
+chmod +x testsuite_flags
 ],
 [srcdir=${srcdir}
 host=${host}

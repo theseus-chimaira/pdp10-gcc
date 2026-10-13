@@ -1082,6 +1082,17 @@ clean-target-libgcc:
 	while read d; do rm -f gcc/$$d/libgcc.a || : ; done
 	-rm -rf gcc/libgcc
 
+# Check target.
+
+.PHONY: check do-check
+check:
+	$(MAKE) do-check NOTPARALLEL=parallel-ok
+
+do-check: $(CHECK_MODULES) \
+	$(CHECK_TARGET_MODULES) \
+	$(CHECK_X11_MODULES) \
+	check-gcc
+
 # Automated reporting of test results.
 
 warning.log: build.log
@@ -1594,6 +1605,29 @@ cross: all-texinfo all-bison all-byacc all-binutils all-gas all-ld
 	echo "Building runtime libraries"; \
 	$(MAKE) $(BASE_FLAGS_TO_PASS) $(RECURSE_FLAGS) \
 	  LANGUAGES="c c++" all
+
+.PHONY: check-gcc
+check-gcc:
+	@if [ -f ./gcc/Makefile ] ; then \
+	  r=`pwd`; export r; \
+	  s=`cd $(srcdir); pwd`; export s; \
+	  $(SET_LIB_PATH) \
+	  (cd gcc; $(MAKE) $(GCC_FLAGS_TO_PASS) check); \
+	else \
+	  true; \
+	fi
+
+.PHONY: check-c++
+check-c++:
+	@if [ -f ./gcc/Makefile ] ; then \
+	  r=`pwd`; export r; \
+	  s=`cd $(srcdir); pwd`; export s; \
+	  $(SET_LIB_PATH) \
+	  (cd gcc; $(MAKE) $(GCC_FLAGS_TO_PASS) check-c++); \
+	  $(MAKE) check-target-libstdc++-v3; \
+	else \
+	  true; \
+	fi
 
 .PHONY: install-gcc
 install-gcc:
