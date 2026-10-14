@@ -21,6 +21,11 @@ upstream historical maintenance notes rather than work specific to this fork.
 
 ## Optimizer and code-size work
 
+- [ ] Benchmark the shared PDP-6 `libp10c-v2.a` assembly routines against
+  byte-by-byte implementations across CPU and optimization profiles.
+  Verify archive extraction with production link scripts and expand
+  width/alignment cases. The staged archive and PDP-6 compiler tests pass.
+
 - [ ] Investigate optimizer regressions where `-Os` produces larger code than
   `-O2` or even `-O1`.
   - Build focused regression cases for every confirmed inversion.
@@ -88,3 +93,7 @@ upstream historical maintenance notes rather than work specific to this fork.
 - [x] Provide direct raw-pair `CIRC` access through `<pdp10-its.h>` without
   introducing a GCC builtin.
 - [x] Add focused GCC target regression coverage for ITS `CIRC`.
+
+- [ ] Validate BLT speed and the four-whole-word threshold on PDP-6 using
+  actual instruction timings. Extend the raw-byte regressions to later
+  processors and additional pointer alignments and overlap conditions.

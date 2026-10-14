@@ -558,6 +558,31 @@ else
 	cp "$SRC/gcc/config/pdp10/libgcc1.s" "$PREFIX/share/gcc-pdp10/config/pdp10/libgcc1.s"
 fi
 
+# Freestanding PDP-6-compatible C library primitives, independent of any
+# operating system. Keep these outside libgcc.a: compiler-generated helper
+# symbols and public C library functions have different ownership.
+# Each installed assembly module is independently selectable by the linker.
+FREESTANDING_SRC="$SRC/gcc/config/pdp10/freestanding"
+FREESTANDING_DST="$PREFIX/lib/gcc-lib/$TARGET/3.2/freestanding"
+FREESTANDING_INCLUDE="$PREFIX/$TARGET/include"
+P10C_TMPBASE=${TMPDIR:-$HOME/tmp}
+mkdir -p "$P10C_TMPBASE"
+P10C_INSTALL_STAGE=$(mktemp -d "$P10C_TMPBASE/gcc-p10c-install-v2.XXXXXXXX")
+sh "$FREESTANDING_SRC/build-archive-v2.sh" "$FREESTANDING_SRC" \
+    "$P10C_INSTALL_STAGE/libp10c-v2.a"
+if [ "$INSTALL_WITH_PRIV" = yes ]; then
+	privileged_command mkdir -p "$FREESTANDING_DST" "$FREESTANDING_INCLUDE"
+	privileged_command cp "$FREESTANDING_SRC"/kcc-libc-*.s "$FREESTANDING_SRC/p10bytes-v2.s" "$FREESTANDING_DST/"
+	privileged_command cp "$P10C_INSTALL_STAGE/libp10c-v2.a" "$FREESTANDING_DST/"
+	privileged_command cp "$FREESTANDING_SRC/include/string.h" "$FREESTANDING_SRC/include/p10bytes-v2.h" "$FREESTANDING_INCLUDE/"
+else
+	mkdir -p "$FREESTANDING_DST" "$FREESTANDING_INCLUDE"
+	cp "$FREESTANDING_SRC"/kcc-libc-*.s "$FREESTANDING_SRC/p10bytes-v2.s" "$FREESTANDING_DST/"
+	cp "$P10C_INSTALL_STAGE/libp10c-v2.a" "$FREESTANDING_DST/"
+	cp "$FREESTANDING_SRC/include/string.h" "$FREESTANDING_SRC/include/p10bytes-v2.h" "$FREESTANDING_INCLUDE/"
+fi
+rm -r "$P10C_INSTALL_STAGE"
+
 INSTALLED_AS=`"$PREFIX/bin/$TARGET-gcc" -print-prog-name=as`
 if [ ! -x "$INSTALLED_AS" ]; then
 	echo "error: installed GCC cannot find target assembler: $INSTALLED_AS" >&2
