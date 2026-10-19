@@ -1,4 +1,5 @@
 build-*
+!gcc/config/pdp10/freestanding/build-archive-v2.sh
 build
 
 # AI agents

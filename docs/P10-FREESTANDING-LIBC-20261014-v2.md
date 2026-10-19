@@ -33,3 +33,31 @@ memmove overlap remains directional, rather than using unsafe forward BLT.
 Eight PDP-6 C execution cells (KCC and GCC) and the native width and
 BLT copy/fill regressions passed. Runtime performance and the threshold
 are not yet calibrated; these are correctness results, not performance claims.
+
+## Search routines (2026-10-19, v1)
+
+`strstr`, `strpbrk`, and `strspn` have been added as separate PDP-6-compatible
+assembler archive members, with GCC target declarations in `string.h`. There
+is no stack or writable library data. The same C89 regression passes under
+KCC (optimized and unoptimized) and GCC `-O0` with the installed libraries;
+each new archive member resolves independently under the production linker.
+The new KCC and GCC archives were verified byte-identical. Their combined
+static implementation is 60 instruction words, versus 94 for three analogous
+KCC-compiled C functions. This does not establish an execution-time speedup.
+
+GCC `-O1` on the extended search test currently triggers an internal compiler
+error in `put_addressof_into_stack` for a 9-bit stack object; a standalone
+reproducer is registered in `pdp10-testkit`. This is *not* a library failure
+and optimized GCC search execution is not yet accepted beyond the separate
+initialized-data regression.
+
+## GCC initialized data fix (2026-10-19)
+
+The PDP-10 backend previously buffered an incomplete 36-bit word for a 9-bit
+initialized object and sometimes flushed that word only *after* switching to
+`.text`, corrupting the object's last characters. Its GAS-mode
+`ASM_FINISH_DECLARE_OBJECT` now flushes pending bytes at the end of each
+object, while its correct section is still selected. A dedicated PDP-6
+execution regression passes at `-O0`, `-O1`, `-O2`, and `-Os` on the rebuilt,
+installed GCC compiler. This fixes data section placement, not the separate
+`ADDRESSOF` optimizer ICE.

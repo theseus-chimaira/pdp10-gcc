@@ -20,6 +20,9 @@ char *strcat(char *restrict dst, const char *restrict src);
 char *strncat(char *restrict dst, const char *restrict src, size_t count);
 char *strchr(const char *s, int c);
 char *strrchr(const char *s, int c);
+char *strstr(const char *haystack, const char *needle);
+char *strpbrk(const char *s, const char *accept);
+size_t strspn(const char *s, const char *accept);
 size_t strcspn(const char *s, const char *reject);
 char *strtok(char *restrict s, const char *restrict delim);
 

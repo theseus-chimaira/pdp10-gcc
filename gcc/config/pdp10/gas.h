@@ -78,4 +78,12 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #define ASM_OUTPUT_ASCII(STREAM, PTR, LEN) \
   pdp10_gas_output_ascii ((STREAM), (PTR), (LEN))
 
+/* The integer emitter buffers subword 9-bit initializers until a complete
+   36-bit word is available.  Flush the final partial word while the object
+   is still in its original section: otherwise GCC can emit the tail after
+   switching to .text for the next function, splitting initialized data
+   across sections.  This also isolates adjacent odd-length objects. */
+#define ASM_FINISH_DECLARE_OBJECT(STREAM, DECL, TOP_LEVEL, AT_END) \
+  pdp10_output_byte ((STREAM), NULL_RTX, 0)
+
 #endif /* __PDP10_GAS_H__ */
