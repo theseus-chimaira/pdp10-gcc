@@ -39,17 +39,19 @@ are not yet calibrated; these are correctness results, not performance claims.
 `strstr`, `strpbrk`, and `strspn` have been added as separate PDP-6-compatible
 assembler archive members, with GCC target declarations in `string.h`. There
 is no stack or writable library data. The same C89 regression passes under
-KCC (optimized and unoptimized) and GCC `-O0` with the installed libraries;
+KCC (optimized and unoptimized) and GCC `-O0/-O1/-O2/-Os` with the installed libraries;
 each new archive member resolves independently under the production linker.
 The new KCC and GCC archives were verified byte-identical. Their combined
-static implementation is 60 instruction words, versus 94 for three analogous
-KCC-compiled C functions. This does not establish an execution-time speedup.
-
-GCC `-O1` on the extended search test currently triggers an internal compiler
-error in `put_addressof_into_stack` for a 9-bit stack object; a standalone
-reproducer is registered in `pdp10-testkit`. This is *not* a library failure
-and optimized GCC search execution is not yet accepted beyond the separate
-initialized-data regression.
+static implementation is 55 instruction words (28+13+14), versus 94 for three analogous
+KCC-compiled C functions. A measured KCC `-n` SIMH PDP-6 comparison
+of 16 searches per workload showed 71,243 vs 198,011 executed steps for
+`strstr`, 54,315 vs 132,123 for `strpbrk`, and 21,771 vs 42,939 for
+`strspn` (assembler vs C reference, including shared harness). These are
+instruction counts, not AAP logical ticks or PDP-6 cycle timing.
+Against GCC `-O2` C reference, the corresponding assembler/C step counts
+are 59,626/65,770, 42,538/42,618 and 12,954/20,714. The middle case is
+essentially tied on instruction steps, so no general throughput claim is
+made from this input alone.
 
 ## GCC initialized data fix (2026-10-19)
 
@@ -59,5 +61,21 @@ initialized object and sometimes flushed that word only *after* switching to
 `ASM_FINISH_DECLARE_OBJECT` now flushes pending bytes at the end of each
 object, while its correct section is still selected. A dedicated PDP-6
 execution regression passes at `-O0`, `-O1`, `-O2`, and `-Os` on the rebuilt,
-installed GCC compiler. This fixes data section placement, not the separate
-`ADDRESSOF` optimizer ICE.
+installed GCC compiler. The separate `ADDRESSOF` optimizer ICE has also
+been repaired in `gcc/function.c` (see below).
+
+## PDP-10 stack-subword ADDRESSOF fix (2026-10-19)
+
+The optimizer could previously abort in `put_addressof_into_stack` while
+handling an `ADDRESSOF` whose underlying 9-bit local was already represented
+by `SUBREG(ZERO_EXTRACT(MEM))`. The generic path expected a raw `REG`
+and incorrectly attempted another register-to-stack conversion. The
+compiler now reuses the PDP-10 byte-address constructor shared with the
+existing variable-fixup path to form an address of the existing stack slot.
+It does not hide the ICE or suppress the original regression.
+
+The unchanged reproducible source compiled at all four GCC optimization
+levels, and the complete freestanding string regression passed on PDP-6
+at `-O0/-O1/-O2/-Os` with the updated installed compiler. The same
+reproducer compiled with `-O1` for PDP-6, KA10, KI10, KS10, and KL10.
+Execution on the latter four CPUs has not been verified by this patch.

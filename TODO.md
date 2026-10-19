@@ -21,14 +21,6 @@ upstream historical maintenance notes rather than work specific to this fork.
 
 ## Optimizer and code-size work
 
-- [ ] Resolve the reproducible PDP-6 GCC `-O1` internal compiler error in
-  `put_addressof_into_stack` when an `ADDRESSOF` operand references a 9-bit
-  stack slot represented as `SUBREG(ZERO_EXTRACT(MEM))`. The regression is
-  `pdp10-testkit/tests/semantic/validation-gcc/gcc-addressof-pdp6-ice-v1.c`
-  and must compile and execute successfully before accepting `-O1/-O2/-Os`
-  string-search optimization sweeps. Never bypass this error with a test-only
-  flag or an unsupported RTL substitution.
-
 - [ ] Benchmark the shared PDP-6 `libp10c-v2.a` assembly routines against
   byte-by-byte implementations across CPU and optimization profiles.
   Verify archive extraction with production link scripts and expand

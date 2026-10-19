@@ -1987,6 +1987,94 @@ fixup_var_refs_insn (insn, var, promoted_mode, unsignedp, toplevel, no_share)
    we allocate it and update the list.  fixup_var_refs_insn will copy VAR
    or the SUBREG, as appropriate, to the pseudo.  */
 
+/* Return the byte address of a PDP-10 stack subword that is already
+   represented as SUBREG (ZERO_EXTRACT (MEM)).  The reg-to-stack pass can
+   produce this shape before ADDRESSOF cleanup: it must not be treated as a
+   REG needing a *second* stack allocation.  Use the same address/PS-field
+   construction for early variable fixup and late ADDRESSOF elimination.  */
+static rtx
+pdp10_stack_subword_address (slot, insn)
+     rtx slot;
+     rtx insn;
+{
+  rtx sub = copy_rtx (SUBREG_REG (slot));
+  int bitsize = INTVAL (XEXP (sub, 1));
+  int bitpos = INTVAL (XEXP (sub, 2));
+  rtx tmp = gen_reg_rtx (Pmode);
+  HOST_WIDE_INT ps;
+  rtx seq, reg;
+
+  /* Build a byte pointer for the sub-word stack slot.
+     Extended targets can use the compact OWGBP selector
+     encoding in the PS field; unextended PDP-6/KA10 targets
+     need an ordinary local byte-pointer PS field.  */
+  if (bitpos < 0 || bitpos + bitsize > 36
+      || bitpos % bitsize != 0)
+    abort ();
+
+  if (TARGET_EXTENDED)
+    {
+      int base;
+
+      switch (bitsize)
+        {
+        case 6:
+          base = 046;
+          break;
+        case 7:
+          base = 062;
+          break;
+        case 8:
+          base = 055;
+          break;
+        case 9:
+          base = 070;
+          break;
+        case 18:
+          base = 075;
+          break;
+        default:
+          abort ();
+        }
+
+      ps = (base + bitpos / bitsize) << 6;
+    }
+  else
+    {
+      switch (bitsize)
+        {
+        case 6:
+        case 7:
+        case 8:
+        case 9:
+        case 18:
+          break;
+        default:
+          abort ();
+        }
+
+      /* Local byte pointer: P,,S with P naming the high bit
+         of the byte, encoded as (P << 6) + S.  */
+      ps = ((36 - bitsize - bitpos) << 6) + bitsize;
+    }
+
+  start_sequence ();
+  emit_move_insn (tmp, XEXP (XEXP (sub, 0), 0));
+
+  reg = XEXP (XEXP (SUBREG_REG (slot), 0), 0);
+  if (GET_CODE (reg) == PLUS)
+    reg = XEXP (reg, 0);
+  if (! REGNO_PTR_FRAME_P (REGNO (reg)))
+    emit_insn (gen_iorsi3 (tmp, tmp,
+                           GEN_INT (trunc_int_for_mode
+                                    (ps << 24, Pmode))));
+
+  seq = gen_sequence ();
+  end_sequence ();
+  emit_insn_before (seq, insn);
+  return tmp;
+}
+
 static void
 fixup_var_refs_1 (var, promoted_mode, loc, insn, replacements, no_share)
      rtx var;
@@ -2011,87 +2099,11 @@ fixup_var_refs_1 (var, promoted_mode, loc, insn, replacements, no_share)
 	  /* Prevent sharing of rtl that might lose.  */
 	  rtx sub = copy_rtx (XEXP (var, 0));
 
-	  /* PDP-10.  */
+	  /* The stack slot is already materialized; form its byte pointer.  */
 	  if (GET_CODE (var) == SUBREG
 	      && GET_CODE (SUBREG_REG (var)) == ZERO_EXTRACT
 	      && GET_CODE (XEXP (SUBREG_REG (var), 0)) == MEM)
-	    {
-	      int bitsize = INTVAL (XEXP (sub, 1));
-	      int bitpos = INTVAL (XEXP (sub, 2));
-	      rtx tmp = gen_reg_rtx (Pmode);
-	      HOST_WIDE_INT ps;
-	      rtx seq, reg;
-
-	      /* Build a byte pointer for the sub-word stack slot.
-		 Extended targets can use the compact OWGBP selector
-		 encoding in the PS field; unextended PDP-6/KA10 targets
-		 need an ordinary local byte-pointer PS field.  */
-	      if (bitpos < 0 || bitpos + bitsize > 36
-		  || bitpos % bitsize != 0)
-		abort ();
-
-	      if (TARGET_EXTENDED)
-		{
-		  int base;
-
-		  switch (bitsize)
-		    {
-		    case 6:
-		      base = 046;
-		      break;
-		    case 7:
-		      base = 062;
-		      break;
-		    case 8:
-		      base = 055;
-		      break;
-		    case 9:
-		      base = 070;
-		      break;
-		    case 18:
-		      base = 075;
-		      break;
-		    default:
-		      abort ();
-		    }
-
-		  ps = (base + bitpos / bitsize) << 6;
-		}
-	      else
-		{
-		  switch (bitsize)
-		    {
-		    case 6:
-		    case 7:
-		    case 8:
-		    case 9:
-		    case 18:
-		      break;
-		    default:
-		      abort ();
-		    }
-
-		  /* Local byte pointer: P,,S with P naming the high bit
-		     of the byte, encoded as (P << 6) + S.  */
-		  ps = ((36 - bitsize - bitpos) << 6) + bitsize;
-		}
-
-	      start_sequence ();
-	      emit_move_insn (tmp, XEXP (XEXP (sub, 0), 0));
-
-	      reg = XEXP (XEXP (SUBREG_REG (var), 0), 0);
-	      if (GET_CODE (reg) == PLUS)
-		reg = XEXP (reg, 0);
-	      if (! REGNO_PTR_FRAME_P (REGNO (reg)))
-		emit_insn (gen_iorsi3 (tmp, tmp,
-				       GEN_INT (trunc_int_for_mode
-						(ps << 24, Pmode))));
-
-	      seq = gen_sequence ();
-	      end_sequence ();
-	      emit_insn_before (seq, insn);
-	      sub = tmp;
-	    }
+	    sub = pdp10_stack_subword_address (var, insn);
 	  else
 	    sub = gen_rtx_UNSPEC (Pmode, gen_rtvec (1, sub), UNSPEC_ADDRESS);
 
@@ -3194,6 +3206,24 @@ purge_addressof_1 (loc, insn, force, store, ht)
   else if (code == ADDRESSOF)
     {
       rtx sub, insns;
+
+      /* PDP-10 subword variables can already have a stack home by the
+	 time the optimizer purges ADDRESSOF.  Form the byte pointer to
+	 that existing slot, rather than passing a non-REG to the generic
+	 REG-to-stack conversion (which would abort).  */
+      if (GET_CODE (XEXP (x, 0)) == SUBREG
+	  && GET_CODE (SUBREG_REG (XEXP (x, 0))) == ZERO_EXTRACT
+	  && GET_CODE (XEXP (SUBREG_REG (XEXP (x, 0)), 0)) == MEM)
+	{
+	  rtx bp;
+	  if (insn == NULL_RTX)
+	    return false; /* A discarded note must not emit instructions. */
+	  bp = pdp10_stack_subword_address (XEXP (x, 0), insn);
+	  if (validate_change (insn, loc, bp, 0)
+	      || validate_replace_rtx (x, bp, insn))
+	    return true;
+	  abort (); /* An unrepresentable byte address is a target bug. */
+	}
 
       if (GET_CODE (XEXP (x, 0)) != MEM)
 	{
