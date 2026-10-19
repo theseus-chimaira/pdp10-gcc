@@ -9438,6 +9438,22 @@ pdp10_output_lshiftrt_memory (insn, operands)
                                    mem, BITS_PER_UNIT, 0);
     }
 
+  /* A stack-local char array can be lowered to an SImode MEM containing
+     an already selected 36-bit word, followed by LSHIFTRT 27.  In this
+     representation MEM_OFFSET counts words (line+1, line+2, ...), not
+     nine-bit bytes.  Reinterpreting that offset below through
+     pdp10_qi_mem_logical_offset selects byte 1 of word 1 for line[4]
+     and byte 2 of word 2 for line[8].  Both must select the first byte
+     of their respective words.  The shift itself specifies bit zero;
+     keep the word address that reload already selected.  */
+  if (GET_CODE (mem) == MEM
+      && INTVAL (operands[2]) == 27
+      && GET_MODE (mem) == SImode
+      && MEM_ALIGN (mem) >= BITS_PER_WORD
+      && pdp10_frame_address_p (XEXP (mem, 0)))
+    return output_bitfield_move (asm_out_file, insn, 0, 0, operands[0],
+                                 mem, BITS_PER_UNIT, 0);
+
   if (GET_CODE (mem) == MEM
       && INTVAL (operands[2]) == 27)
     {
