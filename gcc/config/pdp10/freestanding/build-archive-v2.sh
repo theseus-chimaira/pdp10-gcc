@@ -21,6 +21,7 @@ for name in kcc-libc-memcpy-v1 kcc-libc-memmove-v1 \
             kcc-libc-strlen-v1 kcc-libc-strcmp-v1 \
             kcc-libc-strncmp-v1 \
             kcc-libc-strstr-v1 kcc-libc-strpbrk-v1 kcc-libc-strspn-v1 \
+            kcc-libc-dimode-float-pdp6-v1 \
             p10bytes-v2 kcc-libc-string-v1; do
     object="$work/$name.dobj"
     "$PDP10_PREFIX/bin/das" -F -C -O "$object" "$src/$name.s"
