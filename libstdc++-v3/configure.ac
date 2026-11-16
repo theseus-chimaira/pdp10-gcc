@@ -265,8 +265,6 @@ else
 
   AC_FUNC_MMAP
 
-  # Establish limits on memory usage during 'make check'
-  GLIBCPP_CONFIGURE_TESTSUITE
 fi
 
 # This depends on the possibly-skipped linker test above.
@@ -319,15 +317,14 @@ AC_SUBST(LIBSUPCXX_PICFLAGS)
 AC_CONFIG_FILES([Makefile \
     include/Makefile src/Makefile \
     libmath/Makefile libio/Makefile libsupc++/Makefile \
-    po/Makefile testsuite/Makefile mkcheck testsuite_flags])
+    po/Makefile build_includes])
 AC_CONFIG_COMMANDS([default],
 [if test -n "$CONFIG_FILES"; then
   ac_file=Makefile . ${glibcpp_basedir}/../config-ml.in
   grep '^MULTISUBDIR =' Makefile >> src/Makefile
   grep '^MULTISUBDIR =' Makefile >> libsupc++/Makefile
 fi
-chmod +x mkcheck
-chmod +x testsuite_flags
+chmod +x build_includes
 ],
 [srcdir=${srcdir}
 host=${host}
@@ -343,15 +340,14 @@ dnl  In autoconf 2.5x, AC_OUTPUT is replaced by three AC_ macros:
 dnl  AC_CONFIG_FILES(Makefile \
 dnl      include/Makefile src/Makefile \
 dnl      libmath/Makefile libio/Makefile libsupc++/Makefile \
-dnl      po/Makefile testsuite/Makefile mkcheck testsuite_flags)
+dnl      po/Makefile build_includes)
 dnl  AC_CONFIG_COMMANDS([default],
 dnl  [if test -n "$CONFIG_FILES"; then
 dnl    ac_file=Makefile . ${glibcpp_basedir}/../config-ml.in
 dnl    grep '^MULTISUBDIR =' Makefile >> src/Makefile
 dnl    grep '^MULTISUBDIR =' Makefile >> libsupc++/Makefile
 dnl  fi
-dnl  chmod +x mkcheck
-dnl  chmod +x testsuite_flags
+dnl  chmod +x build_includes
 dnl  ],
 dnl  srcdir=${srcdir}
 dnl  host=${host}

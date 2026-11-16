@@ -281,58 +281,6 @@ fi
 AC_SUBST(OPCODESLIB)
 ])
 
-dnl ====================================================================
-dnl Look for the DejaGnu header file in the source tree. This file
-dnl defines the functions used to testing support.
-AC_DEFUN(CYG_AC_PATH_DEJAGNU, [
-AC_MSG_CHECKING(for the testing support files in the source tree)
-dirlist=".. ../../ ../../../ ../../../../ ../../../../../ ../../../../../../ ../../../../../../.. ../../../../../../../.. ../../../../../../../../.. ../../../../../../../../../.."
-AC_CACHE_VAL(ac_cv_c_dejagnu,[
-for i in $dirlist; do
-    if test -f "$srcdir/$i/ecc/ecc/infra/testlib/current/include/dejagnu.h" ; then
-	ac_cv_c_dejagnu=`(cd $srcdir/$i/ecc/ecc/infra/testlib/current/include; pwd)`
-    fi
-done
-])
-if test x"${ac_cv_c_dejagnu}" != x; then
-    DEJAGNUHDIR="-I${ac_cv_c_dejagnu}"
-    AC_MSG_RESULT(${ac_cv_c_dejagnu})
-else
-    AC_MSG_RESULT(none)
-fi
-AC_CACHE_VAL(ac_cv_c_dejagnulib,[
-for i in $dirlist; do
-    if test -f "$srcdir/$i/infra/testlib/current/lib/hostutil.exp" ; then
-	ac_cv_c_dejagnulib=`(cd $srcdir/$i/infra/testlib/current/lib; pwd)`
-    fi
-done
-])
-if test x"${ac_cv_c_dejagnulib}" != x; then
-    DEJAGNULIB="${ac_cv_c_dejagnulib}"
-else
-    DEJAGNULIB=""
-fi
-AC_MSG_CHECKING(for runtest in the source tree)
-AC_CACHE_VAL(ac_cv_c_runtest,[
-for i in $dirlist; do
-    if test -f "$srcdir/$i/dejagnu/runtest" ; then
-	ac_cv_c_runtest=`(cd $srcdir/$i/dejagnu; pwd)`
-    fi
-done
-])
-if test x"${ac_cv_c_runtest}" != x; then
-    RUNTESTDIR="${ac_cv_c_runtest}"
-   AC_MSG_RESULT(${ac_cv_c_runtest})
-else
-    RUNTESTDIR=""
-    AC_MSG_RESULT(none)
-fi
-AC_SUBST(RUNTESTDIR)
-AC_SUBST(DEJAGNULIB)
-AC_SUBST(DEJAGNUHDIR)
-])
-
-dnl ====================================================================
 dnl Find the libintl library in the build tree. This is for
 dnl  internationalization support.
 AC_DEFUN(CYG_AC_PATH_INTL, [

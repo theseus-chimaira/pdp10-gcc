@@ -50,12 +50,12 @@ fi
 
 libstdcxx_version="target-libstdc++-v3"
 # Don't use libstdc++-v3's flags to configure/build itself.
-libstdcxx_flags='`case $$dir in libstdc++-v3) ;; *) test ! -f $$r/$(TARGET_SUBDIR)/libstdc++-v3/testsuite_flags || $(SHELL) $$r/$(TARGET_SUBDIR)/libstdc++-v3/testsuite_flags --build-includes;; esac` -L$$r/$(TARGET_SUBDIR)/libstdc++-v3/src -L$$r/$(TARGET_SUBDIR)/libstdc++-v3/src/.libs'
+libstdcxx_flags='`case $$dir in libstdc++-v3) ;; *) test ! -f $$r/$(TARGET_SUBDIR)/libstdc++-v3/build_includes || $(SHELL) $$r/$(TARGET_SUBDIR)/libstdc++-v3/build_includes --build-includes;; esac` -L$$r/$(TARGET_SUBDIR)/libstdc++-v3/src -L$$r/$(TARGET_SUBDIR)/libstdc++-v3/src/.libs'
 
 # these tools are built for the host environment
 # Note, the powerpc-eabi build depends on sim occurring before gdb in order to
 # know that we are building the simulator.
-host_tools="texinfo byacc flex bison binutils ld gas gcc cgen sid sim gdb make patch prms send-pr gprof gdbtest tgas etc expect dejagnu ash bash bzip2 m4 autoconf automake libtool ispell grep diff rcs cvssrc fileutils shellutils time textutils wdiff find emacs emacs19 uudecode hello tar gzip indent recode release sed utils guile perl apache inet gawk findutils snavigator libtool gettext zip"
+host_tools="texinfo byacc flex bison binutils ld gas gcc cgen sid sim gdb make patch prms send-pr gprof gdbtest tgas etc expect ash bash bzip2 m4 autoconf automake libtool ispell grep diff rcs cvssrc fileutils shellutils time textutils wdiff find emacs emacs19 uudecode hello tar gzip indent recode release sed utils guile perl apache inet gawk findutils snavigator libtool gettext zip"
 
 
 # these libraries are built for the target environment, and are built after
@@ -429,8 +429,7 @@ else
 	is_cross_compiler=yes
 fi
 
-# We always want to use the same name for this directory, so that dejagnu
-# can reliably find it.
+# Keep the target build directory stable for multilib and linker paths.
 target_subdir=${target_alias}
 
 if [ ! -d ${target_subdir} ] ; then
@@ -567,14 +566,14 @@ case "${host}" in
  noconfigdirs="$noconfigdirs byacc"
     ;;
   i[3456]86-*-vsta)
- noconfigdirs="tcl expect dejagnu make texinfo bison patch flex byacc send-pr gprof uudecode dejagnu diff guile perl apache inet itcl tix db snavigator gnuserv gettext"
+ noconfigdirs="tcl expect make texinfo bison patch flex byacc send-pr gprof uudecode diff guile perl apache inet itcl tix db snavigator gnuserv gettext"
     ;;
   i[3456]86-*-go32* | i[3456]86-*-msdosdjgpp*)
- noconfigdirs="tcl tk expect dejagnu send-pr uudecode guile apache inet itcl tix db snavigator gnuserv"
+ noconfigdirs="tcl tk expect send-pr uudecode guile apache inet itcl tix db snavigator gnuserv"
 	;;
   i[3456]86-*-mingw32*)
-    # noconfigdirs="tcl tk expect dejagnu make texinfo bison patch flex byacc send-pr uudecode dejagnu diff guile perl apache inet itcl tix db snavigator gnuserv"
- noconfigdirs="expect dejagnu cvs autoconf automake send-pr rcs guile perl texinfo apache inet libtool"
+    # noconfigdirs="tcl tk expect make texinfo bison patch flex byacc send-pr uudecode diff guile perl apache inet itcl tix db snavigator gnuserv"
+ noconfigdirs="expect cvs autoconf automake send-pr rcs guile perl texinfo apache inet libtool"
 	;;
   i[3456]86-*-beos*)
  noconfigdirs="$noconfigdirs tk itcl tix libgui gdb"
@@ -586,10 +585,10 @@ case "${host}" in
  noconfigdirs="rcs"
     ;;
   ppc*-*-pe)
- noconfigdirs="patch diff make tk tcl expect dejagnu cvssrc autoconf automake texinfo bison send-pr gprof rcs guile perl apache inet itcl tix db snavigator gnuserv"
+ noconfigdirs="patch diff make tk tcl expect cvssrc autoconf automake texinfo bison send-pr gprof rcs guile perl apache inet itcl tix db snavigator gnuserv"
     ;;
   powerpc-*-beos*)
- noconfigdirs="$noconfigdirs tk itcl tix libgui gdb dejagnu readline"
+ noconfigdirs="$noconfigdirs tk itcl tix libgui gdb readline"
     ;;
 esac
 
@@ -653,7 +652,7 @@ case "${target}" in
  noconfigdirs="$noconfigdirs target-examples"
  noconfigdirs="$noconfigdirs target-libiberty texinfo send-pr"
  noconfigdirs="$noconfigdirs tcl tix tk itcl libgui sim"
- noconfigdirs="$noconfigdirs expect dejagnu"
+ noconfigdirs="$noconfigdirs expect"
     # the C++ libraries don't build on top of CE's C libraries
  noconfigdirs="$noconfigdirs ${libstdcxx_version}"
     skipdirs="$skipdirs target-newlib"

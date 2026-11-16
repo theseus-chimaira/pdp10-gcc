@@ -25,24 +25,9 @@
 AUTOMAKE_OPTIONS = foreign no-dependencies
 MAINT_CHARSET = latin1
 
-SUBDIRS = include libio libmath libsupc++ src po testsuite 
+SUBDIRS = include libio libmath libsupc++ src po
 
 mkinstalldirs = $(SHELL) $(toplevel_srcdir)/mkinstalldirs
-
-# These two special 'check-script' rules use the bash script 'mkcheck'
-# to do testing. This script is not as portable as the dejagnu test
-# harness, and is thus off by default. It does produce interesting
-# output however, including various performance analysis items like
-# compile time, execution time, and binary size.
-check-script: $(top_builddir)/mkcheck
-	-(chmod + $(top_builddir)/mkcheck; \
-	  cd testsuite; \
-	  @glibcpp_builddir@/mkcheck 0)
-
-check-script-install: $(top_builddir)/mkcheck
-	-(chmod + $(top_builddir)/mkcheck; \
-	  cd testsuite; \
-	  @glibcpp_builddir@/mkcheck 1)
 
 # These rules are messy, but are hella worth it.
 doxygen:
@@ -127,7 +112,6 @@ AM_MAKEFLAGS = \
 	"PICFLAG=$(PICFLAG)" \
 	"PICFLAG_FOR_TARGET=$(PICFLAG_FOR_TARGET)" \
 	"SHELL=$(SHELL)" \
-	"RUNTESTFLAGS=$(RUNTESTFLAGS)" \
 	"exec_prefix=$(exec_prefix)" \
 	"infodir=$(infodir)" \
 	"libdir=$(libdir)" \

@@ -1,0 +1,12 @@
+#!/bin/sh
+# Export the include flags required by other target C++ components.
+# This is a production build helper, not a test runner.
+set -eu
+
+if test "$#" -ne 1 || test "$1" != --build-includes; then
+    echo 'usage: build_includes --build-includes' >&2
+    exit 2
+fi
+
+SRC_DIR=@glibcpp_srcdir@
+echo "-nostdinc++ @GLIBCPP_INCLUDES@ -I${SRC_DIR}/libsupc++ -I${SRC_DIR}/libio -I${SRC_DIR}/include/backward"

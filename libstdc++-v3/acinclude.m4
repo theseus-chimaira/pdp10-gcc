@@ -17,7 +17,6 @@ AH_TEMPLATE([HAVE___BUILTIN_SQRT], [Define if the compiler/host combination has 
 AH_TEMPLATE([HAVE___BUILTIN_SQRTF], [Define if the compiler/host combination has __builtin_sqrtf.])
 AH_TEMPLATE([HAVE___BUILTIN_SQRTL], [Define if the compiler/host combination has __builtin_sqrtl.])
 AH_TEMPLATE([_GLIBCPP_CONCEPT_CHECKS], [Define to use concept checking code from the boost libraries.])
-AH_TEMPLATE([_GLIBCPP_MEM_LIMITS], [Define if using setrlimit to limit memory usage during make check.])
 AH_TEMPLATE([_GLIBCPP_SUPPORTS_WEAK], [Define if GCC supports weak symbols.])
 AH_TEMPLATE([_GLIBCPP_USE_C99], [Define if C99 features such as lldiv_t, llabs, lldiv should be exposed.])
 AH_TEMPLATE([_GLIBCPP_USE_LONG_LONG], [Include I/O support for long long and unsigned long long.])
@@ -1553,8 +1552,7 @@ AC_DEFUN([GLIBCPP_ENABLE_CLOCALE], [
       ;;
   esac
 
-  # This is where the testsuite looks for locale catalogs, using the
-  # -DLOCALEDIR define during testsuite compilation.
+  # Keep the build-local catalog path for the locale installation rules.
   glibcpp_localedir=${glibcpp_builddir}/po/share/locale
   AC_SUBST(glibcpp_localedir)
 
@@ -2298,64 +2296,6 @@ dnl string, '#' otherwise
           ifGNUmake='#' ;
   fi
   AC_SUBST(ifGNUmake)
-])
-
-
-dnl Check for headers for, and arguments to, the setrlimit() function.
-dnl Used only in testsuite_hooks.h.
-AC_DEFUN([GLIBCPP_CHECK_SETRLIMIT_ancilliary], [
-  AC_TRY_COMPILE([#include <sys/resource.h>
-                  #include <unistd.h>
-                 ], [ int f = RLIMIT_$1 ; ],
-                 [glibcpp_mresult=1], [glibcpp_mresult=0])
-  AC_DEFINE_UNQUOTED(HAVE_MEMLIMIT_$1, $glibcpp_mresult,
-                     [Only used in build directory testsuite_hooks.h.])
-])
-AC_DEFUN([GLIBCPP_CHECK_SETRLIMIT], [
-  setrlimit_have_headers=yes
-  AC_CHECK_HEADERS(sys/resource.h unistd.h,
-                   [],
-                   setrlimit_have_headers=no)
-  # If don't have the headers, then we can't run the tests now, and we
-  # won't be seeing any of these during testsuite compilation.
-  if test $setrlimit_have_headers = yes; then
-    # Can't do these in a loop, else the resulting syntax is wrong.
-    GLIBCPP_CHECK_SETRLIMIT_ancilliary(DATA)
-    GLIBCPP_CHECK_SETRLIMIT_ancilliary(RSS)
-    GLIBCPP_CHECK_SETRLIMIT_ancilliary(VMEM)
-    GLIBCPP_CHECK_SETRLIMIT_ancilliary(AS)
-
-    # Check for rlimit, setrlimit.
-    AC_CACHE_VAL(glibcpp_cv_setrlimit, [
-      AC_TRY_COMPILE([#include <sys/resource.h>
-		      #include <unistd.h>
-		     ], 
-                     [ struct rlimit r; setrlimit(0, &r);], 
-                     [glibcpp_cv_setrlimit=yes], [glibcpp_cv_setrlimit=no])
-    ])
-  fi
-
-  AC_MSG_CHECKING([for testsuite memory limit support])
-  if test $setrlimit_have_headers = yes && test $glibcpp_cv_setrlimit = yes; then
-    ac_mem_limits=yes
-    AC_DEFINE(_GLIBCPP_MEM_LIMITS)
-  else
-    ac_mem_limits=no
-  fi
-  AC_MSG_RESULT($ac_mem_limits)
-])
-
-
-dnl
-dnl Does any necessary configuration of the testsuite directory.  Generates
-dnl the testsuite_hooks.h header.
-dnl
-dnl GLIBCPP_CONFIGURE_TESTSUITE  [no args]
-AC_DEFUN([GLIBCPP_CONFIGURE_TESTSUITE], [
-  GLIBCPP_CHECK_SETRLIMIT
-
-  # Look for setenv, so that extended locale tests can be performed.
-  GLIBCPP_CHECK_STDLIB_DECL_AND_LINKAGE_3(setenv)
 ])
 
 

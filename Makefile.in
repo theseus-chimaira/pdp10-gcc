@@ -157,14 +157,6 @@ MAKEINFO = `if [ -f $$r/texinfo/makeinfo/makeinfo ] ; \
 # using the makeinfo from the object tree.
 MAKEINFOFLAGS =
 
-EXPECT = `if [ -f $$r/expect/expect ] ; \
-	then echo $$r/expect/expect ; \
-	else echo expect ; fi`
-
-RUNTEST = `if [ -f $$s/dejagnu/runtest ] ; \
-	then echo $$s/dejagnu/runtest ; \
-	else echo runtest ; fi`
-
 
 # compilers to use to create programs which must be run in the build
 # environment.
@@ -378,9 +370,6 @@ BASE_FLAGS_TO_PASS = \
 	"RANLIB_FOR_TARGET=$(RANLIB_FOR_TARGET)" \
 	"RPATH_ENVVAR=$(RPATH_ENVVAR)" \
 	"SHELL=$(SHELL)" \
-	"EXPECT=$(EXPECT)" \
-	"RUNTEST=$(RUNTEST)" \
-	"RUNTESTFLAGS=$(RUNTESTFLAGS)" \
 	"TARGET_SUBDIR=$(TARGET_SUBDIR)" \
 	"WINDRES_FOR_TARGET=$(WINDRES_FOR_TARGET)" \
 	"YACC=$(YACC)" \
@@ -526,7 +515,6 @@ ALL_MODULES = \
 	all-cgen \
 	all-cvssrc \
 	all-db \
-	all-dejagnu \
 	all-diff \
 	all-dosutils \
 	all-etc \
@@ -605,7 +593,6 @@ CROSS_CHECK_MODULES = \
 	check-cgen \
 	check-cvssrc \
 	check-db \
-	check-dejagnu \
 	check-diff \
 	check-etc \
 	check-fileutils \
@@ -678,7 +665,6 @@ INSTALL_MODULES = \
 	install-cgen \
 	install-cvssrc \
 	install-db \
-	install-dejagnu \
 	install-diff \
 	install-dosutils \
 	install-etc \
@@ -850,7 +836,6 @@ CLEAN_MODULES = \
 	clean-cgen \
 	clean-cvssrc \
 	clean-db \
-	clean-dejagnu \
 	clean-diff \
 	clean-dosutils \
 	clean-etc \
@@ -1149,10 +1134,10 @@ install.all: install-no-fixedincludes
 		true ; \
 	fi
 
-# inet-install is used because the I*Net wants DejaGNU installed but
+# inet-install excludes the historical gzip package from installation but
 # not built.  Similarly, gzip is built but not installed.
 inet-install:
-	$(MAKE) INSTALL_MODULES="`echo $(INSTALL_MODULES) | sed -e 's/install-dejagnu//' -e 's/install-gzip//'`" install
+	$(MAKE) INSTALL_MODULES="`echo $(INSTALL_MODULES) | sed -e 's/install-gzip//'`" install
 
 # install-no-fixedincludes is used because Cygnus can not distribute
 # the fixed header files.
@@ -1606,16 +1591,10 @@ cross: all-texinfo all-bison all-byacc all-binutils all-gas all-ld
 	$(MAKE) $(BASE_FLAGS_TO_PASS) $(RECURSE_FLAGS) \
 	  LANGUAGES="c c++" all
 
+# The GCC regression suite is maintained outside this source tree.
 .PHONY: check-gcc
 check-gcc:
-	@if [ -f ./gcc/Makefile ] ; then \
-	  r=`pwd`; export r; \
-	  s=`cd $(srcdir); pwd`; export s; \
-	  $(SET_LIB_PATH) \
-	  (cd gcc; $(MAKE) $(GCC_FLAGS_TO_PASS) check); \
-	else \
-	  true; \
-	fi
+	@echo "GCC tests live in pdp10-testkit; run that repository's test runner." >&2; exit 2
 
 .PHONY: check-c++
 check-c++:
@@ -1689,7 +1668,6 @@ all-cvssrc:
 configure-target-cygmon: $(ALL_GCC_C)
 all-target-cygmon: configure-target-cygmon all-target-libiberty all-target-libstub all-target-bsp
 all-db:
-all-dejagnu: all-tcl all-expect all-tk
 all-diff: all-libiberty
 all-emacs:
 all-emacs19: all-bison all-byacc
@@ -2046,25 +2024,6 @@ gdb.tar: $(DIST_SUPPORT) $(GDB_SUPPORT_DIRS) gdb
 		MD5PROG="$(MD5PROG)" \
 		SUPPORT_FILES="$(GDB_SUPPORT_DIRS)"
 
-DEJAGNU_SUPPORT_DIRS=  tcl expect libiberty
-.PHONY: dejagnu.tar.bz2
-dejagnu.tar.bz2: $(DIST_SUPPORT) $(DEJAGNU_SUPPORT_DIRS) dejagnu
-	$(MAKE) -f Makefile.in taz TOOL=dejagnu \
-		MD5PROG="$(MD5PROG)" \
-		SUPPORT_FILES="$(DEJAGNU_SUPPORT_DIRS)"
-
-.PHONY: gdb+dejagnu.tar.bz2
-GDBD_SUPPORT_DIRS= $(GDB_SUPPORT_DIRS) tcl expect dejagnu
-gdb+dejagnu.tar.bz2: $(DIST_SUPPORT) $(GDBD_SUPPORT_DIRS) gdb
-	$(MAKE) -f Makefile.in gdb-taz TOOL=gdb PACKAGE=gdb+dejagnu \
-		MD5PROG="$(MD5PROG)" \
-		SUPPORT_FILES="$(GDBD_SUPPORT_DIRS)"
-.PHONY: gdb+dejagnu.tar
-gdb+dejagnu.tar: $(DIST_SUPPORT) $(GDBD_SUPPORT_DIRS) gdb
-	$(MAKE) -f Makefile.in gdb-tar TOOL=gdb PACKAGE=gdb+dejagnu \
-		MD5PROG="$(MD5PROG)" \
-		SUPPORT_FILES="$(GDBD_SUPPORT_DIRS)"
-
 .PHONY: insight.tar.bz2
 INSIGHT_SUPPORT_DIRS= $(GDB_SUPPORT_DIRS) tcl tk itcl tix libgui
 insight.tar.bz2: $(DIST_SUPPORT) $(GDB_SUPPORT_DIRS) gdb
@@ -2076,18 +2035,6 @@ insight.tar: $(DIST_SUPPORT) $(GDB_SUPPORT_DIRS) gdb
 	$(MAKE) -f Makefile.in gdb-tar TOOL=gdb PACKAGE=insight \
 		MD5PROG="$(MD5PROG)" \
 		SUPPORT_FILES="$(INSIGHT_SUPPORT_DIRS)"
-
-.PHONY: insight+dejagnu.tar.bz2
-INSIGHTD_SUPPORT_DIRS= $(INSIGHT_SUPPORT_DIRS) expect dejagnu
-insight+dejagnu.tar.bz2: $(DIST_SUPPORT) $(INSIGHTD_SUPPORT_DIRS) gdb
-	$(MAKE) -f Makefile.in gdb-taz TOOL=gdb PACKAGE="insight+dejagnu" \
-		MD5PROG="$(MD5PROG)" \
-		SUPPORT_FILES="$(INSIGHTD_SUPPORT_DIRS)"
-.PHONY: insight+dejagnu.tar
-insight+dejagnu.tar: $(DIST_SUPPORT) $(INSIGHTD_SUPPORT_DIRS) gdb
-	$(MAKE) -f Makefile.in gdb-tar TOOL=gdb PACKAGE="insight+dejagnu" \
-		MD5PROG="$(MD5PROG)" \
-		SUPPORT_FILES="$(INSIGHTD_SUPPORT_DIRS)"
 
 .PHONY: newlib.tar.bz2
 NEWLIB_SUPPORT_DIRS=libgloss
