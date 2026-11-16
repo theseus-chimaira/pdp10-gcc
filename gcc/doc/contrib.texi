@@ -329,7 +329,7 @@ hacking improvements to compile-time performance and overall knowledge
 and direction in the area of instruction scheduling.
 
 @item
-Bob Manson for his behind the scenes work on dejagnu.
+Bob Manson for his behind the scenes work on testing infrastructure.
 
 @item
 Michael Meissner for LRS framework, ia32, m32r, v850, m88k, MIPS powerpc, haifa,
@@ -415,7 +415,7 @@ Melissa O'Neill for various NeXT fixes.
 
 @item
 Rainer Orth for random MIPS work, including improvements to our o32
-ABI support, improvements to dejagnu's MIPS support, etc.
+ABI support and improvements to MIPS testing support.
 
 @item
 Paul Petersen wrote the machine description for the Alliant FX/8.

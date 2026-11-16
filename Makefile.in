@@ -1804,8 +1804,6 @@ Makefile: Makefile.in configure.in $(host_makefile_frag) $(target_makefile_frag)
 # Support for building net releases
 
 # Files in devo used in any net release.
-# ChangeLog omitted because it may refer to files which are not in this
-# distribution (perhaps it would be better to include it anyway).
 DEVO_SUPPORT= README Makefile.in configure configure.in \
 	config.guess config.if config.sub config move-if-change \
 	mpw-README mpw-build.in mpw-config.in mpw-configure mpw-install \
@@ -1814,8 +1812,6 @@ DEVO_SUPPORT= README Makefile.in configure configure.in \
 	libtool.m4 gettext.m4 ltcf-c.sh ltcf-cxx.sh
 
 # Files in devo/etc used in any net release.
-# ChangeLog omitted because it may refer to files which are not in this
-# distribution (perhaps it would be better to include it anyway).
 ETC_SUPPORT= Makefile.in configure configure.in standards.texi \
 	make-stds.texi standards.info* configure.texi configure.info* \
 	configbuild.* configdev.*

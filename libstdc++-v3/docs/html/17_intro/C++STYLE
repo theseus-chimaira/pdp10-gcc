@@ -8,7 +8,7 @@ Standard, which can be referenced here:
 
 http://www.gnu.org/prep/standards_toc.html
 
-ChangeLog entries for member functions should use the
+Version-control commit messages for member functions may use the
 classname::member function name syntax as follows:
 
 1999-04-15  Dennis Ritchie  <dr@att.com>

@@ -129,12 +129,6 @@ the ``Actual Bugs'' node of the @code{g77} documentation:
 info -f f/g77.info -n "Actual Bugs"
 @end smallexample
 
-@item f/ChangeLog
-Lists recent changes to @code{g77} internals.
-
-@item libf2c/ChangeLog
-Lists recent changes to @code{libg2c} internals.
-
 @item f/NEWS
 Contains the per-release changes.
 These include the user-visible

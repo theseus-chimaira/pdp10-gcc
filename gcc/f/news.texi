@@ -1653,9 +1653,8 @@ These fixes are circa version 3.10p of GNAT.
 @item
 Include some other @command{gcc} fixes that seem useful in
 @command{g77}'s version of @command{gcc}.
-(See @file{gcc/ChangeLog} for details---compare it
-to that file in the vanilla @code{gcc-2.7.2.3.tar.gz}
-distribution.)
+(See the repository history for the changes relative to the
+vanilla @code{gcc-2.7.2.3.tar.gz} distribution.)
 @end ifclear
 
 @item

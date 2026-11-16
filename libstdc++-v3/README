@@ -61,8 +61,8 @@ It has subdirectories:
   Tests
     The bundled upstream test suites were removed from this PDP-10
     source distribution.  Toolchain regression tests are maintained
-    in the separate pdp10-testkit repository.  The original DejaGNU
-    and mkcheck targets are not available from this source tree.
+    in the separate pdp10-testkit repository.  The original in-tree
+    test runners are not available from this source tree.
 
 Other subdirectories contain variant versions of certain files
 that are meant to be copied or linked by the configure script.

@@ -17,8 +17,6 @@
 # It sets the following shell variables:
 
 
-AM_RUNTESTFLAGS= 
-
 # Set any host dependent compiler flags.
 # THIS TABLE IS SORTED.  KEEP IT THAT WAY.
 

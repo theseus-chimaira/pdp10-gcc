@@ -41,19 +41,10 @@ Installs gcc.
 Deletes installed files.
 
 @item check
-Run the testsuite.  This creates a @file{testsuite} subdirectory that
-has various @file{.sum} and @file{.log} files containing the results of
-the testing.  You can run subsets with, for example, @code{make check-gcc}.
-You can specify specific tests by setting RUNTESTFLAGS to be the name
-of the @file{.exp} file, optionally followed by (for some tests) an equals
-and a file wildcard, like:
-
-@example
-make check-gcc RUNTESTFLAGS="execute.exp=19980413-*"
-@end example
-
-Note that running the testsuite may require additional tools be
-installed, such as TCL or dejagnu.
+The original in-tree test runner is not shipped with this PDP-10
+compiler source.  Use the separate @file{pdp10-testkit} repository for
+compiler, assembler, and runtime regressions.  This target fails rather
+than reporting an unverified test result.
 
 @item bootstrap
 Builds gcc three times---once with the native compiler, once with the

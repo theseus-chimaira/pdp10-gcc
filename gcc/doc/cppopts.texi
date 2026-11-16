@@ -441,8 +441,8 @@ ignored.  The default is 8.
 @item -fno-show-column
 @opindex fno-show-column
 Do not print column numbers in diagnostics.  This may be necessary if
-diagnostics are being scanned by a program that does not understand the
-column numbers, such as @command{dejagnu}.
+diagnostics are being scanned by a program that does not understand
+column numbers.
 
 @item -A @var{predicate}=@var{answer}
 @opindex A

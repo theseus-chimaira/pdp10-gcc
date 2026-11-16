@@ -260,10 +260,6 @@ RANLIB_TEST_FOR_TARGET = \
 EXPECT = \
 
 
-/^RUNTEST = `/,/`$/c\
-RUNTEST = \
-
-
 /^CC_FOR_TARGET = `/,/`$/c\
 CC_FOR_TARGET = \
 
