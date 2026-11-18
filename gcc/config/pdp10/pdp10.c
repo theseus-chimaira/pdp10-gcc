@@ -5637,7 +5637,7 @@ rtx
 pdp10_expand_builtin_va_arg (valist, type)
      tree valist, type;
 {
-  tree addr_tree, t;
+  tree addr_tree, t, type_size;
   HOST_WIDE_INT align;
   HOST_WIDE_INT size;
   HOST_WIDE_INT rounded_size;
@@ -5646,17 +5646,38 @@ pdp10_expand_builtin_va_arg (valist, type)
   /* Compute the rounded size of the type.  */
   align = PARM_BOUNDARY / BITS_PER_UNIT;
   size = int_size_in_bytes (type);
-  if (size < 0)
-    abort ();
-  rounded_size = (((size + align - 1) / align) * align);
+  type_size = TYPE_SIZE_UNIT (TYPE_MAIN_VARIANT (type));
+  if (type_size == NULL_TREE || TREE_OVERFLOW (type_size))
+    {
+      error ("va_arg requested an incomplete or invalid type");
+      return const0_rtx;
+    }
+  rounded_size = size >= 0
+    ? (((size + align - 1) / align) * align) : 0;
 
   /* Get AP.  */
   addr_tree = valist;
 
   /* Compute new value for AP.  */
-  t = build (MODIFY_EXPR, TREE_TYPE (valist), valist,
-	     build (PLUS_EXPR, TREE_TYPE (valist), valist,
-		    build_int_2 (-rounded_size / UNITS_PER_WORD, 0)));
+  if (size >= 0)
+    t = build (MODIFY_EXPR, TREE_TYPE (valist), valist,
+	       build (PLUS_EXPR, TREE_TYPE (valist), valist,
+		      build_int_2 (-rounded_size / UNITS_PER_WORD, 0)));
+  else
+    {
+      /* A variadic VLA aggregate has a runtime byte count.  The PDP-10
+	 stack passes full 36-bit words, so round the 9-bit unit count up
+	 to a word count, and walk backward through those words.  Do not
+	 use int_size_in_bytes on this type: a negative result denotes
+	 dynamic size, not a malformed argument.  */
+      tree bytes = convert (sizetype, type_size);
+      tree words = size_binop (TRUNC_DIV_EXPR,
+			      size_binop (PLUS_EXPR, bytes,
+					  size_int (align - 1)),
+			      size_int (align));
+      t = build (MODIFY_EXPR, TREE_TYPE (valist), valist,
+		 build (MINUS_EXPR, TREE_TYPE (valist), valist, words));
+    }
   TREE_SIDE_EFFECTS (t) = 1;
   expand_expr (t, const0_rtx, VOIDmode, EXPAND_NORMAL);
 
