@@ -15090,15 +15090,21 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
   else
     return NULL_RTX;
 
-  if (GET_CODE (base_addr) == REG
+  if ((GET_CODE (base_addr) == REG || GET_CODE (base_addr) == MEM)
       && TREE_CODE (base_tree) == INDIRECT_REF
       && byte_pos % (pdp10_word36) bytesize == 0
       && pdp10_normalize_pointer_bytesize (pdp10_bytesize (TREE_TYPE (base_tree)))
          < BITS_PER_WORD)
     {
       rtx inc = GEN_INT ((HOST_WIDE_INT) (bitpos / (pdp10_word36) bytesize));
+      rtx ptr = REG_P (base_addr) ? base_addr
+        : force_reg (Pmode, base_addr);
       reg = gen_reg_rtx (Pmode);
-      return pdp10_expand_addbp3 (TREE_TYPE (object), reg, base_addr, inc);
+      /* At -O0 the incoming record pointer may live in a stack slot.
+         Load its *whole* P/S-encoded value before adjusting its field
+         offset; do not strip the P/S bits as for an ordinary word
+         address in the generic fallback below.  */
+      return pdp10_expand_addbp3 (TREE_TYPE (object), reg, ptr, inc);
     }
 
   if (word_offset != 0 && GET_CODE (base_addr) != REG)
@@ -16572,7 +16578,14 @@ void pdp10_md_array_offset (tree exp, tree index, tree unit_size,
 						     index),
 					    unit_bitsize));
 
-      if (compare_tree_int (unit_bitsize, BITS_PER_WORD) == -1)
+      /* Explicitly packed records have a continuous bit stride.  Do
+         not add unused word-tail bits after every such array element.
+         The ordinary subword scalar arrays still require the existing
+         padding rule where their byte widths do not divide 36.  */
+      if (compare_tree_int (unit_bitsize, BITS_PER_WORD) == -1
+          && !((TREE_CODE (TREE_TYPE (exp)) == RECORD_TYPE
+                || TREE_CODE (TREE_TYPE (exp)) == UNION_TYPE)
+               && TYPE_PACKED (TREE_TYPE (exp))))
 	leftover_bits = size_binop (FLOOR_MOD_EXPR, bits_per_word,
 				    unit_bitsize);
       if (compare_tree_int (leftover_bits, 0) != 0)

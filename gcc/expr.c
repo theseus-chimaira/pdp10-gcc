@@ -4023,6 +4023,27 @@ expand_assignment (to, from, want_value, suggest_reg)
     }
 
 #if REAL_BITS_PER_UNIT == 36
+  /* Match the read-side byte-address construction below.  A field in a
+     packed record reached through an indirect pointer must be stored at
+     its true 9-bit byte address, which may not be word aligned.  The
+     generic store-field expander clears the pointer's P/S selector and
+     constructs an incorrect fixed-position byte pointer, and subsequent
+     optimization can eliminate reads of the correctly addressed field.
+     Build one exact QImode MEM before either store lowering or CSE.  */
+  if (TREE_CODE (to) == COMPONENT_REF
+      && !TREE_THIS_VOLATILE (to)
+      && TREE_CODE (TREE_TYPE (to)) == INTEGER_TYPE
+      && TYPE_PRECISION (TREE_TYPE (to)) == BITS_PER_UNIT
+      && TREE_CODE (TREE_OPERAND (to, 0)) == INDIRECT_REF
+      && TREE_CODE (TREE_TYPE (TREE_OPERAND (to, 0))) == RECORD_TYPE
+      && TYPE_PACKED (TREE_TYPE (TREE_OPERAND (to, 0)))
+      && pdp10_bytesize (TREE_TYPE (TREE_OPERAND (to, 0)))
+         == BITS_PER_UNIT)
+    {
+      rtx direct = expand_expr (to, NULL_RTX, VOIDmode, EXPAND_WRITE);
+      return store_expr (from, direct, want_value);
+    }
+
   /* Packed exact16 ARRAY_REF stores use the same S=1 address path as direct
      loads and array decay.  Let expand_expr build that exact address first,
      then store through the resulting MEM instead of feeding storage-unit
@@ -8025,6 +8046,50 @@ expand_expr (exp, target, tmode, modifier)
     case COMPONENT_REF:
     case BIT_FIELD_REF:
     case ARRAY_RANGE_REF:
+#if REAL_BITS_PER_UNIT == 36
+      /* On the PDP-10 a pointer into a byte-packed record carries its
+         current 9-bit byte position in the pointer's P/S field.  The
+         generic component expander loses that position by exposing all
+         fields as word-addressed MEMs with only MEM_OFFSET metadata.
+         CSE can then merge p->a, p->b and p->c before final output.
+         Form the true field address here, while the tree still retains
+         the base pointer and field identity.  The write-side path above
+         builds the corresponding MEM.  Other record accesses retain
+         their established expansion.  */
+      if (code == COMPONENT_REF
+          && modifier != EXPAND_CONST_ADDRESS
+          && modifier != EXPAND_INITIALIZER
+          && !TREE_THIS_VOLATILE (exp)
+          && TREE_CODE (TREE_TYPE (exp)) == INTEGER_TYPE
+          && TYPE_PRECISION (TREE_TYPE (exp)) == BITS_PER_UNIT
+          && (TREE_CODE (TREE_OPERAND (exp, 0)) == INDIRECT_REF
+              || (TREE_CODE (TREE_OPERAND (exp, 0)) == ARRAY_REF
+                  && TREE_CODE (TREE_OPERAND
+                                (TREE_OPERAND (exp, 0), 0)) == VAR_DECL
+                  && TREE_CONSTANT (TREE_OPERAND
+                                    (TREE_OPERAND (exp, 0), 1))))
+          && TREE_CODE (TREE_TYPE (TREE_OPERAND (exp, 0))) == RECORD_TYPE
+          && TYPE_PACKED (TREE_TYPE (TREE_OPERAND (exp, 0)))
+          && pdp10_bytesize (TREE_TYPE (TREE_OPERAND (exp, 0)))
+             == BITS_PER_UNIT)
+        {
+          tree ptype = build_pointer_type (TREE_TYPE (exp));
+          tree aexp = build1 (ADDR_EXPR, ptype, exp);
+          rtx address = pdp10_expand_ADDR_EXP (aexp, ptype, NULL_RTX,
+                                               0, modifier);
+
+          if (address != NULL_RTX)
+            {
+              rtx byte = gen_rtx_MEM (QImode,
+                                      memory_address (QImode, address));
+              /* The address already denotes the exact byte.  In
+                 particular, do not attach the old word-relative
+                 MEM_EXPR and alignment to this MEM.  */
+              set_mem_align (byte, BITS_PER_UNIT);
+              return byte;
+            }
+        }
+#endif
       /* If the operand is a CONSTRUCTOR, we can just extract the
 	 appropriate field if it is present.  Don't do this if we have
 	 already written the data since we want to refer to that copy
