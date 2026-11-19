@@ -1,7 +1,11 @@
 #ifndef _LIMITS_H___
 #define _LIMITS_H___
 
-#ifndef __pdp10__
+/* The legacy TOPS-20 target defined lowercase __pdp10__, whereas the
+   current DAIMON/GAS backend defines uppercase __PDP10__.  Both use
+   nine-bit C characters and 18/36-bit short/int; do not select the
+   generic eight-bit host limits for either target spelling.  */
+#if !defined(__pdp10__) && !defined(__PDP10__)
 
 /* Number of bits in a `char'.  */
 #undef CHAR_BIT
@@ -112,7 +116,7 @@
 #define ULONG_LONG_MAX (LONG_LONG_MAX * 2ULL + 1)
 #endif
 
-#else /* !defined(__pdp10__) */
+#else /* defined(__pdp10__) || defined(__PDP10__) */
 
 /* Number of bits in a `char'.  */
 #undef CHAR_BIT
@@ -223,6 +227,6 @@
 #define ULONG_LONG_MAX (LONG_LONG_MAX * 2ULL + 1)
 #endif
 
-#endif /* !defined(__pdp10__) */
+#endif /* !defined(__pdp10__) && !defined(__PDP10__) */
 
 #endif /* _LIMITS_H___ */
