@@ -119,6 +119,7 @@ struct pdp10_builtin_string_data
   unsigned HOST_WIDE_INT len;
   int host_unit;
 };
+static unsigned HOST_WIDE_INT pdp10_builtin_string_length PARAMS ((tree));
 static int pdp10_builtin_string_data_init PARAMS ((tree, struct pdp10_builtin_string_data *));
 static int pdp10_builtin_string_char PARAMS ((const struct pdp10_builtin_string_data *, unsigned HOST_WIDE_INT));
 static rtx pdp10_builtin_memcpy_read_str PARAMS ((PTR, HOST_WIDE_INT, enum machine_mode));
@@ -251,12 +252,23 @@ c_strlen (src)
   HOST_WIDE_INT offset;
   int max;
   const char *ptr;
+#ifdef __PDP10_H__
+  int host_unit;
+#endif
 
   src = string_constant (src, &offset_node);
   if (src == 0)
     return 0;
 
+  /* On PDP-10, 9-bit STRING_CSTs contain two host bytes per target
+     character.  Both the offset and the result are in target chars.
+     A host strlen would stop at the leading zero of an ASCII char.  */
+#ifdef __PDP10_H__
+  host_unit = PDP10_STRING_CST_9BIT_P (src) ? 2 : 1;
+  max = pdp10_builtin_string_length (src) - 1;
+#else
   max = TREE_STRING_LENGTH (src) - 1;
+#endif
   ptr = TREE_STRING_POINTER (src);
 
   if (offset_node && TREE_CODE (offset_node) != INTEGER_CST)
@@ -267,7 +279,13 @@ c_strlen (src)
       int i;
 
       for (i = 0; i < max; i++)
+#ifdef __PDP10_H__
+	if (host_unit == 2
+	    ? (ptr[2 * i] == 0 && ptr[2 * i + 1] == 0)
+	    : ptr[i] == 0)
+#else
 	if (ptr[i] == 0)
+#endif
 	  return 0;
 
       /* We don't know the starting offset, but we do know that the string
@@ -303,6 +321,17 @@ c_strlen (src)
 
      Since OFFSET is our starting index into the string, no further
      calculation is needed.  */
+#ifdef __PDP10_H__
+  if (host_unit == 2)
+    {
+      int i;
+
+      for (i = offset; i < max; i++)
+	if (ptr[2 * i] == 0 && ptr[2 * i + 1] == 0)
+	  break;
+      return ssize_int (i - offset);
+    }
+#endif
   return ssize_int (strlen (ptr + offset));
 }
 
@@ -318,6 +347,15 @@ c_getstr (src)
   src = string_constant (src, &offset_node);
   if (src == 0)
     return 0;
+
+#ifdef __PDP10_H__
+  /* c_getstr returns a NUL-terminated *host* char string.  A packed
+     PDP-10 9-bit STRING_CST is not one: host strcmp, strchr, etc.
+     would compare the storage bytes rather than target characters.
+     Leave such folds to target-aware readers or the actual libc.  */
+  if (PDP10_STRING_CST_9BIT_P (src))
+    return 0;
+#endif
 
   if (offset_node == 0)
     return TREE_STRING_POINTER (src);
@@ -2098,9 +2136,10 @@ expand_builtin_memcpy (arglist, target, mode)
       tree dest = TREE_VALUE (arglist);
       tree src = TREE_VALUE (TREE_CHAIN (arglist));
       tree len = TREE_VALUE (TREE_CHAIN (TREE_CHAIN (arglist)));
-      const char *src_str;
 #ifdef __PDP10_H__
       struct pdp10_builtin_string_data pdp10_src_str;
+#else
+      const char *src_str;
 #endif
 
       unsigned int src_align = get_pointer_alignment (src, BIGGEST_ALIGNMENT);
@@ -2128,16 +2167,23 @@ expand_builtin_memcpy (arglist, target, mode)
       dest_mem = get_memory_rtx (dest);
       len_rtx = expand_expr (len, NULL_RTX, VOIDmode, 0);
       set_mem_align (dest_mem, dest_align);
-      src_str = c_getstr (src);
 #ifdef __PDP10_H__
+      pdp10_src_str.ptr = 0;
       if (!pdp10_builtin_string_data_init (src, &pdp10_src_str))
         pdp10_src_str.len = 0;
+#else
+      src_str = c_getstr (src);
 #endif
 
       /* If SRC is a string constant and block move would be done
 	 by pieces, we can avoid loading the string from memory
 	 and only stored the computed constants.  */
-      if (src_str
+      if (
+#ifdef __PDP10_H__
+	  pdp10_src_str.ptr
+#else
+	  src_str
+#endif
 	  && GET_CODE (len_rtx) == CONST_INT
 #ifdef __PDP10_H__
 	  && (unsigned HOST_WIDE_INT) INTVAL (len_rtx) <= pdp10_src_str.len

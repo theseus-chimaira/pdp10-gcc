@@ -21,6 +21,18 @@ upstream historical maintenance notes rather than work specific to this fork.
 
 ## Optimizer and code-size work
 
+- [x] Correct GCC 3.2 builtin folding of PDP-10 packed 9-bit
+  `STRING_CST` constants. `c_strlen` now interprets paired host
+  bytes as logical target characters; generic `c_getstr` declines
+  invalid host-string folds, and literal `memcpy` retains the
+  target-aware store callback. Rebuilt installed `cc1`, with
+  the original binary preserved. The old compiler had four
+  independent PDP-6 string9 guest failures at ID 1, plus the
+  three `strcpy` and three token-scanner optimization failures;
+  all twelve corresponding fixed GCC PDP-6 cells now PASS.
+  See `docs/P10-STRING9-BUILTIN-20261120-v1.md` and the
+  source-pinned `pdp10-testkit` test archive.
+
 - [ ] Benchmark the shared PDP-6 `libp10c-v2.a` assembly routines against
   byte-by-byte implementations across CPU and optimization profiles.
   Verify archive extraction with production link scripts and expand
