@@ -66,16 +66,17 @@ upstream historical maintenance notes rather than work specific to this fork.
   installed backend and passes with the patched backend. See testkit
   test-gcc-packed-block-bytepointer-v1.sh; operational compiler
   installation and broader profiles remain pending.
-- [x] Fix packed 18-bit static/dynamic halfword readback at PDP-6 O0/O1.
-  The staged compiler normalizes a packed COMPONENT_REF to its containing
-  36-bit word and retains the halfword position. The unmodified upstream
-  execute/20010518-2.c and the independent testkit regression both pass
-  PDP-6 O0/O1 with the staged compiler.
-- [ ] Fix the remaining PDP-6 GCC O2/Os optimized packed-field defects:
-  the independent halfword test fails at dynamic c (exit 23), while
-  the original upstream diagnostic fails at nested char e.b4 (exit 15).
-  Both are unresolved; do not weaken or bypass their assertions.
-  Compiler installation and wider profile acceptance remain pending.
+- [x] Fix packed 18-bit static/dynamic halfword readback at PDP-6
+  O0/O1/O2/Os in staged GCC. Normalizing a packed COMPONENT_REF to its
+  containing 36-bit word preserves its selector; explicitly restoring
+  physical word alignment prevents GCC's optimized byte-fragment
+  decomposition from using incorrect C-unit displacements. The exact
+  original upstream execute/20010518-2.c and independent halfword
+  regression now pass all four native PDP-6 profiles. The earlier O2/Os
+  failures disappeared without changing any original assertion.
+- [ ] Install the verified staged GCC backend and check additional CPUs
+  and wider regressions before closing the overall packed-field work.
+  KCC's separate packed-aggregate failure is not resolved by this fix.
 
 - [ ] Implement working PDP-6 floating-point code generation for
   `-mpdp6-float`.

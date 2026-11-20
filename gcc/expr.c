@@ -8597,6 +8597,12 @@ expand_expr (exp, target, tmode, modifier)
 	      {
 		op0 = adjust_address (op0, SImode,
 				      bitpos / BITS_PER_WORD);
+		/* This MEM now addresses a complete physical PDP-10 word.
+		   Keep its physical 36-bit alignment rather than inheriting
+		   the packed field's conservative 9-bit alignment.  Otherwise
+		   at -O2 GCC splits an aligned short into two 9-bit fragment
+		   loads using inappropriate C-unit displacements.  */
+		set_mem_align (op0, BITS_PER_WORD);
 		bitpos %= BITS_PER_WORD;
 	      }
 #endif
