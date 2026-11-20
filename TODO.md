@@ -58,6 +58,21 @@ upstream historical maintenance notes rather than work specific to this fork.
 
 ## PDP-10 backend
 
+- [x] Fix non-extended PDP-10 packed BLKmode inline byte-copy from
+  ordinary word addresses: form valid 9-bit byte pointers without
+  changing incoming P,S-encoded pointers. Constant symbols and direct
+  frame-relative word addresses avoid runtime checks to save code.
+  The staged PDP-6 GCC O0 testkit regression fails with the previous
+  installed backend and passes with the patched backend. See testkit
+  test-gcc-packed-block-bytepointer-v1.sh; operational compiler
+  installation and broader profiles remain pending.
+- [ ] Fix the remaining packed-structure scalar readback mismatch in
+  upstream execute/20010518-2.c: after the byte-copy correction the
+  18-bit c/d fields still read as zero, despite GCC's field layout
+  recording c at bit 54 and d at bit 72. Original source is unchanged.
+  Trace the RTL expansion of packed scalar field fragments; do not
+  weaken the test or substitute a libc copy for the broken field load.
+
 - [ ] Implement working PDP-6 floating-point code generation for
   `-mpdp6-float`.
 - [ ] Implement working KA10/PDP-10 floating-point code generation for

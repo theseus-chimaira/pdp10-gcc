@@ -11504,6 +11504,65 @@ expand_movslj (destination, source, length)
    pointers.  This is the packed-object counterpart to BLT: BLT is only
    correct for whole-word-aligned blocks, while a packed BLKmode object may
    start or end inside a 36-bit word.  */
+static rtx
+pdp10_block_copy_byte_pointer (address)
+     rtx address;
+{
+  rtx pointer = gen_reg_rtx (Pmode);
+
+  emit_move_insn (pointer, address);
+
+  if (!TARGET_EXTENDED)
+    {
+      int known_word_address = GET_CODE (address) == SYMBOL_REF;
+
+      /* The generic BLKmode expander also passes ordinary word addresses
+         (including frame addresses and constant-pool labels) for packed
+         aggregates.  LDB/DPB require a genuine 9-bit local byte pointer.
+         However, a subword object can already supply a P,S-encoded byte
+         pointer, and replacing its selector would lose the starting byte.
+
+         On non-extended PDP-10 machines the high 12 bits encode P,S for
+         byte pointers, while a local word address has those bits clear.
+         Install POINT 9,0,8 only for the latter.  Keep a register-owned
+         copy so the source operand is never modified in place.  */
+      /* A direct frame-relative displacement is also a word address.
+         Avoid a run-time selector check for the common stack/local and
+         constant-pool copies; these are important on small machines.
+         A symbolic CONST carrying an encoded selector is not included.  */
+      if (!known_word_address
+          && GET_CODE (address) == PLUS
+          && GET_CODE (XEXP (address, 0)) == REG
+          && pdp10_frame_address_p (XEXP (address, 0))
+          && GET_CODE (XEXP (address, 1)) == CONST_INT
+          && INTVAL (XEXP (address, 1)) > -01000000
+          && INTVAL (XEXP (address, 1)) < 01000000)
+        known_word_address = 1;
+
+      if (!known_word_address)
+        {
+          rtx selector = gen_reg_rtx (Pmode);
+          rtx ready = gen_label_rtx ();
+
+          emit_insn (gen_andsi3 (selector, pointer,
+                                 gen_int_mode (HWINT (0777700) << 18,
+                                               Pmode)));
+          emit_cmp_and_jump_insn_1 (selector, CONST0_RTX (Pmode), Pmode,
+                                    NE, 0, ready);
+          emit_insn (gen_iorsi3 (pointer, pointer,
+                                gen_int_mode (HWINT (0331100) << 18,
+                                              Pmode)));
+          emit_label (ready);
+        }
+      else
+        emit_insn (gen_iorsi3 (pointer, pointer,
+                              gen_int_mode (HWINT (0331100) << 18,
+                                            Pmode)));
+    }
+
+  return pointer;
+}
+
 static int
 expand_byte_copy (destination, source, length)
      rtx destination;
@@ -11532,10 +11591,8 @@ expand_byte_copy (destination, source, length)
      stack object can arrive as virtual-stack-vars itself; modifying that
      special virtual register with IBP makes virtual-register instantiation
      invalid.  */
-  dst = gen_reg_rtx (Pmode);
-  src = gen_reg_rtx (Pmode);
-  emit_move_insn (dst, destination);
-  emit_move_insn (src, source);
+  dst = pdp10_block_copy_byte_pointer (destination);
+  src = pdp10_block_copy_byte_pointer (source);
   count = gen_reg_rtx (SImode);
   value = gen_reg_rtx (SImode);
   emit_move_insn (count, GEN_INT (n));
