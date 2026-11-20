@@ -78,6 +78,11 @@ upstream historical maintenance notes rather than work specific to this fork.
   correctly, and specify decoding of multicode-unit UTF-9 characters
   before adding Unicode character properties. Keep this work out of
   the 1.0 scope; no test-only isprint substitute.
+  The separately installed, genuine compiler-owned C-locale `isprint`
+  and `isspace` functions now cover the complete nine-bit argument
+  domain and EOF; they are not a substitute for the deferred UTF-9
+  classification and remaining `<ctype.h>` functions. See
+  `docs/P10-C-LOCALE-CTYPE-20261120-v1.md`.
 - [x] Install a GCC-native PDP-10 freestanding stdio header and real
   independently linkable memory formatter (libp10stdio-v1.a);
   provide sprintf, vsprintf, snprintf and vsnprintf using GCC's

@@ -2,3 +2,4 @@
 
 # Install the public SIXBIT compatibility helper with GCC's user headers.
 USER_H += $(srcdir)/ginclude/pdp10-sixbit.h
+USER_H += $(srcdir)/ginclude/ctype.h
