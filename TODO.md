@@ -58,6 +58,21 @@ upstream historical maintenance notes rather than work specific to this fork.
 
 ## PDP-10 backend
 
+- [x] Install a GCC-native PDP-10 freestanding stdio header and real
+  independently linkable memory formatter (libp10stdio-v1.a);
+  provide sprintf, vsprintf, snprintf and vsnprintf using GCC's
+  own va_list ABI. Build at PDP-6-safe -Os, install only
+  supported function declarations, and preserve separate library
+  linkage. The hosted KCC sprintf ABI is not reused.
+  See docs/P10-STDIO-FREESTANDING-20261120-v1.md.
+- [ ] Extend GCC stdio beyond memory formatting only when a real
+  DAIMOS/device I/O backend exists. Implement actual FILE streams,
+  printf, fprintf, putchar, puts and fopen, not dummy declarations
+  or success stubs.
+- [ ] Add correctly rounded floating-point printf conversions to the
+  GCC freestanding formatter when required target arithmetic and
+  test oracles become available.
+
 - [x] Fix non-extended PDP-10 packed BLKmode inline byte-copy from
   ordinary word addresses: form valid 9-bit byte pointers without
   changing incoming P,S-encoded pointers. Constant symbols and direct
