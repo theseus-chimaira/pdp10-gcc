@@ -13,7 +13,7 @@ LIBGCC2_DEBUG_CFLAGS = -g0
 # by GCC-built native programs: __fixdfdi, __fixunsdfdi, __fixunsdfsi,
 # __floatdisf and __floatdidf.
 # Other unsupported hosted conversions remain excluded.
-LIB2FUNCS_EXCLUDE = _fixunssfsi _exit _eprintf \
+LIB2FUNCS_EXCLUDE = _floatunsidf _fixunssfsi _exit _eprintf \
   _bb _fixunssfdi _fixsfdi _fixxfdi _fixunsxfdi _floatdixf \
   _fixunsxfsi _fixtfdi _fixunstfdi _floatditf __main _trampoline _divdi3 _moddi3 \
   _udivdi3 _umoddi3 _udivmoddi4 _udivsi3 _umodsi3
@@ -45,8 +45,8 @@ LIB2FUNCS_EXCLUDE = _fixunssfsi _exit _eprintf \
 # DARC/DLINK provide normal archive extraction, so helpers no longer need
 # bare-only ownership names merely to avoid local-label collisions.
 LIB1ASMSRC = pdp10/libgcc1.s
-LIB1ASMFUNCS = _main _divdi3 _udivsi3 _umodsi3 _fixsfsi _fixdfsi \
-	_floatsisf _floatsidf _floatunssisf _cmpdf2 \
+LIB1ASMFUNCS = _main _divdi3 _udivsi3 _umodsi3 _fixsfsi _fixunssfsi _fixdfsi \
+	_floatsisf _floatsidf _floatunssisf _floatunsidf _cmpdf2 \
 	BADL6 BADL7 BADL8 BADL9 BADLH BADX6 BADX7 BADX8 BADXH
 
 # DAS does not recognize GNU assembler-style CPP line markers.

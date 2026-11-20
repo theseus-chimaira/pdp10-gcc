@@ -21,6 +21,23 @@ upstream historical maintenance notes rather than work specific to this fork.
 
 ## Optimizer and code-size work
 
+- [x] Repair and verify native PDP-6 GCC 36-bit signed/unsigned
+  SF and D-format conversions. Canonical normalized 27-bit SF,
+  nearest/ties-even and full-range signed minimum are correct;
+  `__fixunssfsi` and full 36-bit `__floatunsidf` are real separate
+  target libgcc1 members. The PDP-6 unsigned SI-to-DF backend
+  no longer loses precision through SF. Twenty native GCC O0/O1/
+  O2/Os guests PASS five source-pinned conversion oracles. The
+  installed libgcc and cc1 checksums and raw before/after evidence
+  are in `docs/P10-FP36-NATIVE-CONVERSION-20261120-v1.md`.
+
+- [ ] Complete GNU 71-bit floating conversions required by the
+  unchanged historical `conversion.c` original. GCC currently
+  genuinely fails linking on absent `__fixunssfdi` even after
+  all focused 36-bit conversion oracles pass. Resolve the true
+  71-bit ABI/runtime requirements before relabeling original P1
+  construction as covered or starting the full matrix sweep.
+
 - [x] Correct GCC 3.2 builtin folding of PDP-10 packed 9-bit
   `STRING_CST` constants. `c_strlen` now interprets paired host
   bytes as logical target characters; generic `c_getstr` declines

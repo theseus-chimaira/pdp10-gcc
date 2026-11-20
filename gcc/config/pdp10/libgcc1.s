@@ -248,22 +248,62 @@ FUNC(ledf2):
 #endif
 
 #ifdef L_fixsfsi
-; Convert PDP-10 single floating to signed SImode, truncating toward zero.
-; AC1 is both the argument and result.  AC5/AC6 are call-clobbered scratch.
+; Convert canonical PDP-10 single floating to signed 36-bit SImode.
+; Previous HLRE/TRC/ASH simulation lost the signed minimum (-2^35),
+; returning zero when the normalized mantissa was shifted into bit35.
+; Recover the positive magnitude with a logical shift and then apply
+; the original sign; -2^35 naturally remains unchanged by MOVNS.
+; AC1 is argument/result; AC5/AC6 are call-clobbered scratch.
 	GLOBAL(FUNC(fixsfsi))
 FUNC(fixsfsi):
 	MOVE 5,1
-	HLRE 6,1
-	ASH 6,-011
-	JUMPGE 6,%Lfixsf_pos
+	JUMPE 1,%Lfixsf_done
+	JUMPGE 1,%Lfixsf_pos
 	MOVNS 1
-	TRC 6,-01
 %Lfixsf_pos:
-	TLZ 1,0777000
-	ASH 1,-0233(6)
+	MOVE 6,1
+	LSH 6,-033
+	ANDI 6,0377
+	SUBI 6,0201
+	JUMPL 6,%Lfixsf_zero
+	AND 1,[0777777777]
+	SUBI 6,032
+	LSH 1,0(6)
 	JUMPGE 5,%Lfixsf_done
 	MOVNS 1
 %Lfixsf_done:
+	RETURN
+%Lfixsf_zero:
+	SETZ 1,
+	RETURN
+#endif
+
+#ifdef L_fixunssfsi
+; Convert a nonnegative normalized PDP-10 single float to unsigned
+; 36-bit SImode, truncating toward zero.  No signed conversion helper
+; is suitable above 2^35-1.  For all defined C conversions, the
+; incoming value lies in the representable 0..2^36-1 range.
+;
+; Positive SF: biased exponent in bits 27..34, 27-bit normalized
+; fraction in bits 0..26.  The leading fraction bit represents
+; 2^(exponent-0201).  Shift by exponent-0201-26 to recover the
+; unsigned integer.  AC6 scratch; AC1 input/result.
+	GLOBAL(FUNC(fixunssfsi))
+FUNC(fixunssfsi):
+	JUMPE 1,%Lfixunsf_done
+	JUMPL 1,%Lfixunsf_zero
+	MOVE 6,1
+	LSH 6,-033
+	ANDI 6,0377
+	SUBI 6,0201
+	JUMPL 6,%Lfixunsf_zero
+	AND 1,[0777777777]
+	SUBI 6,032
+	LSH 1,0(6)
+%Lfixunsf_done:
+	RETURN
+%Lfixunsf_zero:
+	SETZ 1,
 	RETURN
 #endif
 
@@ -326,37 +366,167 @@ FUNC(fixdfsi):
 #endif
 
 #ifdef L_floatsisf
-; Convert signed SImode to PDP-10 single floating.  FSC exists on the
-; PDP-6/KA10 baseline; make a positive magnitude, scale it by 2^233
-; (octal), then restore the floating sign.
+; Convert signed 36-bit SImode to a NORMALIZED PDP-10 SF-format value.
+; An FSC on an unnormalized integer sets an exponent, but leaves its
+; mantissa at its original low bit position.  Thus FSC 1,0233 on 1024
+; produces 233000002000, not the canonical 213400000000 value.
+;
+; The result is exponent (0201 + floor(log2(abs(n)))) and a 27-bit
+; fraction aligned at bit 26.  Rounding to nearest/ties-to-even when
+; the integer has more than 27 significant bits compares the lost low
+; bits to the half-ULP without modifying the full magnitude.  A
+; fraction carry increments the exponent.  Negative results
+; are the two's complement of the entire positive floating word.
+; 0 and signed -2^35 have explicitly defined canonical representations.
+; AC5 is call-clobbered.  Preserve AC3/AC4/AC6/AC7 around the
+; normalization loop; GCC may hold caller values in those registers
+; across a libcall.  No static data or heap is needed.
 	GLOBAL(FUNC(floatsisf))
 FUNC(floatsisf):
 	MOVE 5,1
-	JUMPGE 5,%Lflts_pos
+	JUMPN 1,%Lflts_nonzero
+	RETURN
+%Lflts_nonzero:
+	CAMN 1,[0400000000000]
+	 JRST %Lflts_min
+	PUSH 17,3
+	PUSH 17,4
+	PUSH 17,6
+	PUSH 17,7
+	JUMPGE 5,%Lflts_absdone
 	MOVNS 1
-%Lflts_pos:
-	FSC 1,0233
+
+%Lflts_absdone:
+; Find k, highest set bit of the positive magnitude (0..34).
+	MOVE 6,1
+	MOVEI 7,042
+%Lflts_scan:
+	TLNE 6,0200000
+	 JRST %Lflts_found
+	LSH 6,1
+	SOJA 7,%Lflts_scan
+%Lflts_found:
+	MOVEI 6,032
+	SUB 6,7
+	JUMPGE 6,%Lflts_shift
+; More than 27 integer bits: compare discarded remainder to half,
+; and when equal round only if the retained fraction's LSB is 1.
+	MOVE 3,1
+	MOVN 4,6
+	MOVEI 6,1
+	LSH 6,0(4)
+	MOVE 4,6
+	SUBI 4,1
+	AND 3,4
+	MOVEI 6,032
+	SUB 6,7
+	LSH 1,0(6)
+	MOVE 4,7
+	SUBI 4,033
+	MOVEI 6,1
+	LSH 6,0(4)
+	SUB 3,6
+	JUMPL 3,%Lflts_exponent
+	JUMPG 3,%Lflts_round
+	MOVE 3,1
+	ANDI 3,1
+	JUMPE 3,%Lflts_exponent
+%Lflts_round:
+	AOJ 1,
+	CAME 1,[01000000000]
+	 JRST %Lflts_exponent
+	LSH 1,-1
+	AOJ 7,
+	JRST %Lflts_exponent
+%Lflts_shift:
+	LSH 1,0(6)
+%Lflts_exponent:
+	MOVEI 6,0201
+	ADD 6,7
+	LSH 6,033
+	IOR 1,6
 	JUMPGE 5,%Lflts_done
 	MOVNS 1
 %Lflts_done:
+	POP 17,7
+	POP 17,6
+	POP 17,4
+	POP 17,3
+	RETURN
+%Lflts_min:
+	MOVE 1,[0533400000000]
 	RETURN
 #endif
 
 #ifdef L_floatunssisf
-; Convert unsigned SImode to PDP-10 single floating without FLTR.
-; The full 36-bit unsigned case needs nine bits shifted out before FSC;
-; compensate the exponent after scaling.  This is the established
-; PDP-6/KA10 sequence and also runs on later processors.
+; Convert the full unsigned 36-bit SImode range into canonical PDP-10 SF.
+; The old FSC-only conversion retained the integer in the low mantissa
+; bits and discarded nine bits of high unsigned input before rounding.
+; Instead find the highest set bit, align a 27-bit fraction, and round
+; nearest with ties to even.  A carry out of the fraction increments
+; the exponent, so 2^36-1 correctly rounds to exactly 2^36.
+; Preserve AC3/AC4/AC6/AC7, which GCC may keep live over a libcall;
+; no persistent storage or helper dependency is needed.
 	GLOBAL(FUNC(floatunssisf))
 FUNC(floatunssisf):
-	TLNN 1,0777000
-	 JRST %Luflts_small
-	LSH 1,-011
-	FSC 1,0233
-	FSC 1,011
+	JUMPN 1,%Luflts_nonzero
 	RETURN
-%Luflts_small:
-	FSC 1,0233
+%Luflts_nonzero:
+	PUSH 17,3
+	PUSH 17,4
+	PUSH 17,6
+	PUSH 17,7
+	MOVE 6,1
+	MOVEI 7,043
+%Luflts_scan:
+	TLNE 6,0400000
+	 JRST %Luflts_found
+	LSH 6,1
+	SOJA 7,%Luflts_scan
+%Luflts_found:
+	MOVEI 6,032
+	SUB 6,7
+	JUMPGE 6,%Luflts_shift
+; Right-shift by k-26.  Preserve discarded bits for exact rounding;
+; never add to the full 36-bit source, which could overflow.
+	MOVE 3,1
+	MOVN 4,6
+	MOVEI 6,1
+	LSH 6,0(4)
+	MOVE 4,6
+	SUBI 4,1
+	AND 3,4
+	MOVEI 6,032
+	SUB 6,7
+	LSH 1,0(6)
+	MOVE 4,7
+	SUBI 4,033
+	MOVEI 6,1
+	LSH 6,0(4)
+	SUB 3,6
+	JUMPL 3,%Luflts_exponent
+	JUMPG 3,%Luflts_round
+	MOVE 3,1
+	ANDI 3,1
+	JUMPE 3,%Luflts_exponent
+%Luflts_round:
+	AOJ 1,
+	CAME 1,[01000000000]
+	 JRST %Luflts_exponent
+	LSH 1,-1
+	AOJ 7,
+	JRST %Luflts_exponent
+%Luflts_shift:
+	LSH 1,0(6)
+%Luflts_exponent:
+	MOVEI 6,0201
+	ADD 6,7
+	LSH 6,033
+	IOR 1,6
+	POP 17,7
+	POP 17,6
+	POP 17,4
+	POP 17,3
 	RETURN
 #endif
 
@@ -433,6 +603,66 @@ FUNC(floatsidf):
 %Lfltd_min:
 	MOVE 1,[0533400000000]
 	MOVE 2,[0400000000000]
+	RETURN
+#endif
+
+#ifdef L_floatunsidf
+; Exact 36-bit unsigned SImode -> canonical PDP-10 D-format double.
+; A double has a 62-bit fraction, so all 36 unsigned input bits fit
+; without rounding.  Converting through SF loses low precision bits
+; for values >= 2^27 and is not a valid replacement for this helper.
+; Input AC1 is unsigned; output AC1/AC2 contains the full D-format.
+; The fraction is 27 high bits plus 35 low continuation bits.
+	GLOBAL(FUNC(floatunsidf))
+FUNC(floatunsidf):
+	JUMPN 1,%Lufltd_nonzero
+	SETZ 2,
+	RETURN
+%Lufltd_nonzero:
+	PUSH 17,3
+	PUSH 17,4
+	PUSH 17,5
+	PUSH 17,6
+	PUSH 17,7
+; Find the unsigned highest set bit k (0..35), including bit 35.
+	MOVE 5,1
+	MOVEI 6,043
+%Lufltd_scan:
+	TLNE 5,0400000
+	 JRST %Lufltd_found
+	LSH 5,1
+	SOJA 6,%Lufltd_scan
+%Lufltd_found:
+	CAIG 6,032
+	 JRST %Lufltd_small
+; k>26: retain high 27 bits in AC1, put the remaining low bits
+; in AC2 shifted to the high end of its 35-bit continuation.
+	MOVE 7,6
+	SUBI 7,032
+	MOVE 3,1
+	MOVN 4,7
+	LSH 1,0(4)
+	MOVEI 4,043
+	SUB 4,7
+	LSH 3,0(4)
+	TLZ 3,0400000
+	MOVE 2,3
+	JRST %Lufltd_exponent
+%Lufltd_small:
+	MOVEI 4,032
+	SUB 4,6
+	LSH 1,0(4)
+	SETZ 2,
+%Lufltd_exponent:
+	MOVEI 4,0201
+	ADD 4,6
+	LSH 4,033
+	IOR 1,4
+	POP 17,7
+	POP 17,6
+	POP 17,5
+	POP 17,4
+	POP 17,3
 	RETURN
 #endif
 

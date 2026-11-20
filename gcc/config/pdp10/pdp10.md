@@ -5626,18 +5626,12 @@
      {
        if (!TARGET_KI10up)
 	 {
-	   rtx sf = gen_reg_rtx (SFmode);
-
-	   /* PDP-6/KA10 have no native unsigned SI-to-D-float
-	      conversion.  Match the baseline double runtime model used by
-	      __floatsidf: build the exact unsigned single-word float and
-	      extend it by zeroing the low D-float word.  The older inline
-	      D-float construction was off by one binary exponent for small
-	      unsigned values.  */
+	   /* PDP-6/KA10 must preserve all 36 unsigned integer bits in
+	      D-format.  Going through __floatunssisf truncates to the
+	      27-bit SF fraction and cannot represent 2^35-1 exactly.  */
 	   emit_library_call_value
-	     (gen_rtx_SYMBOL_REF (Pmode, \"__floatunssisf\"),
-	      sf, LCT_NORMAL, SFmode, 1, operands[1], SImode);
-	   emit_insn (gen_extendsfdf2 (operands[0], sf));
+	     (gen_rtx_SYMBOL_REF (Pmode, \"__floatunsidf\"),
+	      operands[0], LCT_NORMAL, DFmode, 1, operands[1], SImode);
 	   DONE;
 	 }
        else
