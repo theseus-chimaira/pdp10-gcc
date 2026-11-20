@@ -8528,6 +8528,18 @@ expand_expr (exp, target, tmode, modifier)
 		&& 0 != compare_tree_int (TYPE_SIZE (TREE_TYPE (exp)),
 					  bitsize))
 	    || EXTRACT_FIELD_AS_BITFIELD_P (op0, mode1, bitsize)
+#if REAL_BITS_PER_UNIT == 36
+	    /* An 18-bit field in a packed PDP-10 record is not
+	       necessarily the left half of its containing word.  Treat
+	       the original bit position as authoritative, instead of
+	       narrowing the reference to HImode and losing the halfword
+	       selector during reload.  */
+	    || (code == COMPONENT_REF
+		&& bitsize == 18
+		&& TREE_CODE (TREE_TYPE (TREE_OPERAND (exp, 0)))
+		   == RECORD_TYPE
+		&& TYPE_PACKED (TREE_TYPE (TREE_OPERAND (exp, 0))))
+#endif
 	    )
 	  {
 	    enum machine_mode ext_mode = mode;
@@ -8567,6 +8579,27 @@ expand_expr (exp, target, tmode, modifier)
 		return target;
 	      }
 
+#if REAL_BITS_PER_UNIT == 36
+	    /* The PDP-10 memory address counts 36-bit words, not the
+	       9-bit units used by GCC's generic bit-field machinery.
+	       Normalize a packed halfword reference to its containing
+	       word before extracting the half selected by BITPOS.  */
+	    if (code == COMPONENT_REF
+		&& bitsize == 18
+		&& TREE_CODE (TREE_TYPE (TREE_OPERAND (exp, 0)))
+		   == RECORD_TYPE
+		&& TYPE_PACKED (TREE_TYPE (TREE_OPERAND (exp, 0)))
+		&& GET_CODE (op0) == MEM
+		&& bitpos >= BITS_PER_WORD
+		&& (bitpos % BITS_PER_WORD == 18
+		    || (bitpos % BITS_PER_WORD == 0
+			&& !CONSTANT_ADDRESS_P (XEXP (op0, 0)))))
+	      {
+		op0 = adjust_address (op0, SImode,
+				      bitpos / BITS_PER_WORD);
+		bitpos %= BITS_PER_WORD;
+	      }
+#endif
 	    op0 = validize_mem (op0);
 
 	    if (GET_CODE (op0) == MEM && GET_CODE (XEXP (op0, 0)) == REG)
