@@ -65,10 +65,21 @@ upstream historical maintenance notes rather than work specific to this fork.
   supported function declarations, and preserve separate library
   linkage. The hosted KCC sprintf ABI is not reused.
   See docs/P10-STDIO-FREESTANDING-20261120-v1.md.
-- [ ] Extend GCC stdio beyond memory formatting only when a real
-  DAIMOS/device I/O backend exists. Implement actual FILE streams,
-  printf, fprintf, putchar, puts and fopen, not dummy declarations
-  or success stubs.
+- [ ] Extend GCC stdio to real FILE streams, fprintf, fopen,
+  input scanning and remaining hosted interfaces only with an
+  actual OS/device backend, never declarations or dummy stubs.
+- [x] Add a separately linkable DAIMOS console adapter for GCC
+  printf, vprintf, putchar and puts backed by dsys_writechar;
+  keep the v2 shared buffer formatter freestanding. Generic
+  buffer-formatting regression passes 16 native guest cells in
+  pdp10-testkit; the DAIMOS console adapter passes 8 bare-machine
+  ABI/fail-stop checks owned by daimos-testkit. The actual DAIMOS
+  booted guest acceptance is still unverified (critical root-I/O
+  halt before the test application). See
+  docs/P10-STDIO-DAIMOS-20261120-v2.md.
+- [ ] Accept the real DAIMOS monitor WRITECHAR console test after a
+  successful OS boot and guest transcript; ABI recording alone is
+  insufficient. FILE streams, fprintf and fopen remain pending.
 - [ ] Add correctly rounded floating-point printf conversions to the
   GCC freestanding formatter when required target arithmetic and
   test oracles become available.
