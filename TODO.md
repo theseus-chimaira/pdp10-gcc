@@ -58,6 +58,14 @@ upstream historical maintenance notes rather than work specific to this fork.
 
 ## PDP-10 backend
 
+- [ ] Post-1.0: implement the full PDP-10 character-classification
+  library (<ctype.h>, including isprint and case conversions) with a
+  deliberate UTF-9 strategy. Do not publish a 7-bit ASCII-only
+  classifier as UTF-9-aware. Define C-locale behavior separately
+  from Unicode classification, handle 9-bit code units and EOF
+  correctly, and specify decoding of multicode-unit UTF-9 characters
+  before adding Unicode character properties. Keep this work out of
+  the 1.0 scope; no test-only isprint substitute.
 - [x] Install a GCC-native PDP-10 freestanding stdio header and real
   independently linkable memory formatter (libp10stdio-v1.a);
   provide sprintf, vsprintf, snprintf and vsnprintf using GCC's
