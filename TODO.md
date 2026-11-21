@@ -31,12 +31,21 @@ upstream historical maintenance notes rather than work specific to this fork.
   installed libgcc and cc1 checksums and raw before/after evidence
   are in `docs/P10-FP36-NATIVE-CONVERSION-20261120-v1.md`.
 
-- [ ] Complete GNU 71-bit floating conversions required by the
-  unchanged historical `conversion.c` original. GCC currently
-  genuinely fails linking on absent `__fixunssfdi` even after
-  all focused 36-bit conversion oracles pass. Resolve the true
-  71-bit ABI/runtime requirements before relabeling original P1
-  construction as covered or starting the full matrix sweep.
+- [x] Implement real GNU 71-bit SF/DF conversion runtime helpers for
+  the PDP-6 compiler ABI: `__fixunssfdi`, `__fixsfdi`, `__fixunsdfdi`,
+  `__fixdfdi`, `__floatdidf` and direct, nearest/even `__floatdisf`.
+  All six PDP-6 KCC/GCC native profiles now PASS the **unchanged**
+  `conversion.c` historical source, including its GNU 71-bit cases.
+  A C89 raw 36+35-bit libgcc ABI test also PASSes all four GCC
+  optimization profiles, including a 2^69 halfway/sticky rounding
+  discriminator. The old library is retained and the rebuilt
+  library contains only six changed/additional conversion members.
+  See `docs/P10-71BIT-CONVERSION-20261121-v1.md`.
+
+- [ ] Extend the verified 71-bit conversion ABI to later PDP-10 CPU
+  profiles only after their actual floating-point representations
+  and instruction behavior have been independently validated. Native
+  PDP-6 success must not be treated as a full CPU-matrix PASS.
 
 - [x] Correct GCC 3.2 builtin folding of PDP-10 packed 9-bit
   `STRING_CST` constants. `c_strlen` now interprets paired host

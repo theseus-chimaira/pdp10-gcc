@@ -307,6 +307,187 @@ FUNC(fixunssfsi):
 	RETURN
 #endif
 
+#ifdef L_fixunssfdi
+; PDP-6/KA10 canonical SF -> unsigned 71-bit DImode, truncate toward
+; zero.  Unlike the generic libgcc2 implementation, this does not
+; require soft D-format division, subtraction or any hosted libc.
+;
+; Input:  AC1 = canonical PDP-10 single-precision float.
+; Output: AC1:AC2 = unsigned 71-bit integer (36-bit high word,
+;         35-bit low payload, bit35 of low word copies high sign).
+;
+; For nonnegative SF, integer value is 27-bit fraction F times
+; 2^(unbiased_exponent-26).  Put F in low AC2 of a 72-bit pair,
+; shift the pair by unbiased_exponent-25 (one extra bit), and then
+; logically shift AC2 back by one.  That positions bit35 exactly as
+; the high/low divider boundary without discarding significant bits.
+; The final low sign-copy bit follows AC1 bit35.  Values below 1
+; truncate to zero.  Negative-to-unsigned casts are outside the
+; defined C range; return zero deterministically for those too.
+;
+; Only AC6 is scratch, preserved across the libcall.  No heap, static
+; tables, or calls to other conversion helpers are required.
+	GLOBAL(FUNC(fixunssfdi))
+FUNC(fixunssfdi):
+	JUMPE 1,%Lfixunsfdi_zero
+	JUMPL 1,%Lfixunsfdi_zero
+	PUSH 17,6
+	MOVE 6,1
+	LSH 6,-033
+	ANDI 6,0377
+	SUBI 6,0201
+	JUMPL 6,%Lfixunsfdi_small
+	SUBI 6,031
+	MOVE 2,1
+	AND 2,[0777777777]
+	SETZ 1,
+	LSHC 1,0(6)
+	LSH 2,-1
+	TLZ 2,0400000
+	TLNE 1,0400000
+	 TLO 2,0400000
+	POP 17,6
+	RETURN
+%Lfixunsfdi_small:
+	POP 17,6
+%Lfixunsfdi_zero:
+	SETZ 1,
+	SETZ 2,
+	RETURN
+#endif
+
+#ifdef L_fixunsdfdi
+; PDP-6/KA10 canonical D-format double -> unsigned 71-bit integer.
+; Convert a positive D-format fraction directly using integer shifts,
+; not the generic hosted libgcc2 floating divide/subtract sequence.
+;
+; AC1:AC2 input is fraction27 high plus the 35-bit continuation.
+; Reconstruct a 72-bit normalized pair from the fraction and shift
+; right by (71 - actual exponent).  AC1:AC2 output is high36:low35
+; with a copy of AC1's sign bit into AC2 bit35.  Truncates toward zero.
+; Values below 1 return zero; negative unsigned conversions are outside
+; defined C range and return zero deterministically.  Save AC3..AC6.
+	GLOBAL(FUNC(fixunsdfdi))
+FUNC(fixunsdfdi):
+	JUMPE 1,%Lfixundfdi_zero
+	JUMPL 1,%Lfixundfdi_zero
+	PUSH 17,3
+	PUSH 17,4
+	PUSH 17,5
+	PUSH 17,6
+	MOVE 3,1
+	LSH 3,-033
+	ANDI 3,0377
+	SUBI 3,0200
+	JUMPLE 3,%Lfixundfdi_small
+; Align the 62-bit D-format fraction at the top of 72 bits.
+	MOVE 4,1
+	AND 4,[0777777777]
+	LSH 4,011
+	MOVE 5,2
+	LSH 5,-032
+	IOR 4,5
+	MOVE 5,2
+	LSH 5,012
+	MOVE 1,4
+	MOVE 2,5
+	MOVE 6,3
+	SUBI 6,0107
+	LSHC 1,0(6)
+	LSH 2,-1
+	TLZ 2,0400000
+	TLNE 1,0400000
+	 TLO 2,0400000
+	JRST %Lfixundfdi_done
+%Lfixundfdi_small:
+	SETZ 1,
+	SETZ 2,
+%Lfixundfdi_done:
+	POP 17,6
+	POP 17,5
+	POP 17,4
+	POP 17,3
+	RETURN
+%Lfixundfdi_zero:
+	SETZ 1,
+	SETZ 2,
+	RETURN
+#endif
+
+#ifdef L_fixdfdi
+; PDP-6/KA10 canonical D-format double -> signed 71-bit integer.
+; Preserve the original sign, form the absolute positive D-format
+; 71-bit two's complement, use the exact unsigned integer converter,
+; then apply the sign across the 36+35-bit fixed result.  Preserve
+; zero as canonical all-zero words even for negative fractions < 1.
+	GLOBAL(FUNC(fixdfdi))
+FUNC(fixdfdi):
+	PUSH 17,5
+	MOVE 5,1
+	JUMPGE 5,%Lfixdfdi_pos
+	SETCA 1,1
+	SETCA 2,2
+	AND 2,[0377777777777]
+	ADDI 2,1
+	TLNE 2,0400000
+	 ADDI 1,1
+	AND 2,[0377777777777]
+%Lfixdfdi_pos:
+	PUSHJ 17,FUNC(fixunsdfdi)
+	JUMPGE 5,%Lfixdfdi_done
+	MOVE 6,1
+	IOR 6,2
+	JUMPE 6,%Lfixdfdi_done
+	SETCA 1,1
+	SETCA 2,2
+	AND 2,[0377777777777]
+	ADDI 2,1
+	TLNE 2,0400000
+	 ADDI 1,1
+	AND 2,[0377777777777]
+	TLO 2,0400000
+%Lfixdfdi_done:
+	POP 17,5
+	RETURN
+#endif
+
+#ifdef L_fixsfdi
+; PDP-6/KA10 canonical SF -> signed 71-bit DImode, truncate toward
+; zero.  Use the exact full-width unsigned magnitude converter and
+; negate the 36+35-bit integer result as one 71-bit two's complement.
+; The low word's bit35 is a copy of the signed high word's bit35.
+;
+; AC1 holds the input single float.  AC1/AC2 return the signed pair;
+; AC5 is saved to preserve the pre-conversion floating sign across
+; the call, which may use the 71-bit carry boundary.
+	GLOBAL(FUNC(fixsfdi))
+FUNC(fixsfdi):
+	PUSH 17,5
+	MOVE 5,1
+	JUMPGE 5,%Lfixsfdi_positive
+	MOVNS 1
+%Lfixsfdi_positive:
+	PUSHJ 17,FUNC(fixunssfdi)
+	JUMPGE 5,%Lfixsfdi_done
+	; A fractional negative value between -1 and 0 truncates to
+	; integer zero.  Do not manufacture a signed-71 negative zero
+	; by setting the low-word sign-copy bit on an empty magnitude.
+	MOVE 6,1
+	IOR 6,2
+	JUMPE 6,%Lfixsfdi_done
+	SETCA 1,1
+	SETCA 2,2
+	AND 2,[0377777777777]
+	ADDI 2,1
+	TLNE 2,0400000
+	 ADDI 1,1
+	AND 2,[0377777777777]
+	TLO 2,0400000
+%Lfixsfdi_done:
+	POP 17,5
+	RETURN
+#endif
+
 #ifdef L_fixdfsi
 ; Convert canonical PDP-10 D-format double in AC1/AC2 to signed SImode.
 ; D-format is a 71-bit two's-complement value: AC2 bit 35 copies the
@@ -672,6 +853,192 @@ FUNC(floatunsidf):
    This lets the archive linker pull only helpers actually referenced by a
    program.  The four DImode division/modulo entry points intentionally remain
    together because they share the same substantial private 71-bit divider.  */
+
+#ifdef L_floatdisf
+; Signed 71-bit DImode -> canonical PDP-10 SF, round nearest/ties-even.
+;
+; Input AC1:AC2 is GCC's signed high36:low35 integer with a sign-copy
+; bit at AC2 bit35.  Normalize all 71 integer bits first, then choose
+; the top 27 bits as the SF fraction.  The guard bit is normalized
+; high-word bit8; the sticky bits are high-word bits0..7 and ALL of
+; normalized AC2.  A D-format intermediate would lose some of those
+; bits and can introduce double rounding; never use it here.
+;
+; Return canonical SF in AC1.  This is PDP-6/KA10 base ISA code, with
+; no heap, permanent table, or OS call.  Preserve AC3..AC6 and AC10.
+	GLOBAL(FUNC(floatdisf))
+FUNC(floatdisf):
+	PUSH 17,3
+	PUSH 17,4
+	PUSH 17,5
+	PUSH 17,6
+	PUSH 17,010
+	MOVE 3,1
+	IOR 3,2
+	JUMPE 3,%Lfdsf_zero
+	SETZ 010,
+	TLNE 1,0400000
+	 JRST %Lfdsf_abs
+	JRST %Lfdsf_unsigned
+%Lfdsf_abs:
+	MOVEI 010,1
+	SETCA 1,1
+	SETCA 2,2
+	AND 2,[0377777777777]
+	ADDI 2,1
+	TLNE 2,0400000
+	 ADDI 1,1
+	AND 2,[0377777777777]
+%Lfdsf_unsigned:
+	LSH 2,1
+	MOVEI 3,0107
+%Lfdsf_normalize:
+	TLNE 1,0400000
+	 JRST %Lfdsf_mantissa
+	LSHC 1,1
+	SOJA 3,%Lfdsf_normalize
+%Lfdsf_mantissa:
+; 72-bit normalized integer: AC1 high bit35 is the implicit 1.
+	MOVE 4,1
+	LSH 4,-011
+	MOVE 5,1
+	ANDI 5,0777
+	SUBI 5,0400
+	JUMPL 5,%Lfdsf_pack
+	JUMPG 5,%Lfdsf_round
+; Exactly half an SF ULP at bit8: any remaining low bit means > half.
+	JUMPN 2,%Lfdsf_round
+	TRNE 4,1
+	 JRST %Lfdsf_round
+	JRST %Lfdsf_pack
+%Lfdsf_round:
+	AOJ 4,
+	CAME 4,[01000000000]
+	 JRST %Lfdsf_pack
+	LSH 4,-1
+	AOJ 3,
+%Lfdsf_pack:
+	ADDI 3,0200
+	LSH 3,033
+	IOR 4,3
+	MOVE 1,4
+	JUMPE 010,%Lfdsf_done
+	MOVNS 1
+	JRST %Lfdsf_done
+%Lfdsf_zero:
+	SETZ 1,
+%Lfdsf_done:
+	POP 17,010
+	POP 17,6
+	POP 17,5
+	POP 17,4
+	POP 17,3
+	RETURN
+#endif
+
+#ifdef L_floatdidf
+; Signed 71-bit DImode -> PDP-10 two-word D-format, exactly preserving
+; the 71-bit ABI sign and the low 35-bit continuation.  This is the
+; corresponding compiler-owned GCC entry to the previously verified
+; PDP-6 KCC integer-only normalized conversion algorithm.
+;
+; Input AC1 high36, AC2 low35 plus sign copy.  Output AC1/AC2 is
+; canonical 27+35-bit D-format, rounded nearest/ties-to-even.  The
+; generic libgcc2 arithmetic used a host-style 72-bit word split and
+; produced wrong D-format values at 2^35-1 and at larger boundaries.
+; Only PDP-6 instructions are used; preserve AC3..AC6 and AC10.
+	GLOBAL(FUNC(floatdidf))
+FUNC(floatdidf):
+	PUSH 17,3
+	PUSH 17,4
+	PUSH 17,5
+	PUSH 17,6
+	PUSH 17,010
+	MOVE 3,1
+	IOR 3,2
+	JUMPE 3,%Lfd71_zero
+	SETZ 010,
+	TLNE 1,0400000
+	 JRST %Lfd71_abs
+	JRST %Lfd71_unsigned
+%Lfd71_abs:
+	MOVEI 010,1
+	SETCA 1,1
+	SETCA 2,2
+	AND 2,[0377777777777]
+	ADDI 2,1
+	TLNE 2,0400000
+	 ADDI 1,1
+	AND 2,[0377777777777]
+%Lfd71_unsigned:
+	LSH 2,1
+	MOVEI 3,0107
+%Lfd71_normalize:
+	TLNE 1,0400000
+	 JRST %Lfd71_mantissa
+	LSHC 1,1
+	SOJA 3,%Lfd71_normalize
+%Lfd71_mantissa:
+	MOVE 4,1
+	LSH 4,-011
+	MOVE 5,1
+	ANDI 5,0777
+	LSH 5,032
+	MOVE 6,2
+	LSH 6,-012
+	IOR 5,6
+; Ten lost low bits: guard bit9 and sticky bits8..0.
+	MOVE 6,2
+	ANDI 6,01777
+	SUBI 6,01000
+	JUMPL 6,%Lfd71_pack
+	JUMPE 6,%Lfd71_tie
+	JRST %Lfd71_round
+%Lfd71_tie:
+	TRNE 5,1
+	 JRST %Lfd71_round
+	JRST %Lfd71_pack
+%Lfd71_round:
+	ADDI 5,1
+	TLNE 5,0400000
+	 JRST %Lfd71_carry
+	JRST %Lfd71_pack
+%Lfd71_carry:
+	AND 5,[0377777777777]
+	ADDI 4,1
+	MOVE 6,4
+	LSH 6,-033
+	JUMPE 6,%Lfd71_pack
+	MOVE 4,[0400000000]
+	AOS 3
+%Lfd71_pack:
+	ADDI 3,0200
+	LSH 3,033
+	IOR 4,3
+	MOVE 1,4
+	MOVE 2,5
+	JUMPE 010,%Lfd71_done
+; Two's-complement the whole D-format 71-bit pair, not each word.
+	SETCA 1,1
+	SETCA 2,2
+	AND 2,[0377777777777]
+	ADDI 2,1
+	TLNE 2,0400000
+	 ADDI 1,1
+	AND 2,[0377777777777]
+	TLO 2,0400000
+	JRST %Lfd71_done
+%Lfd71_zero:
+	SETZ 1,
+	SETZ 2,
+%Lfd71_done:
+	POP 17,010
+	POP 17,6
+	POP 17,5
+	POP 17,4
+	POP 17,3
+	RETURN
+#endif
 
 #ifdef L_main
 ; GCC emits a call to __main at the start of main.  In full hosted GCC this

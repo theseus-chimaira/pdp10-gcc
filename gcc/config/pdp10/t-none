@@ -9,11 +9,12 @@ TARGET_LIBGCC2_CFLAGS = -fomit-frame-pointer -DUNDERSCORE=__ -Dinhibit_libc -mar
 LIBGCC2_DEBUG_CFLAGS = -g0
 
 # PDP-10-specific SF/DF conversions and comparisons are supplied by
-# libgcc1.s.  Keep the generic double-word conversion entry points needed
-# by GCC-built native programs: __fixdfdi, __fixunsdfdi, __fixunsdfsi,
-# __floatdisf and __floatdidf.
-# Other unsupported hosted conversions remain excluded.
-LIB2FUNCS_EXCLUDE = _floatunsidf _fixunssfsi _exit _eprintf \
+# libgcc1.s.  The 71-bit signed and unsigned DImode <-> SF/DF paths
+# must also be native libgcc1 members: generic libgcc2 operations
+# truncate the low 35 bits, can double-round through DF, or depend on
+# floating division/hosted code.  Keep other generic helpers only
+# where their target ABI is independently verified.
+LIB2FUNCS_EXCLUDE = _floatunsidf _floatdidf _floatdisf _fixunsdfdi _fixdfdi _fixunssfsi _exit _eprintf \
   _bb _fixunssfdi _fixsfdi _fixxfdi _fixunsxfdi _floatdixf \
   _fixunsxfsi _fixtfdi _fixunstfdi _floatditf __main _trampoline _divdi3 _moddi3 \
   _udivdi3 _umoddi3 _udivmoddi4 _udivsi3 _umodsi3
@@ -45,8 +46,8 @@ LIB2FUNCS_EXCLUDE = _floatunsidf _fixunssfsi _exit _eprintf \
 # DARC/DLINK provide normal archive extraction, so helpers no longer need
 # bare-only ownership names merely to avoid local-label collisions.
 LIB1ASMSRC = pdp10/libgcc1.s
-LIB1ASMFUNCS = _main _divdi3 _udivsi3 _umodsi3 _fixsfsi _fixunssfsi _fixdfsi \
-	_floatsisf _floatsidf _floatunssisf _floatunsidf _cmpdf2 \
+LIB1ASMFUNCS = _main _divdi3 _udivsi3 _umodsi3 _fixsfsi _fixunssfsi _fixunssfdi _fixsfdi _fixdfsi _fixunsdfdi _fixdfdi \
+	_floatsisf _floatsidf _floatunssisf _floatunsidf _floatdidf _floatdisf _cmpdf2 \
 	BADL6 BADL7 BADL8 BADL9 BADLH BADX6 BADX7 BADX8 BADXH
 
 # DAS does not recognize GNU assembler-style CPP line markers.
