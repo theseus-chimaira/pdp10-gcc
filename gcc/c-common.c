@@ -3033,6 +3033,18 @@ c_common_nodes_and_builtins ()
 #include "builtins.def"
 #undef DEF_BUILTIN
 
+  /* __builtin_abort is an unconditional, non-returning call to the
+     C runtime abort function.  GCC 3.2 does not assign it a builtin
+     function code, so give it the correct assembler name directly.
+     This must not leave a reference to a symbol named __builtin_abort.  */
+  {
+    tree decl = builtin_function ("__builtin_abort",
+                                  builtin_types[BT_FN_VOID],
+                                  0, NOT_BUILT_IN, "abort");
+    TREE_THIS_VOLATILE (decl) = 1;
+    TREE_SIDE_EFFECTS (decl) = 1;
+  }
+
   /* Declare _exit and _Exit just to mark them as non-returning.  */
   builtin_function_2 (NULL, "_exit", NULL_TREE, 
 		      builtin_types[BT_FN_VOID_INT],
