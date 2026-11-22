@@ -577,10 +577,14 @@ sh "$FREESTANDING_SRC/build-stdio-archive-v2.sh" "$FREESTANDING_SRC" \
     "$P10C_INSTALL_STAGE/libp10stdio-v2.a" \
     "$P10C_INSTALL_STAGE/libp10stdio-daimos-v1.a" \
     "$P10C_INSTALL_STAGE"
+sh "$FREESTANDING_SRC/build-heap-archive-v1.sh" "$FREESTANDING_SRC" \
+    "$P10C_INSTALL_STAGE/libp10heap-arena-v1.a" \
+    "$P10C_INSTALL_STAGE/p10heap-arena-v1.s"
 if [ "$INSTALL_WITH_PRIV" = yes ]; then
 	privileged_command mkdir -p "$FREESTANDING_DST" "$FREESTANDING_INCLUDE"
 	privileged_command cp "$FREESTANDING_SRC"/kcc-libc-*.s "$FREESTANDING_SRC/p10bytes-v2.s" "$FREESTANDING_DST/"
 	privileged_command cp "$P10C_INSTALL_STAGE/libp10c-v2.a" "$FREESTANDING_DST/"
+	privileged_command cp "$P10C_INSTALL_STAGE/libp10heap-arena-v1.a" "$P10C_INSTALL_STAGE/p10heap-arena-v1.s" "$FREESTANDING_DST/"
 	privileged_command cp "$P10C_INSTALL_STAGE/libp10stdio-v1.a" "$FREESTANDING_DST/"
 	privileged_command cp "$P10C_INSTALL_STAGE/p10stdio-format-v1.s" "$FREESTANDING_DST/"
 	privileged_command cp "$P10C_INSTALL_STAGE/libp10stdio-v2.a" "$P10C_INSTALL_STAGE/libp10stdio-daimos-v1.a" "$FREESTANDING_DST/"
@@ -588,10 +592,12 @@ if [ "$INSTALL_WITH_PRIV" = yes ]; then
 	privileged_command cp "$FREESTANDING_SRC/include/string.h" "$FREESTANDING_SRC/include/p10bytes-v2.h" "$FREESTANDING_INCLUDE/"
 	privileged_command cp "$FREESTANDING_SRC/include/stdio.h" "$FREESTANDING_INCLUDE/"
 	privileged_command cp "$FREESTANDING_SRC/include/p10stdio-daimos-v1.h" "$FREESTANDING_INCLUDE/"
+	privileged_command cp "$FREESTANDING_SRC/include/p10heap-arena-v1.h" "$FREESTANDING_INCLUDE/"
 else
 	mkdir -p "$FREESTANDING_DST" "$FREESTANDING_INCLUDE"
 	cp "$FREESTANDING_SRC"/kcc-libc-*.s "$FREESTANDING_SRC/p10bytes-v2.s" "$FREESTANDING_DST/"
 	cp "$P10C_INSTALL_STAGE/libp10c-v2.a" "$FREESTANDING_DST/"
+	cp "$P10C_INSTALL_STAGE/libp10heap-arena-v1.a" "$P10C_INSTALL_STAGE/p10heap-arena-v1.s" "$FREESTANDING_DST/"
 	cp "$P10C_INSTALL_STAGE/libp10stdio-v1.a" "$FREESTANDING_DST/"
 	cp "$P10C_INSTALL_STAGE/p10stdio-format-v1.s" "$FREESTANDING_DST/"
 	cp "$P10C_INSTALL_STAGE/libp10stdio-v2.a" "$P10C_INSTALL_STAGE/libp10stdio-daimos-v1.a" "$FREESTANDING_DST/"
@@ -599,6 +605,7 @@ else
 	cp "$FREESTANDING_SRC/include/string.h" "$FREESTANDING_SRC/include/p10bytes-v2.h" "$FREESTANDING_INCLUDE/"
 	cp "$FREESTANDING_SRC/include/stdio.h" "$FREESTANDING_INCLUDE/"
 	cp "$FREESTANDING_SRC/include/p10stdio-daimos-v1.h" "$FREESTANDING_INCLUDE/"
+	cp "$FREESTANDING_SRC/include/p10heap-arena-v1.h" "$FREESTANDING_INCLUDE/"
 fi
 rm -r "$P10C_INSTALL_STAGE"
 
