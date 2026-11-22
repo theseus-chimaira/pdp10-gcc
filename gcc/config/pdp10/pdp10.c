@@ -2304,10 +2304,23 @@ maybe_remove_label_and_following_code (label)
   if (!label_has_no_fallthrough_p (label))
     return;
 
-  for (insn = NEXT_INSN (label); GET_CODE (insn) != BARRIER;
+  /* An unreachable entry may precede another, independently reachable
+     label before the next BARRIER.  In particular, a non-fallthrough
+     entry can precede the self-jump of an infinite loop.  Deleting all
+     the way to BARRIER would remove the loop's still-referenced label
+     and leave a dangling branch in the emitted assembly.  */
+  for (insn = NEXT_INSN (label);
+       insn != NULL_RTX && GET_CODE (insn) != BARRIER;
        insn = NEXT_INSN (insn))
-    if (GET_CODE (insn) != NOTE)
-      INSN_DELETED_P (insn) = 1;
+    {
+      if (GET_CODE (insn) == CODE_LABEL
+	  && (LABEL_NUSES (insn) > 0
+	      || LABEL_PRESERVE_P (insn)
+	      || LABEL_NAME (insn)))
+	break;
+      if (GET_CODE (insn) != NOTE)
+	INSN_DELETED_P (insn) = 1;
+    }
 }
 
 static rtx
