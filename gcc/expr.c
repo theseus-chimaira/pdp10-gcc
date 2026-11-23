@@ -3963,6 +3963,15 @@ single_component_in_word_p (to, to_rtx, pbitpos)
   for (f = TYPE_FIELDS (DECL_FIELD_CONTEXT (field)); f != NULL_TREE;
        f = TREE_CHAIN (f))
     {
+      /* A flexible array member has no DECL_SIZE_UNIT.  Its extent is
+         determined by the enclosing object's allocation, not by the
+         record type.  Without a known extent we cannot prove that this
+         is the only component in the word, so use the ordinary store
+         expansion rather than the whole-word shortcut.  */
+      if (DECL_FIELD_OFFSET (f) == NULL_TREE
+	  || DECL_SIZE_UNIT (f) == NULL_TREE)
+	return NULL_RTX;
+
       if (offset > (tree_low_cst (DECL_FIELD_OFFSET (f), 1)
 		    + tree_low_cst (DECL_SIZE_UNIT (f), 1))
 	  || ! DECL_NAME (f)
