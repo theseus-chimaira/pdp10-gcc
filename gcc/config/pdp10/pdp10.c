@@ -16825,6 +16825,41 @@ emit_cmp_and_jump_insn_1 (x, y, mode, comparison, unsignedp, label)
   abort ();
 }
 
+/* Transform an unextended PDP-10 byte pointer for ordinary signed
+   comparison.  The S field is inverted and the word is rotated six bits.
+   A constant can be transformed entirely at compile time: emitting
+   xorsi3 with a CONST_INT first operand is not valid RTL and ICEs at O0.
+   For nonconstants the xorsi3 source must be a register or memory.  */
+static rtx
+pdp10_unextended_pointer_compare_operand (operand)
+     rtx operand;
+{
+  rtx mask = gen_int_mode (HWINT (077) << 30, SImode);
+  rtx temp;
+  rtx result;
+
+  if (GET_CODE (operand) == CONST_INT)
+    {
+      temp = simplify_binary_operation (XOR, SImode, operand, mask);
+      if (temp != NULL_RTX)
+	{
+	  result = simplify_binary_operation (ROTATE, SImode, temp,
+					      GEN_INT (6));
+	  if (result != NULL_RTX)
+	    return force_reg (Pmode, result);
+	}
+    }
+
+  if (!reg_or_mem_operand (operand, Pmode))
+    operand = force_reg (Pmode, operand);
+
+  temp = gen_reg_rtx (Pmode);
+  result = gen_reg_rtx (Pmode);
+  emit_insn (gen_xorsi3 (temp, operand, mask));
+  emit_insn (gen_rotlsi3 (result, temp, GEN_INT (6)));
+  return result;
+}
+
 static void
 pdp10_emit_cmp_and_jump_insns (exp, x, y, comparison, size, mode, unsignedp,
 			       label)
@@ -16876,27 +16911,23 @@ pdp10_emit_cmp_and_jump_insns (exp, x, y, comparison, size, mode, unsignedp,
     }
   else
     {
-      rtx temp0 = gen_reg_rtx (Pmode);
-      rtx temp1 = gen_reg_rtx (Pmode);
-      rtx temp0a, temp1a;
+      rtx temp0, temp1;
 
       if (TARGET_EXTENDED)
 	{
-	  temp0a = force_reg (Pmode, op0);
-	  temp1a = force_reg (Pmode, op1);
+	  rtx temp0a = force_reg (Pmode, op0);
+	  rtx temp1a = force_reg (Pmode, op1);
+	  temp0 = gen_reg_rtx (Pmode);
+	  temp1 = gen_reg_rtx (Pmode);
+	  emit_insn (gen_rotlsi3 (temp0, temp0a, GEN_INT (6)));
+	  emit_insn (gen_rotlsi3 (temp1, temp1a, GEN_INT (6)));
 	}
       else
 	{
-	  temp0a = gen_reg_rtx (Pmode);
-	  temp1a = gen_reg_rtx (Pmode);
-	  emit_insn (gen_xorsi3 (temp0a, op0,
-				 gen_int_mode (HWINT (077) << 30, SImode)));
-	  emit_insn (gen_xorsi3 (temp1a, op1,
-				 gen_int_mode (HWINT (077) << 30, SImode)));
+	  temp0 = pdp10_unextended_pointer_compare_operand (op0);
+	  temp1 = pdp10_unextended_pointer_compare_operand (op1);
 	}
 
-      emit_insn (gen_rotlsi3 (temp0, temp0a, GEN_INT (6)));
-      emit_insn (gen_rotlsi3 (temp1, temp1a, GEN_INT (6)));
       emit_cmp_and_jump_insn_1 (temp0, temp1, mode, comparison, unsignedp,
 				label);
     }

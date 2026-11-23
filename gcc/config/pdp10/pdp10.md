@@ -2450,7 +2450,7 @@
 (define_insn "*snesf"
   [(set (match_operand:SI 0 "register_operand" "=r,x")
 	(ne:SI (match_operand:SF 1 "reg_or_mem_operand" "0,rm")
-	       (match_operand:SF 2 "immediate_operand" "R,R")))]
+	       (match_operand:SF 2 "pdp10_const_double_0_operand" "R,R")))]
   ""
   "@
    skipe %@%0\;%_movei %0,1
@@ -2460,7 +2460,7 @@
 (define_insn "*sltsf"
   [(set (match_operand:SI 0 "register_operand" "=r")
 	(lt:SI (match_operand:SF 1 "register_operand" "0")
-	       (match_operand:SF 2 "immediate_operand" "R")))]
+	       (match_operand:SF 2 "pdp10_const_double_0_operand" "R")))]
   ""
   "skipl %0\;%_tdza %0,%0\;%_%_movei %0,1"
   [(set_attr "length" "3")])
@@ -2468,7 +2468,7 @@
 (define_insn "*sgesf"
   [(set (match_operand:SI 0 "register_operand" "=r")
 	(ge:SI (match_operand:SF 1 "register_operand" "0")
-	       (match_operand:SF 2 "immediate_operand" "R")))]
+	       (match_operand:SF 2 "pdp10_const_double_0_operand" "R")))]
   ""
   "skipge %0\;%_tdza %0,%0\;%_%_movei %0,1"
   [(set_attr "length" "3")])
