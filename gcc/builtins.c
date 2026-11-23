@@ -2527,6 +2527,38 @@ expand_builtin_memcmp (exp, arglist, target, mode)
       return const0_rtx;
     }
 
+#ifdef __PDP10_H__
+  /* The PDP-10 represents a 9-bit STRING_CST character with two host
+     bytes.  c_getstr deliberately rejects that representation because
+     host memcmp would compare the encoding instead of target characters.
+     Compare logical unsigned 9-bit characters with the existing target
+     string reader, and do so only when both literal bounds are known.  */
+  if (host_integerp (len, 1))
+    {
+      struct pdp10_builtin_string_data data1, data2;
+
+      if (pdp10_builtin_string_data_init (arg1, &data1)
+	  && pdp10_builtin_string_data_init (arg2, &data2))
+	{
+	  unsigned HOST_WIDE_INT n = tree_low_cst (len, 1);
+	  unsigned HOST_WIDE_INT i;
+
+	  if (n <= data1.len && n <= data2.len)
+	    {
+	      for (i = 0; i < n; i++)
+		{
+		  int a = pdp10_builtin_string_char (&data1, i);
+		  int b = pdp10_builtin_string_char (&data2, i);
+
+		  if (a != b)
+		    return a < b ? constm1_rtx : const1_rtx;
+		}
+	      return const0_rtx;
+	    }
+	}
+    }
+#endif
+
   p1 = c_getstr (arg1);
   p2 = c_getstr (arg2);
 
