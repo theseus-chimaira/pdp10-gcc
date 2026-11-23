@@ -4105,6 +4105,34 @@ instantiate_virtual_regs_1 (loc, object, extra_insns)
 
     case SET:
 
+      /* A DImode register may be reinterpreted as DFmode and then
+	 narrowed to its first SImode word.  Combine the two SUBREGs before
+	 checking the containing instruction, since the PDP-10 has no
+	 direct move pattern for a twice-reinterpreted word source.  Do
+	 not touch nested CDI subregs, whose two-level layout is handled
+	 by distinct instruction patterns in the PDP-10 backend.  */
+      {
+	rtx src = SET_SRC (x);
+	rtx inner;
+	rtx flat;
+
+	if (GET_CODE (src) == SUBREG
+	    && GET_MODE (src) == SImode
+	    && GET_CODE (SUBREG_REG (src)) == SUBREG)
+	  {
+	    inner = SUBREG_REG (src);
+	    if (GET_MODE (inner) == DFmode
+		&& GET_CODE (SUBREG_REG (inner)) == REG
+		&& GET_MODE (SUBREG_REG (inner)) == DImode)
+	      {
+		flat = simplify_subreg (SImode, inner, DFmode,
+					SUBREG_BYTE (src));
+		if (flat != NULL_RTX)
+		  SET_SRC (x) = flat;
+	      }
+	  }
+      }
+
       /* Canonicalize a mixed-mode bitfield store before descending into its
          address.  Some front-end/expander paths can emit an invalid SET like
 
