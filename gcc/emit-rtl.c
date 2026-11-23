@@ -981,6 +981,43 @@ gen_lowpart_common (mode, x)
       long i[4];  /* Only the low 32 bits of each 'long' are used.  */
       int endian = WORDS_BIG_ENDIAN ? 1 : 0;
 
+#if defined(__PDP10_H__) && HOST_BITS_PER_WIDE_INT == 64
+      /* PDP-10 D-format has 72 target bits.  REAL_VALUE_TO_TARGET_DOUBLE
+	 returns three 32-bit chunks; the generic 64-bit double code below
+	 assumes two and even overruns its buffer for big-endian targets.
+	 Reconstruct the two 36-bit words before converting their raw bits
+	 to an integer constant for CSE.  No numeric float-to-int conversion
+	 is involved in this reinterpretation.  */
+      if (BITS_PER_WORD == 36
+	  && GET_MODE_BITSIZE (GET_MODE (x)) == 72)
+	{
+	  long chunks[3];
+	  unsigned HOST_WIDE_INT top, bottom, bits_low, bits_high;
+	  unsigned HOST_WIDE_INT mask32 = 0xffffffffUL;
+	  unsigned HOST_WIDE_INT mask36
+	    = (((unsigned HOST_WIDE_INT) 1 << 36) - 1);
+
+	  REAL_VALUE_FROM_CONST_DOUBLE (r, x);
+	  REAL_VALUE_TO_TARGET_DOUBLE (r, chunks);
+	  top = (((unsigned HOST_WIDE_INT) chunks[0] & mask32) << 4)
+	    | (((unsigned HOST_WIDE_INT) chunks[1] & mask32) >> 28);
+	  bottom = ((((unsigned HOST_WIDE_INT) chunks[1] & mask32) << 8)
+		    | (((unsigned HOST_WIDE_INT) chunks[2] & mask32) >> 24))
+	    & mask36;
+	  if (GET_MODE_BITSIZE (mode) <= BITS_PER_WORD)
+	    return GEN_INT (trunc_int_for_mode (bottom, mode));
+	  if (GET_MODE_BITSIZE (mode) == 2 * BITS_PER_WORD)
+	    {
+	      bits_low = bottom
+		| ((top & (((unsigned HOST_WIDE_INT) 1 << 28) - 1)) << 36);
+	      bits_high = top >> 28;
+	      return immed_double_const ((HOST_WIDE_INT) bits_low,
+					(HOST_WIDE_INT) bits_high, mode);
+	    }
+	  return 0;
+	}
+#endif
+
       /* Convert 'r' into an array of four 32-bit words in target word
          order.  */
       REAL_VALUE_FROM_CONST_DOUBLE (r, x);
