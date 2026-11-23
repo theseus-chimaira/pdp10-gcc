@@ -11087,15 +11087,19 @@ pdp10_normalize_block_word_address (addr, length, convert_units)
   base = XEXP (x, 0);
   offset = INTVAL (XEXP (x, 1));
 
-  /* BLKmode copy lengths are expressed in 9-bit C storage units, but
-     BLT source/destination addresses are 36-bit word addresses.  Generic
-     ARRAY_REF expansion can leave an element-boundary stack address in
-     storage-unit form as well as for symbolic globals, e.g. a four-word
-     struct array element can arrive as BASE+32 instead of BASE+8.
+  /* BLKmode lengths use 9-bit C storage units, but BLT operands carry
+     36-bit word addresses.  A symbolic/global ARRAY_REF can retain a
+     C-unit displacement, which needs conversion for word-aligned copies.
 
-     Normalize only exact positive element-boundary offsets.  Ordinary
-     stack temporaries and already-normalized word offsets, such as BASE+12
-     for a four-word scratch slot, are left unchanged.  */
+     Word-aligned BLKmode frame-relative operands already use native
+     word addresses, including return-value spill slots.  Their numeric
+     values can nevertheless be exact multiples of a C object size: FP+32
+     may be the genuine word address of a four-word return temporary.
+     Converting it to FP+8 corrupts the copy.  Do not infer byte units
+     from the magnitude of a frame-relative offset.  */
+  if (convert_units && pdp10_frame_address_p (base))
+    return addr;
+
   if (convert_units
       && length > 0
       && offset >= length
