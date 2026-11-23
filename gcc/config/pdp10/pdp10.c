@@ -11933,6 +11933,14 @@ pdp10_bytesize (type)
   while (TREE_CODE (type) == ARRAY_TYPE)
     type = TREE_TYPE (type);
 
+  /* An invalid or incomplete declaration has no size to convert to a
+     PDP-10 byte-pointer S field.  It has already been diagnosed by the
+     C front end; use the ordinary word address only for error recovery.
+     TYPE_SIZE must not be passed to tree_low_cst when it is absent.  */
+  if (type == error_mark_node
+      || (!VOID_TYPE_P (type) && !TYPE_SIZE (type)))
+    return 36;
+
   if (TREE_CODE (type) == RECORD_TYPE)
     {
       tree field;

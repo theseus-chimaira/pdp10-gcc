@@ -87,6 +87,9 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 # ifdef HAVE_FPUTC_UNLOCKED
 #  undef fputc
 #  define fputc(C, Stream) fputc_unlocked (C, Stream)
+/* Some hosts export fputc_unlocked but omit its declaration from stdio.h.
+   The configure function check confirms the symbol is available.  */
+extern int fputc_unlocked PARAMS ((int, FILE *));
 # endif
 
 # ifdef HAVE_FPUTS_UNLOCKED

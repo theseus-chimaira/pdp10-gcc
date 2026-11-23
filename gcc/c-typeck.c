@@ -1588,6 +1588,12 @@ build_function_call (function, params)
   coerced_params
     = convert_arguments (TYPE_ARG_TYPES (fntype), params, name, fundecl);
 
+  /* A malformed prototype or argument can leave an ERROR_MARK in the
+     parameter list.  Do not pass such a list to the format checker or
+     function-call expander.  */
+  if (coerced_params == error_mark_node)
+    return error_mark_node;
+
   /* Check for errors in format strings.  */
 
   if (warn_format)
@@ -1672,6 +1678,11 @@ convert_arguments (typelist, values, name, fundecl)
       val = default_function_array_conversion (val);
 
       val = require_complete_type (val);
+
+      /* Parsing a bad declaration may have left an error marker in the
+         formal argument type.  COMPLETE_TYPE_P requires a real type.  */
+      if (type == error_mark_node || val == error_mark_node)
+	return error_mark_node;
 
       if (type != 0)
 	{
@@ -3065,6 +3076,10 @@ build_unary_op (code, xarg, flag)
 		  error ("increment of pointer to unknown structure");
 		else
 		  error ("decrement of pointer to unknown structure");
+		/* An incomplete pointee has no storage size.  In particular,
+		   the PDP-10 byte-size calculation below cannot inspect it.
+		   Do not continue lowering an invalid pointer expression.  */
+		return error_mark_node;
 	      }
 	    else if ((pedantic || warn_pointer_arith)
 		     && (TREE_CODE (TREE_TYPE (result_type)) == FUNCTION_TYPE
@@ -6702,6 +6717,15 @@ output_init_element (value, type, field, pending)
      tree value, type, field;
      int pending;
 {
+  /* Invalid nested initializers may propagate ERROR_MARK as an element.
+     It has no expression type, so diagnose it through the constructor
+     state instead of inspecting TREE_TYPE below.  */
+  if (value == error_mark_node)
+    {
+      constructor_erroneous = 1;
+      return;
+    }
+
   if (TREE_CODE (TREE_TYPE (value)) == FUNCTION_TYPE
       || (TREE_CODE (TREE_TYPE (value)) == ARRAY_TYPE
 	  && !(TREE_CODE (value) == STRING_CST
@@ -6745,6 +6769,12 @@ output_init_element (value, type, field, pending)
      don't do anything other than checking the initializer.  */
   if (field
       && (TREE_TYPE (field) == error_mark_node
+	  /* A malformed member has no offset.  bit_position requires both
+	     halves of the field location, so discard its initializer after
+	     the earlier field declaration diagnostic.  */
+	  || (TREE_CODE (field) == FIELD_DECL
+	      && (!DECL_FIELD_OFFSET (field)
+		  || !DECL_FIELD_BIT_OFFSET (field)))
 	  || (COMPLETE_TYPE_P (TREE_TYPE (field))
 	      && integer_zerop (TYPE_SIZE (TREE_TYPE (field)))
 	      && (TREE_CODE (constructor_type) == ARRAY_TYPE
@@ -6782,6 +6812,14 @@ output_init_element (value, type, field, pending)
 	{
 	  if (!constructor_unfilled_fields)
 	    set_nonincremental_init ();
+	  else if (!DECL_FIELD_OFFSET (constructor_unfilled_fields)
+		   || !DECL_FIELD_BIT_OFFSET (constructor_unfilled_fields))
+	    {
+	      /* An earlier invalid field was never laid out.  There is no
+		 meaningful ordering comparison to make with its position.  */
+	      constructor_erroneous = 1;
+	      return;
+	    }
 	  else
 	    {
 	      tree bitpos, unfillpos;
