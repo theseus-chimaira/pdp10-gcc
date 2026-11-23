@@ -1908,6 +1908,7 @@ static int	decode_ps PARAMS ((int ps, int *p, int *s));
 static int	label_has_no_fallthrough_p PARAMS ((rtx label));
 static void	maybe_remove_label_and_following_code PARAMS ((rtx label));
 static rtx	follow_label PARAMS ((rtx label));
+static int	pdp10_jrst_chain_has_cycle_p PARAMS ((rtx label));
 
 /* Called by the ASM_DECLARE_OBJECT_NAME macro.
 
@@ -2327,7 +2328,15 @@ static rtx
 follow_label (label)
      rtx label;
 {
-  rtx insn = next_active_insn (label);
+  rtx insn;
+
+  /* A cyclic chain must retain its labels and the branches connecting
+     them.  In particular, bypassing one link and deleting the original
+     label can leave a dangling assembler reference in an infinite loop.  */
+  if (pdp10_jrst_chain_has_cycle_p (label))
+    return label;
+
+  insn = next_active_insn (label);
 
   if (optimize >= 2
       && (simplejump_p (insn)
@@ -12885,6 +12894,7 @@ pdp10_output_call_as_jsp_p (sym)
 static int	jrst_or_popj_p PARAMS ((rtx insn));
 static rtx	jump_target PARAMS ((rtx insn));
 static int	large_jump_address_p PARAMS ((rtx address));
+static rtx	pdp10_follow_jrst_label PARAMS ((rtx label));
 
 int
 pdp10_generate_cbranchdi (code, op0, op1)
@@ -12955,6 +12965,53 @@ large_jump_address_p (address)
   return 0;
 }
 
+/* Follow only a label whose next active instruction is an eligible
+   unconditional jump to another label.  A return, an indirect jump,
+   or a label with a fallthrough path terminates the chain.  */
+static rtx
+pdp10_follow_jrst_label (label)
+     rtx label;
+{
+  rtx target;
+  rtx address;
+
+  if (label == NULL_RTX || GET_CODE (label) != CODE_LABEL
+      || !label_has_no_fallthrough_p (label))
+    return NULL_RTX;
+
+  target = next_active_insn (label);
+  if (target == NULL_RTX || !jrst_or_popj_p (target))
+    return NULL_RTX;
+
+  address = jump_target (target);
+  if (address == NULL_RTX || GET_CODE (address) != LABEL_REF)
+    return NULL_RTX;
+
+  return XEXP (address, 0);
+}
+
+/* Inlining a JRST through a cycle recurses indefinitely through
+   final_scan_insn.  Detect cyclic label chains before expanding them.
+   Floyd's two-pointer walk uses constant memory even for long chains.  */
+static int
+pdp10_jrst_chain_has_cycle_p (label)
+     rtx label;
+{
+  rtx slow = label;
+  rtx fast = label;
+
+  do
+    {
+      slow = pdp10_follow_jrst_label (slow);
+      fast = pdp10_follow_jrst_label (fast);
+      if (fast != NULL_RTX)
+	fast = pdp10_follow_jrst_label (fast);
+    }
+  while (slow != NULL_RTX && fast != NULL_RTX && slow != fast);
+
+  return slow != NULL_RTX && slow == fast;
+}
+
 /* Output a JRST instruction, unless the jump target is another
    unconditional jump instruction (i.e. JRST or POPJ).  In that case
    output the target instruction directly (unless optimize_size is on
@@ -12973,7 +13030,8 @@ pdp10_output_jrst (label)
       && ((address = jump_target (target)) == NULL_RTX
 	  || GET_CODE (address) != LABEL_REF
 	  || XEXP (address, 0) != label)
-      && !(optimize_size && large_jump_address_p (address)))
+      && !(optimize_size && large_jump_address_p (address))
+      && !pdp10_jrst_chain_has_cycle_p (label))
     {
       final_scan_insn (target, asm_out_file, optimize, 0, 0);
       maybe_remove_label_and_following_code (label);
