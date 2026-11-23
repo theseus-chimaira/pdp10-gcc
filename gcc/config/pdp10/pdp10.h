@@ -196,10 +196,14 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
    to define the pre-defined macros that identify this machine and
    system.  */
 #ifndef CPP_PREDEFINES
+/* Keep the historical lowercase reserved target macro alongside the
+   canonical uppercase spelling.  The NetBSD PDP-10 port already defines
+   __pdp10__, and GCC tests and other portable sources use it to exclude
+   interfaces that are not provided on this machine.  */
 #if XKL_STUFF
-#define CPP_PREDEFINES  "-D__PDP10__ -D__PDP10 -D__PDP10_INLINE_UDIV__=1 -DGNUCC -DGCC -Amachine=pdp10"
+#define CPP_PREDEFINES  "-D__PDP10__ -D__PDP10 -D__pdp10__ -D__PDP10_INLINE_UDIV__=1 -DGNUCC -DGCC -Amachine=pdp10"
 #else
-#define CPP_PREDEFINES  "-D__PDP10__ -D__PDP10 -D__PDP10_INLINE_UDIV__=1 -Amachine=pdp10"
+#define CPP_PREDEFINES  "-D__PDP10__ -D__PDP10 -D__pdp10__ -D__PDP10_INLINE_UDIV__=1 -Amachine=pdp10"
 #endif
 #endif
 

@@ -23,10 +23,12 @@ Software Foundation, 59 Temple Place - Suite 330, Boston, MA
 #define HOST_OBJECT_SUFFIX ".REL"
 
 #undef CPP_PREDEFINES
+/* TOPS-20 overrides the generic predefines: keep the same lowercase
+   machine identity as the generic PDP-10 and NetBSD variants.  */
 #if XKL_STUFF
-#define CPP_PREDEFINES  "-D__PDP10__ -D__PDP10 -D__TOPS20__ -D__TOPS20 -DGNUCC -DGCC -Amachine=pdp10"
+#define CPP_PREDEFINES  "-D__PDP10__ -D__PDP10 -D__pdp10__ -D__TOPS20__ -D__TOPS20 -DGNUCC -DGCC -Amachine=pdp10"
 #else
-#define CPP_PREDEFINES  "-D__PDP10__ -D__PDP10 -D__TOPS20__ -D__TOPS20 -Amachine=pdp10"
+#define CPP_PREDEFINES  "-D__PDP10__ -D__PDP10 -D__pdp10__ -D__TOPS20__ -D__TOPS20 -Amachine=pdp10"
 #endif
 
 /* A C string representing the suffix for executable files in TOPS-20.  */
