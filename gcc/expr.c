@@ -9415,7 +9415,25 @@ expand_expr (exp, target, tmode, modifier)
 	  /* If the last operand is a CONST_INT, use plus_constant of
 	     the negated constant.  Else make the MINUS.  */
 	  if (GET_CODE (op1) == CONST_INT)
-	    return plus_constant (op0, - INTVAL (op1));
+	    {
+#ifdef __PDP10_H__
+	      /* A PDP-10 byte pointer includes a P/S selector in its high
+		 bits.  Adding a negative integer directly to its encoded
+		 value can borrow into that selector.  For static pointer
+		 initializers, advance in byte units with the same target ADJBP
+		 simplifier used for constant pointer additions.  This path
+		 must not allocate registers or emit instructions.  */
+	      if (POINTER_TYPE_P (type)
+		  && pdp10_bytesize (TREE_TYPE (type)) < BITS_PER_WORD)
+		{
+		  rtx adjusted = gen_rtx_ADJBP (Pmode, op0,
+						GEN_INT (- INTVAL (op1)));
+		  rtx folded = pdp10_simplify_unspec (adjusted, NULL_RTX);
+		  return folded ? folded : adjusted;
+		}
+#endif
+	      return plus_constant (op0, - INTVAL (op1));
+	    }
 	  else
 	    return gen_rtx_MINUS (mode, op0, op1);
 	}

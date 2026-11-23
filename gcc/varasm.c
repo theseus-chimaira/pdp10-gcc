@@ -4961,11 +4961,20 @@ output_constant (exp, size, align)
 {
   enum tree_code code;
   HOST_WIDE_INT thissize;
+#ifdef __PDP10_H__
+  tree pointer_exp;
+#endif
 
   /* Some front-ends use constants other than the standard language-indepdent
      varieties, but which may still be output directly.  Give the front-end a
      chance to convert EXP to a language-independent representation.  */
   exp = (*lang_hooks.expand_constant) (exp);
+#ifdef __PDP10_H__
+  /* A pointer conversion may change the PDP-10 byte-pointer selector.
+     Keep the typed expression for target expansion instead of discarding
+     a width-changing NOP_EXPR before it reaches the backend.  */
+  pointer_exp = exp;
+#endif
 
   if (size == 0 || flag_syntax_only)
     return;
@@ -5012,7 +5021,8 @@ output_constant (exp, size, align)
     case REFERENCE_TYPE:
 #ifdef __PDP10_H__
       {
-	rtx init = expand_expr (exp, NULL_RTX, VOIDmode, EXPAND_INITIALIZER);
+	rtx init = expand_expr (code == POINTER_TYPE ? pointer_exp : exp,
+				 NULL_RTX, VOIDmode, EXPAND_INITIALIZER);
 	if (! assemble_integer (init, size, align, 0))
 	  {
 	    fprintf (stderr,
@@ -5221,7 +5231,17 @@ output_constructor (exp, size, align)
 
       /* Eliminate the marker that makes a cast not be an lvalue.  */
       if (val != 0)
+	{
+#ifdef __PDP10_H__
+	  /* In aggregate initializers, a pointer NOP_EXPR may convert a
+	     9-bit byte pointer to a 36-bit word pointer.  The conversion
+	     cannot be thrown away even though both types have Pmode.  */
+	  if (!POINTER_TYPE_P (TREE_TYPE (val)))
+	    STRIP_NOPS (val);
+#else
 	STRIP_NOPS (val);
+#endif
+	}
 
       if (index && TREE_CODE (index) == RANGE_EXPR)
 	{

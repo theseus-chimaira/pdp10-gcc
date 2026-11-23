@@ -6643,6 +6643,45 @@ pdp10_gas_assemble_labeldiff_halfword (x)
   return 1;
 }
 
+/* A local PDP-10 pointer constant is a pair of independent 18-bit fields:
+   the left half carries the byte selector and the right half carries the
+   relocatable word address.  Emitting BASE + ENCODED as one 36-bit .long
+   is incorrect when the address addend wraps: BASE + 0777776 would carry
+   into the left half and change a word pointer into a byte pointer.
+
+   Emit the two halves separately, and express the address addend as a
+   signed 18-bit displacement.  DAS then creates a right-half relocation
+   without letting the addition modify the byte selector.  */
+static int
+pdp10_gas_print_symbolic_local_word (x)
+     rtx x;
+{
+  rtx base;
+  pdp10_word36 encoded;
+  pdp10_word36 left;
+  pdp10_word36 right;
+  long signed_right;
+
+  if (TARGET_EXTENDED
+      || !pdp10_decompose_symbolic_word36 (x, &base, &encoded)
+      || base == NULL_RTX)
+    return 0;
+
+  left = (encoded >> 18) & 0777777;
+  right = encoded & ADDRESS_MASK;
+  signed_right = (long) right;
+  if ((right & 0400000) != 0)
+    signed_right -= 01000000L;
+
+  fprintf (asm_out_file, "\t.word\t%lu,,", (unsigned long) left);
+  print_symbolic_ref (asm_out_file, base);
+  if (signed_right > 0)
+    fprintf (asm_out_file, "+%ld", signed_right);
+  else if (signed_right < 0)
+    fprintf (asm_out_file, "%ld", signed_right);
+  return 1;
+}
+
 static bool
 pdp10_assemble_integer (x, size, aligned_p)
      rtx x;
@@ -6670,8 +6709,11 @@ pdp10_assemble_integer (x, size, aligned_p)
       && pdp10_const_word36_byte_pointer_p (x))
     {
       pdp10_output_byte (asm_out_file, NULL_RTX, 0);
-      fputs ("	.long	", asm_out_file);
-      pdp10_print_raw_word36_constant (asm_out_file, x);
+      if (!pdp10_gas_print_symbolic_local_word (x))
+	{
+	  fputs ("	.long	", asm_out_file);
+	  pdp10_print_raw_word36_constant (asm_out_file, x);
+	}
       fputc ('\n', asm_out_file);
       pdp10_byte_count += size;
       return true;
@@ -6703,8 +6745,11 @@ pdp10_assemble_integer (x, size, aligned_p)
 	}
       else
 	{
-	  fputs ("	.long	", asm_out_file);
-	  pdp10_print_raw_word_constant (asm_out_file, x);
+	  if (!pdp10_gas_print_symbolic_local_word (x))
+	    {
+	      fputs ("	.long	", asm_out_file);
+	      pdp10_print_raw_word_constant (asm_out_file, x);
+	    }
 	}
 
       fputc ('\n', asm_out_file);
@@ -12573,10 +12618,39 @@ expand_add_or_sub_pointer (target, op0, type0, op1, type1, add)
       add = 1;
     }
 
+  type = TREE_TYPE (POINTER_TYPE_P (type0) ? type0 : type1);
+
+  /* A static pointer initializer has no active function in which to
+     allocate a pseudo register.  Constant word-pointer arithmetic is
+     already representable as a symbolic address expression.  */
+  if (!target && !neg && WORD_TYPE_P (type)
+      && GET_CODE (op1) == CONST_INT && CONSTANT_ADDRESS_P (op0))
+    return plus_constant (op0, add ? INTVAL (op1) : -INTVAL (op1));
+
+  /* Apply constant local byte-pointer arithmetic to the encoded P/S
+     selector and its word address together.  Reusing the target's
+     ADJBP simplifier preserves byte positions and the signed word carry,
+     without emitting instructions during static-data construction.  */
+  if (!target && !neg && !TARGET_EXTENDED && !WORD_TYPE_P (type)
+      && GET_CODE (op1) == CONST_INT
+      && pdp10_const_word36_byte_pointer_p (op0))
+    {
+      HOST_WIDE_INT n = add ? INTVAL (op1) : -INTVAL (op1);
+      int adjust = (int) n;
+
+      if ((HOST_WIDE_INT) adjust == n)
+        {
+          rtx expr = gen_rtx_UNSPEC
+            (Pmode, gen_rtvec (2, op0, GEN_INT (n)), UNSPEC_ADJBP);
+          rtx folded = pdp10_simplify_unspec (expr, NULL_RTX);
+
+          if (folded != NULL_RTX)
+            return folded;
+        }
+    }
+
   if (!target)
     target = gen_reg_rtx (Pmode);
-
-  type = TREE_TYPE (POINTER_TYPE_P (type0) ? type0 : type1);
 
   if (WORD_TYPE_P (type))
     {

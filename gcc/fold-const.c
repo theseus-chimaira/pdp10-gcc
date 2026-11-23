@@ -914,6 +914,15 @@ split_tree (in, code, conp, litp, negate_p)
   *conp = 0;
   *litp = 0;
 
+#ifdef __PDP10_H__
+  /* PDP-10 word pointers and byte pointers have different encodings.
+     A conversion can therefore change the address even when the RTL
+     modes and signedness are identical.  Never reassociate pointer
+     additions across such conversions.  */
+  if (POINTER_TYPE_P (TREE_TYPE (in)))
+    return in;
+#endif
+
   /* Strip any conversions that don't change the machine mode or signedness.  */
   STRIP_SIGN_NOPS (in);
 
