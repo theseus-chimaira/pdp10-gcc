@@ -11305,6 +11305,15 @@ expand_blt (destination, source, length)
     return 1;
   last = words - 1;
 
+  /* A BLKmode address can itself be loaded through a pointer kept in a
+     stack slot.  The BLT setup instruction accepts effective addresses,
+     not MEM expressions whose contents are pointers.  Materialize these
+     values before building the BLT setup and end-address operands.  */
+  if (GET_CODE (destination) == MEM)
+    destination = force_reg (Pmode, destination);
+  if (GET_CODE (source) == MEM)
+    source = force_reg (Pmode, source);
+
   ac = gen_reg_rtx (Pmode);
 
   /* Build the BLT AC as one target operation.  Do not use a loose
@@ -11722,6 +11731,13 @@ expand_blt_clear (destination, length)
   if (words == 0)
     return 1;
   last = words - 1;
+
+  /* A pointer residing in memory must be loaded before using it as
+     both halves of a BLT control word.  Otherwise the source becomes
+     MEM and the destination PLUS(MEM,1), neither of which is a valid
+     BLT_SETUP address operand for virtual-register instantiation.  */
+  if (GET_CODE (destination) == MEM)
+    destination = force_reg (Pmode, destination);
 
   ac = gen_reg_rtx (Pmode);
 

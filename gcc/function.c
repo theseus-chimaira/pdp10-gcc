@@ -4057,6 +4057,33 @@ pdp10_canonicalize_mixed_mode_bitfield_object (object)
   SET_SRC (pat) = src;
 }
 
+/* Collapse the raw-word interpretation of a DImode register through DFmode.
+   Both reads and writes of this SImode subword must have the same canonical
+   RTL form before IVR validates the containing instruction.  This is a
+   bitwise reinterpretation, not a floating-point conversion.  The complex
+   DImode (CDImode) subregister forms have their own backend patterns and
+   must not be changed here.  */
+static rtx
+pdp10_canonicalize_di_df_si_subreg (operand)
+     rtx operand;
+{
+  rtx inner;
+  rtx flat;
+
+  if (GET_CODE (operand) != SUBREG || GET_MODE (operand) != SImode)
+    return operand;
+
+  inner = SUBREG_REG (operand);
+  if (GET_CODE (inner) != SUBREG
+      || GET_MODE (inner) != DFmode
+      || GET_CODE (SUBREG_REG (inner)) != REG
+      || GET_MODE (SUBREG_REG (inner)) != DImode)
+    return operand;
+
+  flat = simplify_subreg (SImode, inner, DFmode, SUBREG_BYTE (operand));
+  return flat != NULL_RTX ? flat : operand;
+}
+
 
 static int
 instantiate_virtual_regs_1 (loc, object, extra_insns)
@@ -4105,33 +4132,11 @@ instantiate_virtual_regs_1 (loc, object, extra_insns)
 
     case SET:
 
-      /* A DImode register may be reinterpreted as DFmode and then
-	 narrowed to its first SImode word.  Combine the two SUBREGs before
-	 checking the containing instruction, since the PDP-10 has no
-	 direct move pattern for a twice-reinterpreted word source.  Do
-	 not touch nested CDI subregs, whose two-level layout is handled
-	 by distinct instruction patterns in the PDP-10 backend.  */
-      {
-	rtx src = SET_SRC (x);
-	rtx inner;
-	rtx flat;
-
-	if (GET_CODE (src) == SUBREG
-	    && GET_MODE (src) == SImode
-	    && GET_CODE (SUBREG_REG (src)) == SUBREG)
-	  {
-	    inner = SUBREG_REG (src);
-	    if (GET_MODE (inner) == DFmode
-		&& GET_CODE (SUBREG_REG (inner)) == REG
-		&& GET_MODE (SUBREG_REG (inner)) == DImode)
-	      {
-		flat = simplify_subreg (SImode, inner, DFmode,
-					SUBREG_BYTE (src));
-		if (flat != NULL_RTX)
-		  SET_SRC (x) = flat;
-	      }
-	  }
-      }
+      /* Normalize both sides before an address substitution is checked.
+	 The source case is required for aggregate-return stores; the
+	 destination case also occurs while materializing local union words.  */
+      SET_DEST (x) = pdp10_canonicalize_di_df_si_subreg (SET_DEST (x));
+      SET_SRC (x) = pdp10_canonicalize_di_df_si_subreg (SET_SRC (x));
 
       /* Canonicalize a mixed-mode bitfield store before descending into its
          address.  Some front-end/expander paths can emit an invalid SET like
