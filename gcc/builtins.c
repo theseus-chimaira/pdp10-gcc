@@ -2204,6 +2204,12 @@ expand_builtin_memcpy (arglist, target, mode)
         }
 #endif
 
+      /* Word-aligned copies also need a typed word-address view.
+         Save the destination expression so both views share one
+         evaluation, including calls or volatile pointer loads. */
+      if (dest_align == BITS_PER_WORD && src_align == BITS_PER_WORD
+          && host_integerp (len, 1))
+        dest = save_expr (dest);
       dest_mem = get_memory_rtx (dest);
       /* Keep the actual C pointer, including its byte position.  Block
          lowering may convert its private address to a word address. */
@@ -2255,9 +2261,10 @@ expand_builtin_memcpy (arglist, target, mode)
       if (dest_align == BITS_PER_WORD && src_align == BITS_PER_WORD
 	  && GET_CODE (len_rtx) == CONST_INT)
 	{
-          rtx word_addr = pdp10_convert_ptr (NULL_TREE, dest_addr,
-                                              NULL_RTX, 9, 36, 1);
-          dest_mem = replace_equiv_address (dest_mem, word_addr);
+          /* Retain the typed address conversion: a register holding
+             an untagged word address cannot be used as a QI/HI byte
+             pointer by the later move-by-pieces patterns. */
+          dest_mem = get_memory_rtx (convert_to_int_ptr (dest));
           set_mem_align (dest_mem, dest_align);
 	  src = convert_to_int_ptr (src);
 	}
