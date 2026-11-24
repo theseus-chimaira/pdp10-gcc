@@ -506,7 +506,8 @@
    (UNSPEC_BLT_SETUP	20)	; Build BLT control word (SImode):
 				;   Operand 0 is the source address.
 				;   Operand 1 is the destination address.
-   (UNSPEC_MULSI_LOW	21)])	; Canonicalize low word after MUL (SImode):
+   (UNSPEC_MULSI_LOW	21)
+   (UNSPEC_DF_NORMALIZE 22)])	; Canonicalize low word after MUL (SImode):
 				;   Operand 0 is the raw low word.
 				;   Operand 1 is the raw high word.
 
@@ -5621,19 +5622,21 @@
 
 (define_insn "*floatunssisf2_ki10"
   [(set (match_operand:SF 0 "register_operand" "=r")
-	(unsigned_float:SF (match_operand:SI 1 "reg_or_mem_operand" "rm")))]
+        (unsigned_float:SF (match_operand:SI 1 "reg_or_mem_operand" "rm")))]
   "TARGET_KI10up"
   {
     if (TARGET_XKL2)
       return "ufltr %0,%1";
     else
-      /* Sequence taken from KCC.  */
-      return "skipge %0,%1\;%_lsh %0,1\;fltr %0,%0\;skipge %@%1\;%_fsc %0,1";
+      /* Read the source once.  For the upper unsigned half, shift
+         right before FLTR and retain a sticky low bit for rounding.
+         Rescale only that path.  */
+      return "move %0,%1\;jumpge %0,.+011\;trnn %0,1\;jrst .+3\;lsh %0,-1\;troa %0,1\;lsh %0,-1\;fltr %0,%0\;fsc %0,1\;jrst .+2\;fltr %0,%0";
   }
   [(set (attr "length")
-	(if_then_else (ne (symbol_ref "TARGET_XKL2") (const_int 0))
-		      (const_int 1)
-		      (const_int 5)))])
+        (if_then_else (ne (symbol_ref "TARGET_XKL2") (const_int 0))
+                      (const_int 1)
+                      (const_int 11)))])
 
 ; (define_insn "floatdisf2" ...)
 
@@ -5650,6 +5653,14 @@
   "!TARGET_GFLOAT"
   "fsc %0,0233\;movei %Z0,0"
   [(set_attr "length" "2")])
+
+(define_insn "pdp10_normalize_dfloat"
+  [(set (match_operand:DF 0 "register_operand" "=r")
+        (unspec:DF [(match_operand:DF 1 "register_operand" "0")
+                    (match_operand:DF 2 "memory_operand" "m")]
+                   UNSPEC_DF_NORMALIZE))]
+  "TARGET_KI10up && !TARGET_GFLOAT"
+  "dfad %0,%2")
 
 (define_expand "floatsidf2"
   [(set (match_operand:DF 0 "register_operand" "")
@@ -5670,9 +5681,11 @@
 	 emit_insn (gen_ASHC (temp, temp, GEN_INT (-8)));
        emit_insn (gen_xorsi3 (temp0, temp0,
 			      GEN_INT ((HOST_WIDE_INT)0243 << 27)));
-       if (!flag_unsafe_math_optimizations)
-	 emit_insn (gen_adddf3 (operands[0], operands[0],
-				CONST0_RTX (DFmode)));
+       /* An integer cast constructs an unnormalized fraction.
+          Normalization is not the identity x+0 on this bit pattern. */
+       emit_insn (gen_pdp10_normalize_dfloat
+                  (operands[0], operands[0],
+                   force_const_mem (DFmode, CONST0_RTX (DFmode))));
        DONE;
      }")
 
@@ -5718,23 +5731,26 @@
 	      are hidden inside a conditional expression.  The visible assembly
 	      must be:
 
-	          -mdfloat:  TLC ...,243000
+	          -mdfloat:  TLC ...,244000
 	          -mgfloat:  TLC ...,274300
 	   */
 	   exp = TARGET_GFLOAT
 		 ? GEN_INT ((HOST_WIDE_INT)02743 << 24)
-		 : GEN_INT ((HOST_WIDE_INT)0243 << 27);
+		 : GEN_INT ((HOST_WIDE_INT)0244 << 27);
 
 	   emit_move_insn (temp0, operands[1]);
 	   emit_move_insn (temp1, const0_rtx);
 	   emit_insn (gen_lshrdi3 (temp, temp, GEN_INT (9)));
-	   emit_insn (gen_lshrsi3 (temp1, temp1, GEN_INT (1)));
+	   if (!TARGET_71BIT || TARGET_GFLOAT)
+	     emit_insn (gen_lshrsi3 (temp1, temp1, GEN_INT (1)));
 	   emit_insn (gen_xorsi3 (temp0, temp0, exp));
-	   if (!flag_unsafe_math_optimizations
-	       && ((TARGET_KI10up && !TARGET_GFLOAT)
-		   || (TARGET_KL10up && TARGET_GFLOAT)))
-	     emit_insn (gen_adddf3 (operands[0], operands[0],
-				    CONST0_RTX (DFmode)));
+           if (!TARGET_GFLOAT)
+             emit_insn (gen_pdp10_normalize_dfloat
+                        (operands[0], operands[0],
+                         force_const_mem (DFmode, CONST0_RTX (DFmode))));
+           else if (!flag_unsafe_math_optimizations && TARGET_KL10up)
+             emit_insn (gen_adddf3 (operands[0], operands[0],
+                                   CONST0_RTX (DFmode)));
 	   DONE;
 	 }
      }")
@@ -5771,26 +5787,28 @@
 
 (define_expand "extendsfdf2"
   [(set (match_operand:DF 0 "nonimmediate_operand" "")
-	(float_extend:DF (match_operand:SF 1 "reg_or_mem_operand" "")))]
+        (float_extend:DF (match_operand:SF 1 "reg_or_mem_operand" "")))]
   "!TARGET_GFLOAT || TARGET_KL10up"
-  "")
+  "if (!TARGET_GFLOAT && !register_operand (operands[0], DFmode))
+     {
+       rtx tmp = gen_reg_rtx (DFmode);
+       emit_insn (gen_extendsfdf2 (tmp, operands[1]));
+       emit_move_insn (operands[0], tmp);
+       DONE;
+     }")
 
-;; Extend to D-float by moving the high-order word (if necessary) and
-;; zeroing the low-order word.
+;; D-format has a copy of the high sign in the continuation word.
+;; Extending an exact negative SF value must set that bit, not all
+;; fraction bits.  A register pair makes this a three-word sequence.
 (define_insn "*extendsfdf2"
-  [(set (match_operand:DF 0 "nonimmediate_operand" "=r,o,r,o")
-	(float_extend:DF
-	 (match_operand:SF 1 "reg_or_mem_operand" "0,0,rm,r")))]
+  [(set (match_operand:DF 0 "register_operand" "=r,r")
+        (float_extend:DF
+         (match_operand:SF 1 "reg_or_mem_operand" "0,rm")))]
   "!TARGET_GFLOAT"
   "@
-   movei %Z0,0%; extendsfdf2
-   setzm %Z0%; extendsfdf2
-   move %0,%1%; extendsfdf2\;movei %Z0,0%; extendsfdf2
-   movem %1,%0%; extendsfdf2\;setzm %Z0%; extendsfdf2"
-  [(set (attr "length")
-	(if_then_else (eq_attr "alternative" "0,1")
-		      (const_int 1)
-		      (const_int 2)))])
+   movei %Z0,0\;jumpge %0,.+2\;tlo %Z0,0400000
+   move %0,%1\;movei %Z0,0\;jumpge %0,.+2\;tlo %Z0,0400000"
+  [(set_attr "length" "3,4")])
 
 (define_insn "*GSNGL"
   [(set (match_operand:DF 0 "register_operand" "=r")
