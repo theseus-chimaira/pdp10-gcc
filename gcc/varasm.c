@@ -3759,6 +3759,13 @@ output_constant_def_contents (exp, reloc, labelno)
 		    : int_size_in_bytes (TREE_TYPE (exp))),
 		   align);
 
+#ifdef __PDP10_GAS_H__
+  /* Constant-pool objects have their own word address, just like
+     initialized declarations.  Finish the buffered final word here,
+     before another label or a section switch can separate it from
+     its defining label.  Do not flush inside nested constructors. */
+  pdp10_output_byte (asm_out_file, NULL_RTX, 0);
+#endif
 }
 
 /* Structure to represent sufficient information about a constant so that
