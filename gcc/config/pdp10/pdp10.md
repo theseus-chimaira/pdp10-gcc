@@ -3347,8 +3347,12 @@
    }")
 
 ;; The signed DIV instruction can divide an unsigned 36-bit dividend by a
-;; positive 35-bit divisor when the dividend is placed in the low word of a
-;; zero-extended AC pair.  A divisor with bit 35 set can only produce quotient
+;; positive 35-bit divisor when the dividend is represented as a positive
+;; 70-bit dividend in an AC pair.  DIV consumes only the low 35 payload bits
+;; of the second AC: its sign bit is NOT the 36th dividend bit.  Transfer that
+;; bit into bit 0 of the first AC before DIV, and clear it in the second AC.
+;; Merely using SETZ on the first AC silently truncates 36-bit unsigned
+;; numerators at 2^35.  A divisor with bit 35 set can only produce quotient
 ;; zero or one, so handle that case with an unsigned comparison.  Do not use
 ;; reciprocal multiplication: default PDP-10 DImode has only 71 value bits.
 (define_expand "udivmodsi4"
@@ -3390,10 +3394,10 @@
         (umod:SI (match_dup 1) (match_dup 2)))]
   ""
   "@
-   move %Z0,%1\;setz %0,\;div %0,%2
-   move %Z0,%1\;setz %0,\;divi %0,%2
-   move %Z0,%1\;setz %0,\;div %0,[%2]"
-  [(set_attr "length" "3,3,3")])
+   move %Z0,%1\;move %0,%1\;lsh %0,-43\;tlz %Z0,0400000\;div %0,%2
+   move %Z0,%1\;move %0,%1\;lsh %0,-43\;tlz %Z0,0400000\;divi %0,%2
+   move %Z0,%1\;move %0,%1\;lsh %0,-43\;tlz %Z0,0400000\;div %0,[%2]"
+  [(set_attr "length" "5,5,5")])
 
 (define_insn "pdp10_udivmodsi4_general"
   [(set (subreg:SI (match_operand:DI 0 "register_operand" "=&r") 0)
@@ -3403,8 +3407,8 @@
         (umod:SI (match_dup 1) (match_dup 2)))
    (clobber (match_scratch:SI 3 "=&r"))]
   ""
-  "jumpge %2,.+16\;move %0,%1\;tlc %0,0400000\;move %3,%2\;tlc %3,0400000\;camge %0,%3\;jrst .+5\;movei %0,1\;move %Z0,%1\;sub %Z0,%2\;jrst .+7\;movei %0,0\;move %Z0,%1\;jrst .+4\;move %Z0,%1\;setz %0,\;div %0,%2"
-  [(set_attr "length" "17")])
+  "jumpge %2,.+16\;move %0,%1\;tlc %0,0400000\;move %3,%2\;tlc %3,0400000\;camge %0,%3\;jrst .+5\;movei %0,1\;move %Z0,%1\;sub %Z0,%2\;jrst .+11\;movei %0,0\;move %Z0,%1\;jrst .+6\;move %Z0,%1\;move %0,%1\;lsh %0,-43\;tlz %Z0,0400000\;div %0,%2"
+  [(set_attr "length" "19")])
 
 (define_expand "udivsi3"
   [(set (match_operand:SI 0 "nonimmediate_operand" "")

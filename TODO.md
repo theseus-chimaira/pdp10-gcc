@@ -21,6 +21,20 @@ upstream historical maintenance notes rather than work specific to this fork.
 
 ## Optimizer and code-size work
 
+- [x] Repair unsigned 36-bit `SImode` division/remainder on all PDP-10
+  CPU profiles. Split numerator bit 35 into the high DIV accumulator
+  before the 70-bit divide; correct general-case branch displacements.
+  The 108 existing failing GCC reducer profiles now PASS, and a new
+  36-profile constant-divisor regression also PASSes. No new runtime
+  register or library helper is required. See
+  `docs/P10-UNSIGNED-SI-DIVMOD-20261124-v17.md`.
+
+- [ ] Triage the remaining GCC runtime failures by shared generated
+  instruction signature, starting with byte-pointer subtraction and
+  subword load/store/struct-layout failures. Keep runtime failures
+  distinct from compile, link and timeout outcomes in the checkpoint
+  inventory; do not mark an incomplete full sweep as green.
+
 - [x] Repair and verify native PDP-6 GCC 36-bit signed/unsigned
   SF and D-format conversions. Canonical normalized 27-bit SF,
   nearest/ties-even and full-range signed minimum are correct;
