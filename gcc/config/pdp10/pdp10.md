@@ -169,12 +169,14 @@
 ;;
 ;;	setcm 1,3
 ;;	movn 2,4
-;;	jumpe 2,[aoja 1,.+1]
+;;	skipn 2,2
+;;	addi 1,1
 ;;
 ;;	; to self
 ;;	setca 1,
-;;	jumpe 2,[aoja 1,.+2]
-;;	 movn 2,2
+;;	skipn 2,2
+;;	addi 1,1
+;;	movn 2,2
 ;;
 ;; Magnitude 72 -> 72.
 ;;
@@ -3569,9 +3571,9 @@
 	(neg:DI (match_operand:DI 1 "reg_or_mem_operand" "0,ro")))]
   "!TARGET_71BIT"
   "@
-   setca %0,\;jumpe %Z0,[aoja %0,.+2]\;%_movn %Z0,%Z0
-   setcm %0,%1\;movn %Z0,%Z1\;jumpe %Z0,[aoja %0,.+1]"
-  [(set_attr "length" "3,3")])
+   setca %0,\;skipn %Z0,%Z0\;addi %0,1\;%_movn %Z0,%Z0
+   setcm %0,%1\;movn %Z0,%Z1\;skipn %Z0,%Z0\;addi %0,1"
+  [(set_attr "length" "4,4")])
 
 ;; KA10/PDP-6-class 71-bit doubleword negation.  The low word carries
 ;; only 35 value bits in the hardware-style 71-bit integer model; bit 0
@@ -3582,9 +3584,9 @@
 	(neg:DI (match_operand:DI 1 "reg_or_mem_operand" "0,ro")))]
   "TARGET_71BIT && !TARGET_KI10up"
   "@
-   tlz %Z0,0400000\;setca %0,\;jumpe %Z0,[aoja %0,.+2]\;%_movn %Z0,%Z0\;tlz %Z0,0400000\;tlne %0,0400000\;%_tlo %Z0,0400000
-   setcm %0,%1\;move %Z0,%Z1\;tlz %Z0,0400000\;jumpe %Z0,[aoja %0,.+2]\;%_movn %Z0,%Z0\;tlz %Z0,0400000\;tlne %0,0400000\;%_tlo %Z0,0400000"
-  [(set_attr "length" "7,8")])
+   tlz %Z0,0400000\;setca %0,\;skipn %Z0,%Z0\;addi %0,1\;%_movn %Z0,%Z0\;tlz %Z0,0400000\;tlne %0,0400000\;%_tlo %Z0,0400000
+   setcm %0,%1\;move %Z0,%Z1\;tlz %Z0,0400000\;skipn %Z0,%Z0\;addi %0,1\;%_movn %Z0,%Z0\;tlz %Z0,0400000\;tlne %0,0400000\;%_tlo %Z0,0400000"
+  [(set_attr "length" "8,9")])
 
 (define_insn "*DMOVN"
   [(set (match_operand:DI 0 "register_operand" "=r")

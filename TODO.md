@@ -21,6 +21,19 @@ upstream historical maintenance notes rather than work specific to this fork.
 
 ## Optimizer and code-size work
 
+- [x] Remove the invalid out-of-line AOJA literal branch from doubleword
+  negation patterns. Use direct SKIPN/ADDI correction of the high word,
+  including 71-bit sign-copy semantics; no extra runtime helper or
+  scratch register. The formerly timed-out wide-int `950612-1.c`
+  source passes staged O2 PDP-6/KA10/KI10/KS10 checks and all 36
+  registered GCC profiles. Final cross-regression: 284/284 GCC/KCC
+  PASS. See
+  `docs/P10-DIMODE-NEGATION-CONTROLFLOW-20261124-v22.md`.
+
+- [ ] Audit other literal-pool control-flow constructs in PDP-10
+  arithmetic patterns, particularly `JCRY0 [AOJA ...]`, with focused
+  zero/carry branch oracles before modifying them.
+
 - [x] Correct the executable nested-function trampoline stack address.
   Avoid rounding PDP-10 word addresses as four nine-bit storage
   units, while preserving a compact word-aligned BLT template copy.
