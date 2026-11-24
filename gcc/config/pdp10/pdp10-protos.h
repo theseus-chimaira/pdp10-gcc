@@ -284,6 +284,7 @@ extern rtx	pdp10_expand_binop PARAMS ((enum machine_mode mode,
 					    Optab optab, rtx op0, rtx op1,
 					    rtx target, int unsignedp,
 					    Optab_methods methods, tree exp));
+extern rtx	pdp10_global_native_ref_address PARAMS ((tree object));
 extern rtx	pdp10_expand_ADDR_EXP PARAMS ((tree exp, tree type, rtx target,
 					       int ignore, int mod));
 extern rtx	pdp10_convert_pointer PARAMS ((tree exp, rtx op0, rtx target,

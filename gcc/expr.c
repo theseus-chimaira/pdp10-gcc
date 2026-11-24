@@ -4519,6 +4519,28 @@ pdp10_copy_aggregate_bits (dst, dstpos, src, srcpos, bits)
 }
 #endif
 
+#if REAL_BITS_PER_UNIT == 36
+/* Extended native subword references carry an architectural global
+   byte pointer.  Do not attach the containing record's word-relative
+   offset or alignment to the resulting MEM. */
+static rtx
+pdp10_global_native_ref_mem (exp)
+     tree exp;
+{
+  rtx addr, mem;
+  enum machine_mode mode = TYPE_MODE (TREE_TYPE (exp));
+  if (!TARGET_EXTENDED || (mode != QImode && mode != HImode))
+    return NULL_RTX;
+  addr = pdp10_global_native_ref_address (exp);
+  if (!addr)
+    return NULL_RTX;
+  mem = gen_rtx_MEM (mode, memory_address (mode, addr));
+  set_mem_align (mem, GET_MODE_BITSIZE (mode));
+  MEM_VOLATILE_P (mem) = TREE_THIS_VOLATILE (exp);
+  return mem;
+}
+#endif
+
 /* Expand an assignment that stores the value of FROM into TO.
    If WANT_VALUE is nonzero, return an rtx for the value of TO.
    (This may contain a QUEUED rtx;
@@ -4548,6 +4570,13 @@ expand_assignment (to, from, want_value, suggest_reg)
     }
 
 #if REAL_BITS_PER_UNIT == 36
+  if (TARGET_EXTENDED && (TREE_CODE (to) == ARRAY_REF
+                          || TREE_CODE (to) == COMPONENT_REF))
+    {
+      rtx mem = pdp10_global_native_ref_mem (to);
+      if (mem != NULL_RTX)
+        return store_expr (from, mem, want_value);
+    }
   if (TREE_CODE (to) == INDIRECT_REF
       && pdp10_exact32_type_p (TREE_TYPE (to)))
     {
@@ -8603,6 +8632,13 @@ expand_expr (exp, target, tmode, modifier)
       if (TREE_CODE (TREE_TYPE (TREE_OPERAND (exp, 0))) != ARRAY_TYPE)
 	abort ();
 #if REAL_BITS_PER_UNIT == 36
+      if (TARGET_EXTENDED && modifier != EXPAND_CONST_ADDRESS
+          && modifier != EXPAND_INITIALIZER)
+        {
+          rtx mem = pdp10_global_native_ref_mem (exp);
+          if (mem != NULL_RTX)
+            return mem;
+        }
       if (modifier == EXPAND_NORMAL && !TREE_THIS_VOLATILE (exp))
         {
           HOST_WIDE_INT p, w;
@@ -8785,6 +8821,13 @@ expand_expr (exp, target, tmode, modifier)
     case BIT_FIELD_REF:
     case ARRAY_RANGE_REF:
 #if REAL_BITS_PER_UNIT == 36
+      if (TARGET_EXTENDED && code == COMPONENT_REF
+          && modifier != EXPAND_CONST_ADDRESS && modifier != EXPAND_INITIALIZER)
+        {
+          rtx mem = pdp10_global_native_ref_mem (exp);
+          if (mem != NULL_RTX)
+            return mem;
+        }
       if (modifier == EXPAND_NORMAL && !TREE_THIS_VOLATILE (exp))
         {
           HOST_WIDE_INT p, w;

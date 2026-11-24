@@ -13297,6 +13297,33 @@ expand_subtract_pointers (mode, target, op0, type0, op1, type1)
           emit_label (done);
           emit_move_insn (target, result);
         }
+      else if (TARGET_EXTENDED
+               && (pdp10_bytesize (type) == 9 || pdp10_bytesize (type) == 18))
+        {
+          /* OWGBP: the top six bits are consecutive selectors within
+             a native width, and the remaining 30 bits are the word
+             coordinate.  Subtract the coordinates without a table or
+             a double-word multiply.  Return C storage units. */
+          int half = pdp10_bytesize (type) == 18;
+          rtx y0 = gen_reg_rtx (Pmode), y1 = gen_reg_rtx (Pmode);
+          rtx p0 = gen_reg_rtx (Pmode), p1 = gen_reg_rtx (Pmode);
+          rtx delta = gen_reg_rtx (Pmode);
+          op0 = force_reg (Pmode, op0);
+          op1 = force_reg (Pmode, op1);
+          emit_insn (gen_andsi3 (y0, op0, GEN_INT (ADDRESS_MASK)));
+          emit_insn (gen_andsi3 (y1, op1, GEN_INT (ADDRESS_MASK)));
+          emit_insn (gen_subsi3 (delta, y0, y1));
+          emit_insn (gen_ashlsi3_pointer (delta, delta,
+                                           GEN_INT (half ? 1 : 2)));
+          emit_insn (gen_lshrsi3 (p0, op0, GEN_INT (30)));
+          emit_insn (gen_lshrsi3 (p1, op1, GEN_INT (30)));
+          emit_insn (gen_addsi3 (delta, delta, p0));
+          emit_insn (gen_subsi3 (delta, delta, p1));
+          if (half)
+            emit_insn (gen_ashlsi3_pointer (target, delta, GEN_INT (1)));
+          else
+            emit_move_insn (target, delta);
+        }
       else if (!TARGET_EXTENDED
                && (pdp10_bytesize (type) == 9 || pdp10_bytesize (type) == 18))
         {
@@ -16936,6 +16963,133 @@ pdp10_convert_ptr (exp, op0, target, from, to, not_null)
   return op0;
 }
 
+/* Lower native record subobjects in the extended address model.  The
+   selector belongs to the selected element, while every array stride
+   comes from the declared layout.  In particular, a dynamic record
+   index and a dynamic member-array index must both survive lowering.
+   Return NULL before evaluating operands for unsupported layouts.  */
+rtx
+pdp10_global_native_ref_address (object)
+     tree object;
+{
+  tree t = object, type = TREE_TYPE (object), count = NULL_TREE;
+  HOST_WIDE_INT pos = 0;
+  int width, from, record = 0;
+  rtx ptr;
+
+  if (!TARGET_EXTENDED)
+    return NULL_RTX;
+  width = pdp10_bytesize (type);
+  if (width != 9 && width != 18)
+    return NULL_RTX;
+  while (TREE_CODE (type) == ARRAY_TYPE)
+    type = TREE_TYPE (type);
+  if (!INTEGRAL_TYPE_P (type) || TYPE_PRECISION (type) != width)
+    return NULL_RTX;
+
+  while (TREE_CODE (t) == COMPONENT_REF || TREE_CODE (t) == ARRAY_REF)
+    {
+      tree parent = TREE_OPERAND (t, 0);
+      if (TREE_CODE (t) == COMPONENT_REF)
+        {
+          tree field = TREE_OPERAND (t, 1);
+          HOST_WIDE_INT bit;
+          if (TREE_CODE (TREE_TYPE (parent)) != RECORD_TYPE
+              || TYPE_PACKED (TREE_TYPE (parent)) || DECL_PACKED (field)
+              || DECL_BIT_FIELD (field) || !DECL_FIELD_OFFSET (field)
+              || !host_integerp (DECL_FIELD_OFFSET (field), 1)
+              || !host_integerp (DECL_FIELD_BIT_OFFSET (field), 1))
+            return NULL_RTX;
+          bit = int_bit_position (field);
+          if (bit < 0 || bit % width)
+            return NULL_RTX;
+          pos += bit;
+          record = 1;
+        }
+      else
+        {
+          tree index = TREE_OPERAND (t, 1);
+          tree domain = TYPE_DOMAIN (TREE_TYPE (parent));
+          tree low = domain ? TYPE_MIN_VALUE (domain) : integer_zero_node;
+          tree size = TYPE_SIZE (TREE_TYPE (t));
+          HOST_WIDE_INT stride;
+          if (!low || !host_integerp (low, 0) || !size
+              || !host_integerp (size, 1))
+            return NULL_RTX;
+          stride = tree_low_cst (size, 1);
+          if (stride % width)
+            return NULL_RTX;
+          if (host_integerp (index, 0))
+            pos += (tree_low_cst (index, 0) - tree_low_cst (low, 0)) * stride;
+          else
+            {
+              tree delta = size_diffop (convert (sizetype, index),
+                                        convert (sizetype, low));
+              delta = size_binop (MULT_EXPR, delta,
+                         convert (TREE_TYPE (delta), size_int (stride / width)));
+              count = count ? size_binop (PLUS_EXPR, count, delta) : delta;
+            }
+        }
+      t = parent;
+    }
+  if (!record || pos < 0 || pos % width
+      || (TREE_CODE (t) != VAR_DECL && TREE_CODE (t) != PARM_DECL
+          && TREE_CODE (t) != INDIRECT_REF))
+    return NULL_RTX;
+
+  from = pdp10_bytesize (TREE_TYPE (t));
+  if (from != 9 && from != 18 && from != 36)
+    return NULL_RTX;
+  if (TREE_CODE (t) == INDIRECT_REF)
+    {
+      /* An incoming record pointer may already select a byte.  Keep
+         its slot through conversion, rather than masking to RH18. */
+      ptr = expand_expr (TREE_OPERAND (t, 0), NULL_RTX, Pmode, EXPAND_NORMAL);
+      ptr = protect_from_queue (ptr, 0);
+      ptr = force_reg (Pmode, ptr);
+      if (from != width)
+        ptr = pdp10_convert_ptr (NULL_TREE, ptr, NULL_RTX, from, width, 1);
+    }
+  else
+    {
+      rtx mem = expand_expr (t, NULL_RTX, VOIDmode, EXPAND_CONST_ADDRESS);
+      rtx addr, base;
+      pdp10_word36 encoded;
+      int selector = ps_base_for_bytesize (width) + (pos % BITS_PER_WORD) / width;
+      if (GET_CODE (mem) != MEM)
+        return NULL_RTX;
+      addr = XEXP (mem, 0);
+      if (pdp10_decompose_symbolic_word36 (addr, &base, &encoded)
+          && base != NULL_RTX)
+        {
+          encoded = (((pdp10_word36) selector) << 30)
+            | ((encoded + pos / BITS_PER_WORD) & ADDRESS_MASK);
+          ptr = pdp10_plus_constant_word36 (base, encoded);
+        }
+      else
+        {
+          /* A declared automatic object's MEM address is a physical
+             word coordinate.  XMOVEI preserves the stack section. */
+          addr = plus_constant (addr, pos / BITS_PER_WORD);
+          ptr = gen_reg_rtx (Pmode);
+          emit_insn (gen_MOVEI (ptr, addr));
+          emit_TLO (ptr, ptr, selector << 12);
+        }
+      pos = 0;
+    }
+  if (pos != 0)
+    {
+      tree delta = convert (ssizetype, size_int (pos / width));
+      count = count ? size_binop (PLUS_EXPR, count, delta) : delta;
+    }
+  if (count != NULL_TREE && !integer_zerop (count))
+    {
+      rtx inc = expand_expr (count, NULL_RTX, Pmode, EXPAND_NORMAL);
+      ptr = pdp10_expand_addbp_units (width, gen_reg_rtx (Pmode), ptr, inc);
+    }
+  return ptr;
+}
+
 /* Expand the tree ADDR_EXP tree expression in EXP into RTL instructions.
    Store the result in TARGET if convenient, and return the result.  */
 rtx
@@ -16952,6 +17106,13 @@ pdp10_expand_ADDR_EXP (exp, type, target, ignore, mod)
   /* If nonzero, TEMP will be set to the address of something that might
      be a MEM corresponding to a stack slot.  */
   temp = 0;
+
+  if (TARGET_EXTENDED && !ignore && modifier != EXPAND_INITIALIZER)
+    {
+      rtx addr = pdp10_global_native_ref_address (TREE_OPERAND (exp, 0));
+      if (addr != NULL_RTX)
+        return addr;
+    }
 
   {
     rtx init_addr = pdp10_initializer_byte_pointer (exp);

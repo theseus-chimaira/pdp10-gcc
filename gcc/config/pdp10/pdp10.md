@@ -1228,25 +1228,9 @@
   ""
   "move %0,%1")
 
-(define_insn "*LDBzqi_sequence"
-  [(set (match_operand:SI 0 "register_operand" "=r,r")
-        (zero_extend:SI (match_operand:QI 1 "memory_operand" "m,>")))]
-  "TARGET_EXTENDED
-   && !CONSTANT_ADDRESS_P (XEXP (operands[1], 0))
-   && pdp10_pointer_alignment (XEXP (operands[1], 0)) >= UNITS_PER_WORD
-   && (GET_CODE (XEXP (operands[1], 0)) == REG
-       || (INTVAL (XEXP (XEXP (operands[1], 0), 1)) % UNITS_PER_WORD == 0))"
-  {
-    rtx ops[4];
-    ops[0] = operands[0];
-    ops[1] = operands[1];
-    ops[2] = GEN_INT (9);
-    ops[3] = GEN_INT (0);
-    output_asm_insn (pdp10_output_extzv_sequence (ops), ops);
-    return "";
-  }
-  [(set_attr "length" "2")])
-
+;; A global byte pointer is not a word address, even when its
+;; selected byte or containing record is word aligned.  Use LDBzqi;
+;; word/shift extraction belongs to explicit word MEMs.
 (define_insn "*LDBzqi"
   [(set (match_operand:SI 0 "register_operand" "=r,r")
         (zero_extend:SI (match_operand:QI 1 "memory_operand" ">,m")))]
