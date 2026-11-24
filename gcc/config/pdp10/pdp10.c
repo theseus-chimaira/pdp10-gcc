@@ -11690,18 +11690,9 @@ pdp10_expand_aligned_memop (destination, source, length, fill)
   HOST_WIDE_INT words = length / UNITS_PER_WORD;
   HOST_WIDE_INT tail = length % UNITS_PER_WORD;
   HOST_WIDE_INT i;
-  rtx dst, src = NULL_RTX, val = NULL_RTX, mem;
+  rtx dst = destination, src = source, val = NULL_RTX, mem;
 
-  dst = pdp10_first_byte_word_address (destination);
-  if (!dst)
-    dst = pdp10_convert_ptr (NULL_TREE, destination, NULL_RTX, 9, 36, 1);
-  if (source)
-    {
-      src = pdp10_first_byte_word_address (source);
-      if (!src)
-        src = pdp10_convert_ptr (NULL_TREE, source, NULL_RTX, 9, 36, 1);
-    }
-  else
+  if (!src)
     {
       unsigned HOST_WIDE_INT pattern = 0;
       for (i = 0; i < UNITS_PER_WORD; ++i)

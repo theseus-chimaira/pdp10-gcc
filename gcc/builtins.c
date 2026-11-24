@@ -133,7 +133,7 @@ static rtx expand_builtin_strspn	PARAMS ((tree, rtx,
 static rtx expand_builtin_strcspn	PARAMS ((tree, rtx,
 						 enum machine_mode));
 static rtx expand_builtin_memcpy	PARAMS ((tree, rtx,
-                                                 enum machine_mode));
+                                                 enum machine_mode, int));
 static rtx expand_builtin_strcpy	PARAMS ((tree, rtx,
                                                  enum machine_mode));
 static rtx builtin_strncpy_read_str	PARAMS ((PTR, HOST_WIDE_INT,
@@ -143,7 +143,7 @@ static rtx expand_builtin_strncpy	PARAMS ((tree, rtx,
 static rtx builtin_memset_read_str	PARAMS ((PTR, HOST_WIDE_INT,
 						 enum machine_mode));
 static rtx expand_builtin_memset	PARAMS ((tree, rtx,
-                                                 enum machine_mode));
+                                                 enum machine_mode, int));
 static rtx expand_builtin_bzero		PARAMS ((tree));
 static rtx expand_builtin_strlen	PARAMS ((tree, rtx));
 static rtx expand_builtin_strstr	PARAMS ((tree, rtx,
@@ -2136,6 +2136,38 @@ pdp10_memop_pointer (exp)
   return CONSTANT_P (ptr) ? ptr : copy_to_mode_reg (Pmode, ptr);
 }
 
+/* Obtain a physical word address for an already aligned argument.
+   The source and an unused destination result do not need a C byte
+   pointer at all.  A conversion from a native 36-bit integer pointer
+   to void * can therefore be bypassed without evaluating it twice.
+   Do not apply this to exact32 pointers, which can carry a logical
+   packed-field representation. */
+static rtx
+pdp10_memop_word_address (exp, original)
+     tree exp;
+     rtx *original;
+{
+  rtx ptr, word;
+  if (!original
+      && (TREE_CODE (exp) == NOP_EXPR || TREE_CODE (exp) == CONVERT_EXPR)
+      && VOID_TYPE_P (TREE_TYPE (TREE_TYPE (exp))))
+    {
+      tree inner = TREE_OPERAND (exp, 0);
+      tree type = TREE_TYPE (inner);
+      if (POINTER_TYPE_P (type)
+          && INTEGRAL_TYPE_P (TREE_TYPE (type))
+          && TYPE_PRECISION (TREE_TYPE (type)) == BITS_PER_WORD)
+        return pdp10_memop_pointer (inner);
+    }
+
+  ptr = pdp10_memop_pointer (exp);
+  if (original)
+    *original = ptr;
+  word = pdp10_first_byte_word_address (ptr);
+  return word ? word
+    : pdp10_convert_ptr (NULL_TREE, ptr, NULL_RTX, 9, 36, 1);
+}
+
 static int
 pdp10_aligned_memop_length_p (len)
      tree len;
@@ -2152,10 +2184,11 @@ pdp10_aligned_memop_length_p (len)
    that's convenient).  */
 
 static rtx
-expand_builtin_memcpy (arglist, target, mode)
+expand_builtin_memcpy (arglist, target, mode, ignore)
      tree arglist;
      rtx target;
      enum machine_mode mode;
+     int ignore ATTRIBUTE_UNUSED;
 {
   if (!validate_arglist (arglist,
 			 POINTER_TYPE, POINTER_TYPE, INTEGER_TYPE, VOID_TYPE))
@@ -2237,9 +2270,10 @@ expand_builtin_memcpy (arglist, target, mode)
       if (dest_align == BITS_PER_WORD && src_align == BITS_PER_WORD
           && pdp10_aligned_memop_length_p (len))
         {
-          rtx original = pdp10_memop_pointer (dest);
-          rtx source = pdp10_memop_pointer (src);
-          pdp10_expand_aligned_memop (original, source,
+          rtx original = const0_rtx;
+          rtx word = pdp10_memop_word_address (dest, ignore ? 0 : &original);
+          rtx source = pdp10_memop_word_address (src, 0);
+          pdp10_expand_aligned_memop (word, source,
                                      tree_low_cst (len, 1), 0);
           return original;
         }
@@ -2466,10 +2500,11 @@ builtin_memset_read_str (data, offset, mode)
    convenient).  */
 
 static rtx
-expand_builtin_memset (exp, target, mode)
+expand_builtin_memset (exp, target, mode, ignore)
      tree exp;
      rtx target;
      enum machine_mode mode;
+     int ignore ATTRIBUTE_UNUSED;
 {
   tree arglist = TREE_OPERAND (exp, 1);
 
@@ -2506,10 +2541,11 @@ expand_builtin_memset (exp, target, mode)
 #ifdef __PDP10_H__
       if (dest_align == BITS_PER_WORD && pdp10_aligned_memop_length_p (len))
         {
-          rtx original = pdp10_memop_pointer (dest);
+          rtx original = const0_rtx;
+          rtx word = pdp10_memop_word_address (dest, ignore ? 0 : &original);
           unsigned HOST_WIDE_INT fill = TREE_INT_CST_LOW (val)
             & (((unsigned HOST_WIDE_INT) 1 << BITS_PER_UNIT) - 1);
-          pdp10_expand_aligned_memop (original, NULL_RTX,
+          pdp10_expand_aligned_memop (word, NULL_RTX,
                                      tree_low_cst (len, 1), fill);
           return original;
         }
@@ -2579,7 +2615,7 @@ expand_builtin_bzero (exp)
   newarglist = tree_cons (NULL_TREE, dest, newarglist);
 
   TREE_OPERAND (exp, 1) = newarglist;
-  result = expand_builtin_memset (exp, const0_rtx, VOIDmode);
+  result = expand_builtin_memset (exp, const0_rtx, VOIDmode, 1);
 
   /* Always restore the original arguments.  */
   TREE_OPERAND (exp, 1) = arglist;
@@ -4240,13 +4276,13 @@ expand_builtin (exp, target, subtarget, mode, ignore)
       break;
 
     case BUILT_IN_MEMCPY:
-      target = expand_builtin_memcpy (arglist, target, mode);
+      target = expand_builtin_memcpy (arglist, target, mode, ignore);
       if (target)
 	return target;
       break;
 
     case BUILT_IN_MEMSET:
-      target = expand_builtin_memset (exp, target, mode);
+      target = expand_builtin_memset (exp, target, mode, ignore);
       if (target)
 	return target;
       break;
