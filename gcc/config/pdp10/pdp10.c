@@ -15704,11 +15704,17 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
       rtx inc = GEN_INT ((HOST_WIDE_INT) (bitpos / (pdp10_word36) bytesize));
       rtx ptr = REG_P (base_addr) ? base_addr
         : force_reg (Pmode, base_addr);
+      /* A record's native byte size is not necessarily the byte
+         size of its selected member.  Convert before applying a
+         member-sized displacement, preserving the base position.
+         Otherwise e.g. a char member of an 18-bit record advances
+         in halfwords instead of nine-bit characters. */
+      int base_size = pdp10_normalize_pointer_bytesize
+        (pdp10_bytesize (TREE_TYPE (base_tree)));
       reg = gen_reg_rtx (Pmode);
-      /* At -O0 the incoming record pointer may live in a stack slot.
-         Load its *whole* P/S-encoded value before adjusting its field
-         offset; do not strip the P/S bits as for an ordinary word
-         address in the generic fallback below.  */
+      if (base_size != bytesize)
+        ptr = pdp10_convert_ptr (NULL_TREE, ptr, NULL_RTX,
+                                 base_size, bytesize, 1);
       return pdp10_expand_addbp_elements (TREE_TYPE (object), reg, ptr, inc);
     }
 
