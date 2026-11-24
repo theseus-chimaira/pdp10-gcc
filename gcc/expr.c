@@ -4042,18 +4042,21 @@ pdp10_slice_word (mem, word)
   return ref;
 }
 
-/* A constant subobject path in a packed declaration has a single
-   physical layout: the front end's field positions and array strides.
-   Ordinary scalar byte arrays keep their separate machine byte layout. */
+/* A packed subobject path has a single physical layout: the front
+   end's field positions and array strides.  Keep variable byte strides
+   separate from constant bit positions.  Ordinary scalar byte arrays
+   retain their native machine-byte layout. */
 static tree
-pdp10_packed_decl_ref (exp, pos, width)
+pdp10_packed_decl_ref (exp, pos, width, dynamic)
      tree exp;
      HOST_WIDE_INT *pos, *width;
+     tree *dynamic;
 {
   tree type = TREE_TYPE (exp);
   tree t = exp;
   int packed = 0;
   *pos = 0;
+  *dynamic = NULL_TREE;
   if (!INTEGRAL_TYPE_P (type) || !TYPE_SIZE (type)
       || !host_integerp (TYPE_SIZE (type), 1))
     return NULL_TREE;
@@ -4088,12 +4091,26 @@ pdp10_packed_decl_ref (exp, pos, width)
           tree domain = TYPE_DOMAIN (TREE_TYPE (parent));
           tree low = domain ? TYPE_MIN_VALUE (domain) : integer_zero_node;
           tree size = TYPE_SIZE (TREE_TYPE (t));
-          if (!host_integerp (index, 0) || !low
-              || !host_integerp (low, 0) || !size
+          if (!low || !host_integerp (low, 0) || !size
               || !host_integerp (size, 1))
             return NULL_TREE;
-          *pos += (tree_low_cst (index, 0) - tree_low_cst (low, 0))
-                  * tree_low_cst (size, 1);
+          if (host_integerp (index, 0))
+            *pos += (tree_low_cst (index, 0) - tree_low_cst (low, 0))
+                    * tree_low_cst (size, 1);
+          else
+            {
+              HOST_WIDE_INT stride = tree_low_cst (size, 1);
+              tree units;
+              if (TARGET_EXTENDED || stride % BITS_PER_UNIT)
+                return NULL_TREE;
+              units = size_diffop (convert (sizetype, index),
+                                    convert (sizetype, low));
+              units = size_binop (MULT_EXPR, units,
+                                  convert (TREE_TYPE (units),
+                                           size_int (stride / BITS_PER_UNIT)));
+              *dynamic = *dynamic
+                ? size_binop (PLUS_EXPR, *dynamic, units) : units;
+            }
           t = parent;
         }
       else
@@ -4104,6 +4121,14 @@ pdp10_packed_decl_ref (exp, pos, width)
           && !(TREE_CODE (t) == INDIRECT_REF && !TARGET_EXTENDED
                && pdp10_continuous_record_p (TREE_TYPE (t)))))
     return NULL_TREE;
+  if (*dynamic)
+    {
+      tree base_type = TREE_TYPE (t);
+      while (TREE_CODE (base_type) == ARRAY_TYPE)
+        base_type = TREE_TYPE (base_type);
+      if (!pdp10_continuous_record_p (base_type))
+        return NULL_TREE;
+    }
   return t;
 }
 
@@ -4174,25 +4199,31 @@ pdp10_packed_scalar_store (mem, pos, width, value)
    constant-slice path; byte-aligned records need at most two word accesses.
    Do not read the following word unless the field actually crosses it. */
 static rtx
-pdp10_indirect_packed_scalar (root, pos, width, unsignedp, value)
-     tree root;
+pdp10_indirect_packed_scalar (root, dynamic, pos, width, unsignedp, value)
+     tree root, dynamic;
      HOST_WIDE_INT pos, width;
      int unsignedp;
      rtx value;
 {
   rtx ptr, addr, mem, bit, first, done, right;
   rtx word, next;
-  ptr = force_reg (Pmode, expand_expr (TREE_OPERAND (root, 0),
-                                      NULL_RTX, Pmode, EXPAND_NORMAL));
-  if (pdp10_bytesize (TREE_TYPE (root)) == BITS_PER_WORD)
+  if (TREE_CODE (root) == INDIRECT_REF)
+    ptr = expand_expr (TREE_OPERAND (root, 0),
+                       NULL_RTX, Pmode, EXPAND_NORMAL);
+  else
     {
-      mem = gen_rtx_MEM (SImode, ptr);
-      if (value)
-        {
-          pdp10_packed_scalar_store (mem, pos, width, value);
-          return value;
-        }
-      return pdp10_packed_scalar_load (mem, pos, width, unsignedp);
+      tree ptype = build_pointer_type (TREE_TYPE (root));
+      tree address = build1 (ADDR_EXPR, ptype, root);
+      ptr = pdp10_expand_ADDR_EXP (address, ptype, NULL_RTX,
+                                   0, EXPAND_NORMAL);
+    }
+  ptr = force_reg (Pmode, ptr);
+  if (dynamic)
+    {
+      rtx delta = expand_expr (dynamic, NULL_RTX, Pmode, EXPAND_NORMAL);
+      ptr = pdp10_expand_addbp_elements (unsigned_char_type_node,
+                                         gen_reg_rtx (Pmode), ptr, delta);
+      ptr = force_reg (Pmode, ptr);
     }
   if (pos / BITS_PER_UNIT)
     ptr = pdp10_expand_addbp_elements (unsigned_char_type_node, gen_reg_rtx (Pmode),
@@ -4354,17 +4385,18 @@ expand_assignment (to, from, want_value, suggest_reg)
 #if REAL_BITS_PER_UNIT == 36
       {
         HOST_WIDE_INT p, w;
-        tree root = pdp10_packed_decl_ref (to, &p, &w);
+        tree dynamic;
+        tree root = pdp10_packed_decl_ref (to, &p, &w, &dynamic);
         if (root && !TREE_THIS_VOLATILE (to) && !TREE_THIS_VOLATILE (root))
           {
             rtx mem;
             push_temp_slots ();
-            if (TREE_CODE (root) == INDIRECT_REF)
+            if (dynamic || TREE_CODE (root) == INDIRECT_REF)
               {
                 rtx v = expand_expr (from, NULL_RTX, VOIDmode, EXPAND_NORMAL);
                 v = convert_modes (SImode, TYPE_MODE (TREE_TYPE (from)),
                                    v, TREE_UNSIGNED (TREE_TYPE (from)));
-                pdp10_indirect_packed_scalar (root, p, w,
+                pdp10_indirect_packed_scalar (root, dynamic, p, w,
                                               TREE_UNSIGNED (TREE_TYPE (to)), v);
                 if (want_value && w < BITS_PER_WORD)
                   {
@@ -8358,13 +8390,14 @@ expand_expr (exp, target, tmode, modifier)
       if (modifier == EXPAND_NORMAL && !TREE_THIS_VOLATILE (exp))
         {
           HOST_WIDE_INT p, w;
-          tree root = pdp10_packed_decl_ref (exp, &p, &w);
+          tree dynamic;
+          tree root = pdp10_packed_decl_ref (exp, &p, &w, &dynamic);
           if (root && !TREE_THIS_VOLATILE (root))
             {
               rtx mem;
-              if (TREE_CODE (root) == INDIRECT_REF)
+              if (dynamic || TREE_CODE (root) == INDIRECT_REF)
                 return convert_modes (mode, SImode,
-                         pdp10_indirect_packed_scalar (root, p, w,
+                         pdp10_indirect_packed_scalar (root, dynamic, p, w,
                                                     TREE_UNSIGNED (type), NULL_RTX),
                          TREE_UNSIGNED (type));
               mem = expand_expr (root, NULL_RTX, VOIDmode, EXPAND_NORMAL);
@@ -8530,13 +8563,14 @@ expand_expr (exp, target, tmode, modifier)
       if (modifier == EXPAND_NORMAL && !TREE_THIS_VOLATILE (exp))
         {
           HOST_WIDE_INT p, w;
-          tree root = pdp10_packed_decl_ref (exp, &p, &w);
+          tree dynamic;
+          tree root = pdp10_packed_decl_ref (exp, &p, &w, &dynamic);
           if (root && !TREE_THIS_VOLATILE (root))
             {
               rtx mem;
-              if (TREE_CODE (root) == INDIRECT_REF)
+              if (dynamic || TREE_CODE (root) == INDIRECT_REF)
                 return convert_modes (mode, SImode,
-                         pdp10_indirect_packed_scalar (root, p, w,
+                         pdp10_indirect_packed_scalar (root, dynamic, p, w,
                                                     TREE_UNSIGNED (type), NULL_RTX),
                          TREE_UNSIGNED (type));
               mem = expand_expr (root, NULL_RTX, VOIDmode, EXPAND_NORMAL);
