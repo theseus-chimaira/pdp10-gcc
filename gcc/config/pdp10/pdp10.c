@@ -13298,13 +13298,14 @@ expand_subtract_pointers (mode, target, op0, type0, op1, type1)
           emit_move_insn (target, result);
         }
       else if (TARGET_EXTENDED
-               && (pdp10_bytesize (type) == 9 || pdp10_bytesize (type) == 18))
+               && VALID_OWGBP_SELECTOR_BYTE_SIZE_P (pdp10_bytesize (type)))
         {
           /* OWGBP: the top six bits are consecutive selectors within
              a native width, and the remaining 30 bits are the word
              coordinate.  Subtract the coordinates without a table or
              a double-word multiply.  Return C storage units. */
-          int half = pdp10_bytesize (type) == 18;
+          int width = pdp10_bytesize (type);
+          int slots = BITS_PER_WORD / width;
           rtx y0 = gen_reg_rtx (Pmode), y1 = gen_reg_rtx (Pmode);
           rtx p0 = gen_reg_rtx (Pmode), p1 = gen_reg_rtx (Pmode);
           rtx delta = gen_reg_rtx (Pmode);
@@ -13313,13 +13314,26 @@ expand_subtract_pointers (mode, target, op0, type0, op1, type1)
           emit_insn (gen_andsi3 (y0, op0, GEN_INT (ADDRESS_MASK)));
           emit_insn (gen_andsi3 (y1, op1, GEN_INT (ADDRESS_MASK)));
           emit_insn (gen_subsi3 (delta, y0, y1));
-          emit_insn (gen_ashlsi3_pointer (delta, delta,
-                                           GEN_INT (half ? 1 : 2)));
+          if (slots == 2 || slots == 4)
+            emit_insn (gen_ashlsi3_pointer (delta, delta,
+                                             GEN_INT (slots == 2 ? 1 : 2)));
+          else
+            {
+              /* A signed 30-bit word difference times at most six
+                 fits in 36 bits.  Use short shift/add sequences rather
+                 than the general 36-bit modular multiply expansion. */
+              rtx scaled = gen_reg_rtx (Pmode);
+              emit_insn (gen_ashlsi3_pointer (scaled, delta,
+                                               GEN_INT (slots == 5 ? 2 : 1)));
+              emit_insn (gen_addsi3 (delta, delta, scaled));
+              if (slots == 6)
+                emit_insn (gen_ashlsi3_pointer (delta, delta, GEN_INT (1)));
+            }
           emit_insn (gen_lshrsi3 (p0, op0, GEN_INT (30)));
           emit_insn (gen_lshrsi3 (p1, op1, GEN_INT (30)));
           emit_insn (gen_addsi3 (delta, delta, p0));
           emit_insn (gen_subsi3 (delta, delta, p1));
-          if (half)
+          if (width == 18)
             emit_insn (gen_ashlsi3_pointer (target, delta, GEN_INT (1)));
           else
             emit_move_insn (target, delta);
