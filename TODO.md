@@ -21,6 +21,13 @@ upstream historical maintenance notes rather than work specific to this fork.
 
 ## Optimizer and code-size work
 
+- [x] Correct optimized KS10 signed 9-bit and 18-bit byte pointer
+  loads (`0245` at O1; `0344` at O2/Os). Distinguish actual scalar
+  slots from pointers *to* bytes, and decode POINT 18 half selector
+  before choosing HL/HR. Full 36-profile pointer test and dedicated
+  v27 regression both pass 36/36 in independent strict checkpoints.
+  See `docs/P10-KS10-SIGNED-BYTEPTR-LOAD-20261124-v27.md`.
+
 - [x] Fix the nonterminating packed BLKmode byte-copy loop by binding
   count decrement and backward branch into one RTL/SOJN operation.
   At v23, the 27 old GCC packed-byvalue timeouts became 44

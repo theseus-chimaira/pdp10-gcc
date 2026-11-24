@@ -5122,6 +5122,15 @@ pdp10_scalar_mem_p (op)
   if (GET_CODE (op) != MEM)
     return 0;
 
+  /* MEM(MEM(frame+offset)) dereferences a byte pointer stored in a
+     stack slot.  It is not the scalar local *at* that frame address.
+     Treating it as one causes KS10's signed-byte load expander to
+     replace LDB with a whole-word MOVE/ASH and lose the P/S byte
+     selector.  Frame reachability alone does not prove the accessed
+     object is a word-promoted scalar.  */
+  if (GET_CODE (XEXP (op, 0)) == MEM)
+    return 0;
+
   /* A local byte-pointer variable can have subword alignment in its MEM
      attributes because it points at byte objects.  The storage slot itself
      is still a full PDP-10 pointer word, not a scalar QI/HI object.  Do not
@@ -5135,6 +5144,18 @@ pdp10_scalar_mem_p (op)
     return 1;
 
   if (!pdp10_frame_address_p (XEXP (op, 0)))
+    return 0;
+
+  /* A QI/HI MEM without a source object is not proof of a scalar
+     stack slot.  After reload its address can be an arbitrary byte
+     pointer in the physical register normally used for a frame
+     address.  In particular, KS10 can put q=&arr_c9[11] in AC16;
+     treating (mem:QI (reg 016)) as an aligned local then turns its
+     LDB into a whole-word MOVE/ASH.  Require actual source identity
+     for the fallback.  MEM_SCALAR_P above still covers scalar slots
+     whose source expression was lost.  */
+  if ((GET_MODE (op) == QImode || GET_MODE (op) == HImode)
+      && MEM_EXPR (op) == 0)
     return 0;
 
   if (GET_MODE (op) == QImode || GET_MODE (op) == HImode)
@@ -8230,22 +8251,38 @@ pdp10_output_movhi (operands, sign_extend)
         return bitmove;
     }
 
-  /* Optimized signed short16 pointer dereferences can become a plain
-     HImode MEM with a constant POINT 16 address.  The generic HLRZ
-     fast path extracts 18 bits, including two padding bits after the
-     16-bit field.  A subsequent 16-bit sign extension then discards
-     the actual sign bit (e.g. -32767 becomes 4).  Load the precise
-     16-bit byte through its already-encoded pointer instead.  This
-     also leaves the HImode value correctly right-justified for the
-     following sign-extension instruction.  */
+  /* A constant native POINT address still carries an exact byte
+     selector, even after the optimizer has folded a stack-held byte
+     pointer to the corresponding symbolic constant.  HLRZ takes the
+     left half regardless of P; this reads arr_s18[4] instead of
+     arr_s18[5] when the pointer selects the right half at P=35.
+     The original short16 case likewise requires an exact LDB because
+     HLRZ extracts 18 bits including two padding bits.  Preserve the
+     P/S selector for both widths rather than guessing a halfword. */
   if (!store && address && CONSTANT_P (address)
       && pdp10_const_word36_byte_pointer_p (address))
     {
       rtx base;
       pdp10_word36 encoded;
-      if (pdp10_decompose_symbolic_word36 (address, &base, &encoded)
-          && ((encoded >> 24) & 077) == 16)
-        return "ldb %0,%1";
+      if (pdp10_decompose_symbolic_word36 (address, &base, &encoded))
+        {
+          int pos, size;
+          if (decode_ps ((int) ((encoded >> 24) & 07777), &pos, &size) == 0)
+            {
+              if (size == 16)
+                return "ldb %0,%1";
+              if (size == 18 && (pos == 0 || pos == 18))
+                {
+                  /* The native halves are aligned within the word:
+                     choose HL or HR from the encoded P/S selector.
+                     HRxE/HLxE sign-extend directly in one instruction;
+                     the plain HImode load stays zero-extended.  */
+                  if (pos == 0)
+                    return sign_extend ? "hlre %0,%W1" : "hlrz %0,%W1";
+                  return sign_extend ? "hrre %0,%W1" : "hrrz %0,%W1";
+                }
+            }
+        }
     }
 
   if (address && GET_CODE (address) == PRE_INC)

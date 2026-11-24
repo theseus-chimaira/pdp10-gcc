@@ -1271,8 +1271,15 @@
         (sign_extend:SI (match_operand:QI 1 "memory_operand" ">,m")))]
   "!TARGET_XKL2"
   {
-    if (/*CONSTANT_ADDRESS_P (XEXP (operands[1], 0)) || */
-	pdp10_pointer_alignment (XEXP (operands[1], 0)) >= UNITS_PER_WORD)
+    /* The word/shift shortcut requires proof that the *accessed byte*
+       is a word-aligned scalar, not merely that a register or stack
+       slot containing an encoded byte pointer is word-aligned.  A
+       register-held byte pointer has its own P/S selector; skipping
+       LDB for such a QImode load reads the wrong signed byte on KS10.
+       Preserve the fast path for known scalar or static addresses.  */
+    if ((pdp10_scalar_mem_p (operands[1])
+	 || CONSTANT_ADDRESS_P (XEXP (operands[1], 0)))
+	&& pdp10_pointer_alignment (XEXP (operands[1], 0)) >= UNITS_PER_WORD)
       {
 	rtx ops[4];
 	int offset = pdp10_pointer_offset (XEXP (operands[1], 0));
