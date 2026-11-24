@@ -221,8 +221,17 @@ get_pointer_alignment (exp, max_align)
 	  exp = TREE_OPERAND (exp, 0);
 	  if (TREE_CODE (exp) == FUNCTION_DECL)
 	    align = FUNCTION_BOUNDARY;
-	  else if (DECL_P (exp))
-	    align = DECL_ALIGN (exp);
+      else if (DECL_P (exp))
+	    {
+	      align = DECL_ALIGN (exp);
+#ifdef __PDP10_H__
+              /* A standalone subword scalar is right-justified in its
+                 word slot.  Slot alignment is not pointer alignment. */
+              if (!AGGREGATE_TYPE_P (TREE_TYPE (exp))
+                  && pdp10_bytesize (TREE_TYPE (exp)) < BITS_PER_WORD)
+                align = MIN (align, BITS_PER_UNIT);
+#endif
+	    }
 #ifdef CONSTANT_ALIGNMENT
 	  else if (TREE_CODE_CLASS (TREE_CODE (exp)) == 'c')
 	    align = CONSTANT_ALIGNMENT (exp, align);
@@ -2115,6 +2124,28 @@ convert_to_int_ptr (exp)
   return t;
 }
 
+#ifdef __PDP10_H__
+/* Evaluate the C pointer once, before deriving its private word address.
+   A separate pseudo protects the return value from later argument effects. */
+static rtx
+pdp10_memop_pointer (exp)
+     tree exp;
+{
+  rtx ptr = expand_expr (exp, NULL_RTX, ptr_mode, EXPAND_NORMAL);
+  ptr = protect_from_queue (ptr, 0);
+  return CONSTANT_P (ptr) ? ptr : copy_to_mode_reg (Pmode, ptr);
+}
+
+static int
+pdp10_aligned_memop_length_p (len)
+     tree len;
+{
+  return !TARGET_EXTENDED && host_integerp (len, 1)
+    && (unsigned HOST_WIDE_INT) tree_low_cst (len, 1)
+       <= (unsigned HOST_WIDE_INT) 01000000 * UNITS_PER_WORD;
+}
+#endif
+
 /* Expand a call to the memcpy builtin, with arguments in ARGLIST.
    Return 0 if we failed, the caller should emit a normal call, otherwise
    try to get the result in TARGET, if convenient (and in mode MODE if
@@ -2201,6 +2232,16 @@ expand_builtin_memcpy (arglist, target, mode)
                 }
               return force_operand (original, NULL_RTX);
             }
+        }
+
+      if (dest_align == BITS_PER_WORD && src_align == BITS_PER_WORD
+          && pdp10_aligned_memop_length_p (len))
+        {
+          rtx original = pdp10_memop_pointer (dest);
+          rtx source = pdp10_memop_pointer (src);
+          pdp10_expand_aligned_memop (original, source,
+                                     tree_low_cst (len, 1), 0);
+          return original;
         }
 #endif
 
@@ -2461,6 +2502,18 @@ expand_builtin_memset (exp, target, mode)
 
       if (TREE_CODE (val) != INTEGER_CST)
 	return 0;
+
+#ifdef __PDP10_H__
+      if (dest_align == BITS_PER_WORD && pdp10_aligned_memop_length_p (len))
+        {
+          rtx original = pdp10_memop_pointer (dest);
+          unsigned HOST_WIDE_INT fill = TREE_INT_CST_LOW (val)
+            & (((unsigned HOST_WIDE_INT) 1 << BITS_PER_UNIT) - 1);
+          pdp10_expand_aligned_memop (original, NULL_RTX,
+                                     tree_low_cst (len, 1), fill);
+          return original;
+        }
+#endif
 
       if (target_char_cast (val, &c))
 	return 0;

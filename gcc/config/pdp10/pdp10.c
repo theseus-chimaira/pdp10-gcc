@@ -11676,6 +11676,95 @@ expand_blt (destination, source, length)
   return 1;
 }
 
+/* The caller has established first-byte alignment and a constant C-byte
+   count.  Work exclusively in physical word addresses.  In particular a
+   two-character tail is 18 bits, not the language's exact16 HImode.
+   A null SOURCE denotes memset; FILL contains one target character.
+   Keep the caller's original byte pointer independent of these addresses. */
+void
+pdp10_expand_aligned_memop (destination, source, length, fill)
+     rtx destination, source;
+     HOST_WIDE_INT length;
+     unsigned HOST_WIDE_INT fill;
+{
+  HOST_WIDE_INT words = length / UNITS_PER_WORD;
+  HOST_WIDE_INT tail = length % UNITS_PER_WORD;
+  HOST_WIDE_INT i;
+  rtx dst, src = NULL_RTX, val = NULL_RTX, mem;
+
+  dst = pdp10_first_byte_word_address (destination);
+  if (!dst)
+    dst = pdp10_convert_ptr (NULL_TREE, destination, NULL_RTX, 9, 36, 1);
+  if (source)
+    {
+      src = pdp10_first_byte_word_address (source);
+      if (!src)
+        src = pdp10_convert_ptr (NULL_TREE, source, NULL_RTX, 9, 36, 1);
+    }
+  else
+    {
+      unsigned HOST_WIDE_INT pattern = 0;
+      for (i = 0; i < UNITS_PER_WORD; ++i)
+        pattern = (pattern << BITS_PER_UNIT) | fill;
+      val = gen_int_mode (pattern, SImode);
+    }
+
+  /* Small copies need no BLT setup.  Large fills seed one word and
+     propagate it with forward BLT, which is defined for this overlap. */
+  if (words > 3)
+    {
+      if (src)
+        expand_blt (dst, src, GEN_INT (words * UNITS_PER_WORD));
+      else
+        {
+          mem = gen_rtx_MEM (SImode, memory_address (SImode, dst));
+          set_mem_align (mem, BITS_PER_WORD);
+          emit_move_insn (mem, val);
+          expand_blt (plus_constant (dst, 1), dst,
+                      GEN_INT ((words - 1) * UNITS_PER_WORD));
+        }
+    }
+  else
+    for (i = 0; i < words; ++i)
+      {
+        mem = gen_rtx_MEM (SImode, memory_address (SImode,
+                           plus_constant (dst, i)));
+        set_mem_align (mem, BITS_PER_WORD);
+        if (src)
+          {
+            rtx from = gen_rtx_MEM (SImode, memory_address (SImode,
+                                    plus_constant (src, i)));
+            set_mem_align (from, BITS_PER_WORD);
+            val = force_reg (SImode, from);
+          }
+        emit_move_insn (mem, val);
+      }
+
+  if (tail)
+    {
+      int bits = tail * BITS_PER_UNIT;
+      mem = gen_rtx_MEM (SImode, memory_address (SImode,
+                         plus_constant (dst, words)));
+      set_mem_align (mem, BITS_PER_WORD);
+      if (src)
+        {
+          rtx from = gen_rtx_MEM (SImode, memory_address (SImode,
+                                  plus_constant (src, words)));
+          set_mem_align (from, BITS_PER_WORD);
+          val = gen_reg_rtx (SImode);
+          emit_insn (gen_extzv (val, from, GEN_INT (bits), const0_rtx));
+        }
+      else
+        {
+          unsigned HOST_WIDE_INT pattern = 0;
+          for (i = 0; i < tail; ++i)
+            pattern = (pattern << BITS_PER_UNIT) | fill;
+          val = force_reg (SImode, gen_int_mode (pattern, SImode));
+        }
+      emit_insn (gen_insv (mem, GEN_INT (bits), const0_rtx, val));
+    }
+}
+
 /* Expand an overlap-safe move of a constant whole-word block.
 
    Forward BLT is safe when DESTINATION is below SOURCE, or when the two
