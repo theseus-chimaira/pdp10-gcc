@@ -1986,7 +1986,22 @@
   [(set (match_operand:SI 0 "nonimmediate_operand" "")
         (match_operand:SI 1 "general_operand" ""))]
   ""
-  "/* Keep CONST_INT values canonical for the target's 36-bit SImode.
+  "/* The old generic expander promotes packed parameter char fields
+     to full SImode MEMs at the same word address.  Their field bit
+     positions must become explicit RTL before CSE can merge them.  */
+   if (GET_CODE (operands[1]) == MEM
+       && pdp10_packed_parm_byte_position (operands[1]) >= 0)
+     {
+       rtx target = REG_P (operands[0]) ? operands[0] : gen_reg_rtx (SImode);
+       if (pdp10_expand_packed_parm_byte_load (target, operands[1]))
+         {
+           if (!REG_P (operands[0]))
+             emit_move_insn (operands[0], target);
+           DONE;
+         }
+     }
+
+   /* Keep CONST_INT values canonical for the target's 36-bit SImode.
      Front-end pointer construction can produce the correct 36-bit bit
      pattern as a positive HOST_WIDE_INT (for example 0700000000000).
      Reload expects the sign-extended SImode representation instead.  */
@@ -2005,14 +2020,26 @@
         (match_operand:SI 1 "general_operand" "rm,I,S,L,M,N,P,i,O,M,r,i"))]
   "TARGET_CACHE && !optimize_size"
   "*return pdp10_output_movsi (insn, which_alternative);"
-  [(set_attr "length" "1,1,1,1,1,1,1,2,1,1,1,1")])
+  [(set (attr "length")
+	(cond [(and (eq_attr "alternative" "0")
+	            (ne (symbol_ref "pdp10_packed_parm_byte_signed_p (operands[1])")
+	                (const_int 0))) (const_int 3)
+	       (eq_attr "alternative" "7") (const_int 2)]
+	      (const_int 1)))])
 
 (define_insn "*movsi_nocache"
   [(set (match_operand:SI 0 "nonimmediate_operand" "=r,r,r,r,r,r,r,r,m,m,m")
 	;; ADDRESS: the S constraint allows a symbol.
         (match_operand:SI 1 "general_operand" "rm,I,S,L,M,N,P,i,O,M,r"))]
   ""
-  "*return pdp10_output_movsi (insn, which_alternative);")
+  "*return pdp10_output_movsi (insn, which_alternative);"
+  [(set (attr "length")
+	(if_then_else
+	 (and (eq_attr "alternative" "0")
+	      (ne (symbol_ref "pdp10_packed_parm_byte_signed_p (operands[1])")
+	          (const_int 0)))
+	 (const_int 3)
+	 (const_int 1)))])
 
 (define_insn "move_two_halves"
   [(set (match_operand:SI 0 "register_operand" "=r")
@@ -2627,7 +2654,22 @@
 		 (match_operand:SI 2 "general_operand" "")))]
   ""
   ;; Make sure that for a MEM + x, x can only be a register or +/-1.
-  "if (memory_operand (operands[1], SImode)
+  "if (GET_CODE (operands[1]) == MEM
+       && pdp10_packed_parm_byte_position (operands[1]) >= 0)
+     {
+       rtx temp = gen_reg_rtx (SImode);
+       if (pdp10_expand_packed_parm_byte_load (temp, operands[1]))
+         operands[1] = temp;
+     }
+   if (GET_CODE (operands[2]) == MEM
+       && pdp10_packed_parm_byte_position (operands[2]) >= 0)
+     {
+       rtx temp = gen_reg_rtx (SImode);
+       if (pdp10_expand_packed_parm_byte_load (temp, operands[2]))
+         operands[2] = temp;
+     }
+
+   if (memory_operand (operands[1], SImode)
        && !(register_operand (operands[2], SImode)
 	    || (const_int_operand (operands[2], SImode)
 		&& (INTVAL (operands[2]) == 1 || INTVAL (operands[2]) == -1))))
@@ -2702,11 +2744,19 @@
 ;	      && (INTVAL (operands[2]) == 1 || INTVAL (operands[2]) == -1))))"
   "*return pdp10_output_addsi (insn, operands, which_alternative);"
   [(set (attr "length")
-	(if_then_else
-	 (and (eq_attr "alternative" "3")
+	(cond
+	 [(and (eq_attr "alternative" "3")
 	      (ne (symbol_ref "!TARGET_EXTENDED && pdp10_const_word36_byte_pointer_p (operands[2])")
 	          (const_int 0)))
 	 (const_int 2)
+	 (and (eq_attr "alternative" "0")
+	      (ne (symbol_ref "pdp10_packed_parm_byte_signed_p (operands[2])")
+	          (const_int 0)))
+	 (const_int 4)
+	 (and (eq_attr "alternative" "0")
+	      (ne (symbol_ref "pdp10_packed_parm_byte_position (operands[2]) >= 0")
+	          (const_int 0)))
+	 (const_int 2)]
 	 (const_int 1)))])
 
 (define_insn "*ADDI_reg"

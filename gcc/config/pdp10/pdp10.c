@@ -10121,6 +10121,128 @@ pdp10_qi_mem_byte_offset (mem, byteoffp, unsignedp)
   return 1;
 }
 
+/* Return the bit position of a 9-bit scalar field passed inside a
+   by-value aggregate, or -1 for any other memory operand.
+
+   GCC 3.2 can promote a packed unsigned-char field of a formal
+   structure parameter to an SImode MEM while retaining S1/A9 in
+   its memory attributes.  For example, p.a0, p.a1 and p.a2 all
+   become (mem:SI (plus frame -2)) with distinct COMPONENT_REFs.
+   A plain MOVE/ADD of that MEM reads the entire 36-bit argument
+   word, not the requested 9-bit field.  The address has already
+   been normalized to the *containing word* in the incoming-argument
+   frame.  Only its byte position must be recovered from FIELD_DECL.
+
+   Do not rewrite arbitrary SImode MEMs, dereferences through a
+   real byte pointer, or fields spanning two words.  Those have
+   different address/width contracts.  This exact test is shared
+   by final output and the addsi instruction-length attribute.  */
+int
+pdp10_packed_parm_byte_position (mem)
+     rtx mem;
+{
+  tree expr, base, field, type;
+  rtx size;
+  HOST_WIDE_INT pos;
+
+  if (GET_CODE (mem) != MEM || GET_MODE (mem) != SImode
+      || !MEM_IN_STRUCT_P (mem)
+      || MEM_ALIGN (mem) > BITS_PER_UNIT
+      || !pdp10_frame_address_p (XEXP (mem, 0)))
+    return -1;
+
+  size = MEM_SIZE (mem);
+  if (size == 0 || GET_CODE (size) != CONST_INT
+      || INTVAL (size) != 1)
+    return -1;
+
+  expr = MEM_EXPR (mem);
+  if (expr == 0 || TREE_CODE (expr) != COMPONENT_REF)
+    return -1;
+  base = TREE_OPERAND (expr, 0);
+  field = TREE_OPERAND (expr, 1);
+  type = TREE_TYPE (expr);
+  if (base == 0 || TREE_CODE (base) != PARM_DECL
+      || field == 0 || TREE_CODE (field) != FIELD_DECL
+      || type == 0 || TREE_CODE (type) != INTEGER_TYPE
+      || TYPE_PRECISION (type) != BITS_PER_UNIT)
+    return -1;
+
+  pos = int_bit_position (field) % BITS_PER_WORD;
+  if (pos < 0 || pos + BITS_PER_UNIT > BITS_PER_WORD)
+    return -1;
+  return (int) pos;
+}
+
+/* The sign of a promoted packed parameter field is not encoded by
+   its SImode MEM.  Preserve it explicitly when final combine leaves
+   the field as an ADD/MOVE memory operand after normal RTL expansion.  */
+int
+pdp10_packed_parm_byte_signed_p (mem)
+     rtx mem;
+{
+  return pdp10_packed_parm_byte_position (mem) >= 0
+    && !TREE_UNSIGNED (TREE_TYPE (MEM_EXPR (mem)));
+}
+
+/* Lower the byte field before CSE and combine see its value.
+   Merely changing MOVE/ADD at final output cannot be sufficient:
+   the optimizer considers all the promoted SImode MEMs at the same
+   stack address identical and merges p.a0 with p.a1.  Represent the
+   access as a real ZERO_EXTRACT of a containing 36-bit word, with
+   the FIELD_DECL bit position present in RTL throughout optimization.
+   The new word MEM intentionally does not inherit the narrow
+   field's MEM_EXPR/S1 attributes; it accesses the containing word
+   and is conservatively aliasable.  Preserve volatility.  */
+int
+pdp10_expand_packed_parm_byte_load (dst, src)
+     rtx dst;
+     rtx src;
+{
+  int pos = pdp10_packed_parm_byte_position (src);
+  rtx word;
+
+  if (pos < 0)
+    return 0;
+
+  word = gen_rtx_MEM (SImode, copy_rtx (XEXP (src, 0)));
+  set_mem_align (word, BITS_PER_WORD);
+  MEM_VOLATILE_P (word) = MEM_VOLATILE_P (src);
+  if (TREE_UNSIGNED (TREE_TYPE (MEM_EXPR (src))))
+    emit_insn (gen_extzv (dst, word, GEN_INT (BITS_PER_UNIT),
+                          GEN_INT (pos)));
+  else
+    emit_insn (gen_extv (dst, word, GEN_INT (BITS_PER_UNIT),
+                         GEN_INT (pos)));
+  return 1;
+}
+
+/* Emit an exact 9-bit LDB from the containing argument word.
+   The register form of the address needs parentheses, whereas a
+   frame-plus-displacement operand already contains its index.  */
+static void
+pdp10_output_packed_parm_byte_load (dst, mem, pos)
+     rtx dst;
+     rtx mem;
+     int pos;
+{
+  rtx ops[2];
+  char buf[64];
+
+  ops[0] = dst;
+  ops[1] = XEXP (mem, 0);
+  if (REG_P (ops[1]))
+    sprintf (buf, "ldb %%0,[POINT 9,(%%1),%d]", pos + BITS_PER_UNIT - 1);
+  else
+    sprintf (buf, "ldb %%0,[POINT 9,%%1,%d]", pos + BITS_PER_UNIT - 1);
+  output_asm_insn (buf, ops);
+  if (pdp10_packed_parm_byte_signed_p (mem))
+    {
+      output_asm_insn ("trne %0,0400", ops);
+      output_asm_insn ("orcmi %0,0777", ops);
+    }
+}
+
 
 
 const char *
@@ -10129,6 +10251,25 @@ pdp10_output_addsi (insn, operands, which_alternative)
      rtx *operands;
      int which_alternative;
 {
+  if (which_alternative == 0 && GET_CODE (operands[2]) == MEM)
+    {
+      int pos = pdp10_packed_parm_byte_position (operands[2]);
+
+      if (pos >= 0)
+        {
+          rtx ops[2];
+
+          /* AC0 is the backend's existing reserved scratch.  This
+             extracts the field before adding it to the live result.  */
+          pdp10_output_packed_parm_byte_load
+            (gen_rtx_REG (SImode, 0), operands[2], pos);
+          ops[0] = operands[0];
+          ops[1] = gen_rtx_REG (SImode, 0);
+          output_asm_insn ("add %0,%1", ops);
+          return "";
+        }
+    }
+
   if (which_alternative == 0
       && GET_CODE (PATTERN (insn)) == SET
       && REG_P (operands[0])
@@ -10616,6 +10757,22 @@ pdp10_output_movsi (insn, which_alternative)
      rtx insn;
      int which_alternative;
 {
+  if (which_alternative == 0
+      && GET_CODE (PATTERN (insn)) == SET
+      && REG_P (SET_DEST (PATTERN (insn)))
+      && GET_CODE (SET_SRC (PATTERN (insn))) == MEM)
+    {
+      rtx src = SET_SRC (PATTERN (insn));
+      int pos = pdp10_packed_parm_byte_position (src);
+
+      if (pos >= 0)
+        {
+          pdp10_output_packed_parm_byte_load
+            (SET_DEST (PATTERN (insn)), src, pos);
+          return "";
+        }
+    }
+
   /* Packed SImode fields can reach final output as ordinary word stores even
      when the field begins in the middle of a PDP-10 word.  Do not use the
      rounded MEM address as a full-word destination: split the 36-bit value at

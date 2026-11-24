@@ -23,15 +23,19 @@ upstream historical maintenance notes rather than work specific to this fork.
 
 - [x] Fix the nonterminating packed BLKmode byte-copy loop by binding
   count decrement and backward branch into one RTL/SOJN operation.
-  The 27 old GCC packed-byvalue timeouts are gone; the source now
-  reports 44 independent packed-argument runtime failures rather than
-  any timeouts. Dedicated termination regression: 36/36 GCC PASS.
+  At v23, the 27 old GCC packed-byvalue timeouts became 44
+  independent packed-argument runtime failures. Those subsequent
+  field extraction failures were fixed in v26. Dedicated v23
+  termination regression: 36/36 GCC PASS.
   See `docs/P10-PACKED-BYTE-COPY-COUNTED-LOOP-20261124-v23.md`.
 
-- [ ] Repair the packed-argument-by-value field extraction/ABI defect
-  in `gnu-packed-byvalue.c`; v23 correctly exposes 44 runtime failures
-  without losing the timeout diagnosis. Do not weaken the field-value
-  oracle to make these tests pass.
+- [x] Repair packed 9-bit field extraction from by-value aggregate
+  parameters before CSE. The original `gnu-packed-byvalue.c` now
+  passes 44/44 GCC target profiles, with 36/36 PASS in the new v26
+  signed/unsigned field regression. Direct formal-parameter MEMs
+  are expanded to distinct ZERO_EXTRACT/SIGN_EXTRACT operations;
+  late combined ADD/MOVE sources retain exact width and sign.
+  See `docs/P10-PACKED-BYVALUE-FIELD-EXTRACTION-20261124-v26.md`.
 
 - [x] Remove the invalid out-of-line AOJA literal branch from doubleword
   negation patterns. Use direct SKIPN/ADDI correction of the high word,
@@ -53,11 +57,13 @@ upstream historical maintenance notes rather than work specific to this fork.
   trampoline test. See
   `docs/P10-TRAMPOLINE-STACK-ALIGNMENT-20261124-v21.md`.
 
-- [ ] Analyze the separate GCC wide-integer (`950612-1.c`) and packed
-  aggregate by-value (`gnu-packed-byvalue.c`) timeout clusters. The
-  wide-int KI10/O2 reproducer still fails after 200 million guest
-  steps; the packed-by-value 44-cell GCC matrix still has 27 timeouts
-  and 17 runtime failures. Do not relabel either as a slow PASS.
+- [x] Resolve the previously separate GCC wide-integer
+  (`950612-1.c`) and packed aggregate by-value
+  (`gnu-packed-byvalue.c`) timeout clusters. Wide-integer v22
+  removed 36 timeouts, v23 repaired 27 packed byte-copy timeouts,
+  and v26 repaired the remaining 44 packed parameter runtime
+  failures without weakening the original tests. Independent full
+  compiler-matrix acceptance remains separate.
 
 - [x] Fix speculation of an opaque, untyped reverse-IBP search into
   the native short16 pointer branch. Lower S=1 pointer adjustments

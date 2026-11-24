@@ -191,6 +191,9 @@ extern const char *
 extern const char *
 		pdp10_output_addsi PARAMS ((rtx insn, rtx *operands,
 					     int which_alternative));
+extern int	pdp10_packed_parm_byte_position PARAMS ((rtx mem));
+extern int	pdp10_packed_parm_byte_signed_p PARAMS ((rtx mem));
+extern int	pdp10_expand_packed_parm_byte_load PARAMS ((rtx dst, rtx src));
 extern const char *
 		pdp10_output_movdi PARAMS ((rtx insn, rtx *operands,
 					       int which_alternative, int have_dmove));
