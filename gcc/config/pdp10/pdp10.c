@@ -12619,9 +12619,7 @@ pdp10_expand_addbp3 (type, target, op0, op1)
      rtx op1;
 {
   int byte_size = pdp10_bytesize (type);
-  int bytes_per_word = 36 / byte_size;
   int units_per_byte = (byte_size + BITS_PER_UNIT - 1) / BITS_PER_UNIT;
-  HOST_WIDE_INT increment;
 
   /* Generic ARRAY_REF expansion represents a dynamic short16 index as
      INDEX * TYPE_SIZE_UNIT, i.e. INDEX * 2 in 9-bit C storage units.  The
@@ -12679,6 +12677,20 @@ pdp10_expand_addbp3 (type, target, op0, op1)
             op1 = GEN_INT (n / units_per_byte);
         }
     }
+
+  return pdp10_expand_addbp_elements (type, target, op0, op1);
+}
+
+/* Adjust by an explicit count of source-language elements.  Do not infer
+   storage-unit scaling from the numeric value or shape of that count. */
+rtx
+pdp10_expand_addbp_elements (type, target, op0, op1)
+     tree type;
+     rtx target;
+     rtx op0;
+     rtx op1;
+{
+  int byte_size = pdp10_bytesize (type);
 
   /* ushort16 pointers are self-describing at the KCC/GCC ABI boundary:
      native objects use S=16, while non-byte-aligned packed arrays decay to
@@ -15685,7 +15697,7 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
          Load its *whole* P/S-encoded value before adjusting its field
          offset; do not strip the P/S bits as for an ordinary word
          address in the generic fallback below.  */
-      return pdp10_expand_addbp3 (TREE_TYPE (object), reg, ptr, inc);
+      return pdp10_expand_addbp_elements (TREE_TYPE (object), reg, ptr, inc);
     }
 
   if (word_offset != 0 && GET_CODE (base_addr) != REG)
@@ -15756,7 +15768,7 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
                                  GEN_INT (dyn_index_scale)));
           index_rtx = scaled;
         }
-      return pdp10_expand_addbp3 (dyn_elem_type, reg, reg, index_rtx);
+      return pdp10_expand_addbp_elements (dyn_elem_type, reg, reg, index_rtx);
     }
 
   return reg;

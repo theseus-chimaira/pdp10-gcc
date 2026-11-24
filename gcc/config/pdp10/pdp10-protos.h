@@ -212,6 +212,8 @@ extern int	pdp10_expand_cmpstrsi PARAMS ((rtx *operands));
 extern int	pdp10_bytesize PARAMS ((tree type));
 extern rtx	pdp10_expand_addbp3 PARAMS ((tree type, rtx target, rtx op0,
 					     rtx op1));
+extern rtx	pdp10_expand_addbp_elements PARAMS ((tree type, rtx target, rtx op0,
+					     rtx op1));
 extern int	pdp10_const_word36_byte_pointer_p PARAMS ((rtx x));
 
 /* Unconditional Jumps.  */

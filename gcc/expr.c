@@ -8223,7 +8223,7 @@ expand_expr (exp, target, tmode, modifier)
                   if (!register_operand (idx, Pmode)
                       && GET_CODE (idx) != CONST_INT)
                     idx = force_reg (Pmode, idx);
-                  addr = pdp10_expand_addbp3 (TREE_TYPE (exp), NULL_RTX,
+                  addr = pdp10_expand_addbp_elements (TREE_TYPE (exp), NULL_RTX,
                                               ptr, idx);
                   temp = gen_rtx_MEM (mode, memory_address (mode, addr));
                   set_mem_attributes (temp, exp, 0);
