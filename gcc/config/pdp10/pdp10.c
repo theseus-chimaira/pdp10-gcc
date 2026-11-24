@@ -1590,7 +1590,10 @@ pdp10_legitimize_address (x, oldx, mode)
       rtx high_part;
 
       if (!TARGET_EXTENDED)
-	error ("address too large for unextended mode");
+	/* Local effective addresses use the low 18 bits of the sum.
+	   Fold a large displacement at the address boundary, not in
+	   pointer arithmetic, which may still need the full word.  */
+	return plus_constant (x0, offset & mask);
       else if (offset <= -(HWINT (1) << 30)
 	       || offset >= (HWINT (1) << 30))
 	error ("address too large for extended mode");
@@ -3513,7 +3516,14 @@ pdp10_print_operand_address (stream, x, mode, flags)
 		offset &= ADDRESS_MASK;
 	    }
 
-	  if (offset >= -0400000 && offset <= 0377777)
+          if (!TARGET_EXTENDED)
+            {
+              /* A local indexed operand has an unsigned 18-bit Y field.
+                 A large local displacement never requires a global
+                 indirect word (which PDP-6/KA10 cannot execute).  */
+              pdp10_print_offset (stream, offset & 0777777);
+            }
+          else if (offset >= -0400000 && offset <= 0377777)
 	    pdp10_print_offset (stream, offset);
 	  else
 	    {

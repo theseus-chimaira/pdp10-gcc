@@ -1035,6 +1035,31 @@ handle_alias_attribute (node, name, args, flags, no_add_attrs)
 	  *no_add_attrs = true;
 	  return NULL_TREE;
 	}
+#ifdef __PDP10_H__
+      /* An alias name is compiler metadata, not a target string object.
+         The C lexer stores 9-bit narrow strings as high/low host bytes
+         (TREE_LANG_FLAG_1).  Normalize this argument once so both this
+         lookup and the deferred assembler alias use the same name.  */
+      if (TREE_LANG_FLAG_1 (id))
+        {
+          const unsigned char *src = (const unsigned char *) TREE_STRING_POINTER (id);
+          int len = TREE_STRING_LENGTH (id) / 2;
+          char *namebuf = alloca (len);
+          int i;
+          for (i = 0; i < len; ++i)
+            {
+              if (src[2 * i] || (i < len - 1 && !src[2 * i + 1]))
+                {
+                  error ("alias name is not representable as a host symbol");
+                  *no_add_attrs = true;
+                  return NULL_TREE;
+                }
+              namebuf[i] = src[2 * i + 1];
+            }
+          id = build_string (len, namebuf);
+          TREE_VALUE (args) = id;
+        }
+#endif
       id = get_identifier (TREE_STRING_POINTER (id));
       /* This counts as a use of the object pointed to.  */
       TREE_USED (id) = 1;

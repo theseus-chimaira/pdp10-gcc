@@ -2002,7 +2002,7 @@ do {								\
 */
 
 /* This works for GAS.  */
-#define SET_ASM_OP ".set"
+#define SET_ASM_OP "\t.set\t"
 
 /*
  * Output of Assembler Instructions
