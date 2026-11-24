@@ -21,6 +21,15 @@ upstream historical maintenance notes rather than work specific to this fork.
 
 ## Optimizer and code-size work
 
+- [x] Fix speculation of an opaque, untyped reverse-IBP search into
+  the native short16 pointer branch. Lower S=1 pointer adjustments
+  through typed visible RTL, preserving pointer selector bits and
+  normalizing multiples of 36 bits without loops. All 16 prior
+  `runtime-byte-pointer-diff.c` simulator timeouts are gone; the source
+  now has 33/36 GCC PASS, with 3 KS10 optimized load bugs open.
+  Dedicated v20 regression: 36/36 PASS. Earlier regressions: 216/216
+  PASS. See `docs/P10-LOGICAL-BITPOINTER-SPECULATION-20261124-v20.md`.
+
 - [x] Correct indexed local byte-pointer construction in GCC's
   `*addsi3` emitter. A register-indexed full POINT constant must
   retain P/S: generate MOVEI of the word address followed by HRLI

@@ -12552,8 +12552,36 @@ pdp10_expand_addbp3 (type, target, op0, op1)
         }
       if (!register_operand (scaled, Pmode) && GET_CODE (scaled) != CONST_INT)
         scaled = force_reg (Pmode, scaled);
-      emit_insn (gen_rtx_SET (VOIDmode, target,
-                              gen_rtx_ADJBP (Pmode, op0, scaled)));
+      /* The S=1 branch is a *typed* bit-pointer adjustment.  Do not
+         emit a raw, untyped ADJBP here on pre-KL10 machines.  Its
+         assembler fallback hides a potentially unbounded reverse-IBP
+         search inside a single RTL SET.  The optimizer can speculate
+         that nominally side-effect-free SET ahead of this branch,
+         executing the search even when OP0 is a native S=16 pointer.
+
+         Emit the real one-bit arithmetic as RTL instead.  In particular,
+         constant offsets divisible by 36 become direct right-half word
+         adjustments, preserving the P/S selector without a byte loop.
+         Dynamic offsets use the existing explicit RTL loop, whose
+         control flow remains visible to the optimizer.  */
+      if (TARGET_KL10up)
+        emit_insn (gen_rtx_SET (VOIDmode, target,
+                                gen_rtx_ADJBP (Pmode, op0, scaled)));
+      else if (GET_CODE (scaled) == CONST_INT
+               && (HOST_WIDE_INT) (int) INTVAL (scaled)
+                  == INTVAL (scaled))
+        {
+          if (INTVAL (scaled) == 0)
+            emit_move_insn (target, op0);
+          else if (!maybe_expand_ibp (1, target, op0,
+                                      (int) INTVAL (scaled)))
+            abort ();
+        }
+      else
+        /* The constant IBP helper takes a host int.  Larger PDP-10
+           counts must retain their full width in the general RTL
+           adjustment rather than silently truncating on the host.  */
+        expand_adjust_byte_pointer_size (1, target, op0, scaled);
       emit_jump_insn (gen_jump (done_label));
       emit_barrier ();
 
