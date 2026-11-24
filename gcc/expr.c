@@ -4003,6 +4003,67 @@ single_component_in_word_p (to, to_rtx, pbitpos)
   }
 }
 
+#if REAL_BITS_PER_UNIT == 36
+/* Constant references into an array or record have a bit offset from
+   the containing object.  A static DECL_RTL may carry a byte selector
+   describing its first element; do not apply that selector a second
+   time when addressing the containing physical word. */
+static rtx
+pdp10_aggregate_word_mem (mem)
+     rtx mem;
+{
+  rtx base;
+  pdp10_expr_word36 offset;
+  if (GET_CODE (mem) != MEM
+      || !pdp10_const_word36_byte_pointer_p (XEXP (mem, 0))
+      || !pdp10_expr_decompose_symbolic_word36 (XEXP (mem, 0),
+                                                &base, &offset)
+      || base == NULL_RTX)
+    return mem;
+  offset &= TARGET_EXTENDED ? 07777777777ULL : 0777777ULL;
+  mem = replace_equiv_address (mem, plus_constant (base, offset));
+  set_mem_align (mem, BITS_PER_WORD);
+  return mem;
+}
+
+/* Move a packed aggregate between word-addressed memory objects.  Split
+   at BOTH word boundaries, not at GCC's nominal nine-bit storage units.
+   Each piece is a scalar extraction followed by a scalar insertion.
+   The caller supplies an independent temporary if the objects overlap. */
+static void
+pdp10_copy_aggregate_bits (dst, dstpos, src, srcpos, bits)
+     rtx dst, src;
+     HOST_WIDE_INT dstpos, srcpos, bits;
+{
+  while (bits > 0)
+    {
+      HOST_WIDE_INT d = dstpos % BITS_PER_WORD;
+      HOST_WIDE_INT s = srcpos % BITS_PER_WORD;
+      HOST_WIDE_INT n = MIN (bits, MIN (BITS_PER_WORD - d,
+                                      BITS_PER_WORD - s));
+      rtx dw = adjust_address (dst, SImode, dstpos / BITS_PER_WORD);
+      rtx sw = adjust_address (src, SImode, srcpos / BITS_PER_WORD);
+      rtx part;
+
+      set_mem_align (dw, BITS_PER_WORD);
+      set_mem_align (sw, BITS_PER_WORD);
+      set_mem_alias_set (dw, 0);
+      set_mem_alias_set (sw, 0);
+      if (n == BITS_PER_WORD)
+        emit_move_insn (dw, sw);
+      else
+        {
+          part = extract_bit_field (sw, n, s, 1, NULL_RTX,
+                                    SImode, SImode, -1);
+          store_bit_field (dw, n, d, SImode, part, -1);
+        }
+      dstpos += n;
+      srcpos += n;
+      bits -= n;
+    }
+}
+#endif
+
 /* Expand an assignment that stores the value of FROM into TO.
    If WANT_VALUE is nonzero, return an rtx for the value of TO.
    (This may contain a QUEUED rtx;
@@ -4108,6 +4169,40 @@ expand_assignment (to, from, want_value, suggest_reg)
 	tem = stabilize_reference (tem);
 
       orig_to_rtx = to_rtx = expand_expr (tem, NULL_RTX, VOIDmode, 0);
+#if REAL_BITS_PER_UNIT == 36
+      if (TREE_CODE (tem) == VAR_DECL && AGGREGATE_TYPE_P (TREE_TYPE (tem)))
+        orig_to_rtx = to_rtx = pdp10_aggregate_word_mem (to_rtx);
+#endif
+
+
+#if REAL_BITS_PER_UNIT == 36
+      if (offset == 0 && bitsize > 0 && bitpos >= 0
+          && AGGREGATE_TYPE_P (TREE_TYPE (to))
+          && GET_CODE (to_rtx) == MEM
+          && (bitpos % BITS_PER_WORD || bitsize % BITS_PER_WORD))
+        {
+          tree object_type = TREE_TYPE (to);
+          rtx value = expand_expr (from, NULL_RTX, VOIDmode, EXPAND_NORMAL);
+          rtx snapshot = assign_temp (object_type, 0, 1, 1);
+
+          if (GET_CODE (value) != MEM)
+            emit_move_insn (snapshot, value);
+          else
+            pdp10_copy_aggregate_bits (snapshot, 0, value, 0, bitsize);
+
+          if (volatilep)
+            {
+              to_rtx = copy_rtx (to_rtx);
+              MEM_VOLATILE_P (to_rtx) = 1;
+            }
+          pdp10_copy_aggregate_bits (to_rtx, bitpos, snapshot, 0, bitsize);
+          result = want_value ? snapshot : NULL_RTX;
+          preserve_temp_slots (result);
+          free_temp_slots ();
+          pop_temp_slots ();
+          return result;
+        }
+#endif
 
       if (offset != 0)
 	{
@@ -8208,6 +8303,13 @@ expand_expr (exp, target, tmode, modifier)
 	  set_mem_align (op0, BITS_PER_WORD);
 	}
 
+#if REAL_BITS_PER_UNIT == 36
+        if (TREE_CODE (tem) == VAR_DECL && AGGREGATE_TYPE_P (TREE_TYPE (tem))
+            && modifier != EXPAND_CONST_ADDRESS
+            && modifier != EXPAND_INITIALIZER)
+          orig_op0 = op0 = pdp10_aggregate_word_mem (op0);
+#endif
+
 	/* If this is a constant, put it into a register if it is a
 	   legitimate constant and OFFSET is 0 and memory if it isn't.  */
 	if (CONSTANT_P (op0))
@@ -8497,6 +8599,21 @@ expand_expr (exp, target, tmode, modifier)
 
 	    MEM_VOLATILE_P (op0) = 1;
 	  }
+
+#if REAL_BITS_PER_UNIT == 36
+        if (offset == 0 && bitsize > 0 && bitpos >= 0
+            && AGGREGATE_TYPE_P (type)
+            && GET_CODE (op0) == MEM
+            && modifier != EXPAND_CONST_ADDRESS
+            && modifier != EXPAND_INITIALIZER
+            && modifier != EXPAND_WRITE
+            && (bitpos % BITS_PER_WORD || bitsize % BITS_PER_WORD))
+          {
+            rtx object = assign_temp (type, 0, 1, 1);
+            pdp10_copy_aggregate_bits (object, 0, op0, bitpos, bitsize);
+            return object;
+          }
+#endif
 
 	/* The following code doesn't handle CONCAT.
 	   Assume only bitpos == 0 can be used for CONCAT, due to

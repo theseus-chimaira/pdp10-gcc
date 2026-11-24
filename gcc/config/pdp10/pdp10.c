@@ -14796,7 +14796,8 @@ pdp10_initializer_type_bitsize (type, bitsp)
   if (type == error_mark_node)
     return 0;
 
-  if ((TREE_CODE (type) == RECORD_TYPE || TREE_CODE (type) == ARRAY_TYPE)
+  if ((TREE_CODE (type) == RECORD_TYPE || TREE_CODE (type) == UNION_TYPE
+       || TREE_CODE (type) == ARRAY_TYPE)
       && TYPE_SIZE (type) != 0
       && host_integerp (TYPE_SIZE (type), 1))
     {
@@ -14835,6 +14836,13 @@ pdp10_initializer_record_field_bitpos (type, wanted, bitposp)
   tree field;
   pdp10_word36 bitpos;
 
+  /* All union alternatives begin at the same address.  Do not walk
+     preceding alternatives as if they were sequential record fields. */
+  if (TREE_CODE (type) == UNION_TYPE)
+    {
+      *bitposp = int_bit_position (wanted);
+      return 1;
+    }
   if (TREE_CODE (type) != RECORD_TYPE)
     return 0;
 
