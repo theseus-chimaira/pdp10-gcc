@@ -8230,6 +8230,24 @@ pdp10_output_movhi (operands, sign_extend)
         return bitmove;
     }
 
+  /* Optimized signed short16 pointer dereferences can become a plain
+     HImode MEM with a constant POINT 16 address.  The generic HLRZ
+     fast path extracts 18 bits, including two padding bits after the
+     16-bit field.  A subsequent 16-bit sign extension then discards
+     the actual sign bit (e.g. -32767 becomes 4).  Load the precise
+     16-bit byte through its already-encoded pointer instead.  This
+     also leaves the HImode value correctly right-justified for the
+     following sign-extension instruction.  */
+  if (!store && address && CONSTANT_P (address)
+      && pdp10_const_word36_byte_pointer_p (address))
+    {
+      rtx base;
+      pdp10_word36 encoded;
+      if (pdp10_decompose_symbolic_word36 (address, &base, &encoded)
+          && ((encoded >> 24) & 077) == 16)
+        return "ldb %0,%1";
+    }
+
   if (address && GET_CODE (address) == PRE_INC)
     {
       if (store)
@@ -12474,7 +12492,14 @@ pdp10_expand_addbp3 (type, target, op0, op1)
       rtx native_label = gen_label_rtx ();
       rtx done_label = gen_label_rtx ();
 
+      /* Both S=1 and native S=16 branches must write the same result.
+         The native helper allocates a new register if TARGET aliases
+         OP0 (ADJBP needs the original pointer), and its return value
+         was previously ignored here.  Optimized in-place subtraction
+         then used the unmodified input pointer on the native branch.
+         Choose a non-overlapping result before splitting the paths.  */
       if (!target || !register_operand (target, Pmode)
+          || reg_overlap_mentioned_p (target, op0)
           || reg_overlap_mentioned_p (target, op1))
         target = gen_reg_rtx (Pmode);
       if (!register_operand (op0, Pmode))
@@ -12636,7 +12661,18 @@ expand_add_or_sub_pointer (target, op0, type0, op1, type1, add)
       && pdp10_const_word36_byte_pointer_p (op0))
     {
       HOST_WIDE_INT n = add ? INTVAL (op1) : -INTVAL (op1);
-      int adjust = (int) n;
+      int adjust;
+
+      /* The generic front end expresses constant short16 subscripts
+         in 9-bit C units, two per physical 16-bit PDP-10 byte.  The
+         early symbolic-pointer fold must use the same element-count
+         normalization as pdp10_expand_addbp3 below; otherwise
+         &a[3] becomes POINT 16,a+3,15 instead of a+1,31.
+         Leave already-unscaled odd counts intact.  */
+      if (pdp10_bytesize (type) == 16 && n % 2 == 0)
+        n /= 2;
+
+      adjust = (int) n;
 
       if ((HOST_WIDE_INT) adjust == n)
         {
@@ -14078,6 +14114,45 @@ pdp10_expand_binop (mode, binoptab, op0, op1, target, unsignedp, methods, exp)
 
       if (ptr0 || ptr1)
 	{
+	  /* Generic C pointer addition to short16 has already multiplied
+	     its integer index by TYPE_SIZE_UNIT (two 9-bit C units) before
+	     this hook receives the RTL.  The PDP-10 byte-pointer adjuster,
+	     however, consumes a count of physical 16-bit elements.  Direct
+	     packed ARRAY_REF lowering supplies an unscaled element index,
+	     so only normalize the *proven* generic multiply-by-two tree.
+
+	     Do not re-expand the original index expression: it may have
+	     side effects (for instance, p + i++).  Shift the already
+	     evaluated value back to element units.  Constants and intact
+	     MULT/ASHIFT RTX forms are normalized by pdp10_expand_addbp3.  */
+	  if (POINTER_TYPE_P (TREE_TYPE (exp)) && ptr0
+	      && pdp10_bytesize (TREE_TYPE (TREE_TYPE (exp))) == 16
+	      && GET_CODE (op1) != CONST_INT
+	      && GET_CODE (op1) != MULT
+	      && GET_CODE (op1) != ASHIFT)
+	    {
+	      tree step = TREE_OPERAND (exp, 1);
+	      STRIP_NOPS (step);
+	      if (TREE_CODE (step) == MULT_EXPR)
+		{
+		  tree a = TREE_OPERAND (step, 0);
+		  tree b = TREE_OPERAND (step, 1);
+		  if ((TREE_CODE (b) == INTEGER_CST
+		       && TREE_INT_CST_HIGH (b) == 0
+		       && TREE_INT_CST_LOW (b) == 2)
+		      || (TREE_CODE (a) == INTEGER_CST
+		          && TREE_INT_CST_HIGH (a) == 0
+		          && TREE_INT_CST_LOW (a) == 2))
+		    {
+		      rtx elements = gen_reg_rtx (Pmode);
+		      if (!register_operand (op1, Pmode))
+		        op1 = force_reg (Pmode, op1);
+		      emit_insn (gen_ashrsi3_pointer
+		                 (elements, op1, GEN_INT (1)));
+		      op1 = elements;
+		    }
+		}
+	    }
 	  if (POINTER_TYPE_P (TREE_TYPE (exp)))
 	    {
 	      type0 = TREE_TYPE (exp);

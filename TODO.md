@@ -21,6 +21,14 @@ upstream historical maintenance notes rather than work specific to this fork.
 
 ## Optimizer and code-size work
 
+- [x] Correct GCC short16 dynamic pointer scaling, constant POINT 16
+  address construction, optimized 16-bit signed loads and KS10 native
+  ADJBP result-register aliasing. The permanent PDP-10 testkit v18
+  regression passes 36/36 GCC cells, with the larger byte-pointer test
+  now passing all 9 O0 cells. Preserve the 11 optimized assertion
+  failures and 16 timeout cells as separate open work. See
+  `docs/P10-SHORT16-BYTEPTR-SCALING-20261124-v18.md`.
+
 - [x] Repair unsigned 36-bit `SImode` division/remainder on all PDP-10
   CPU profiles. Split numerator bit 35 into the high DIV accumulator
   before the 70-bit divide; correct general-case branch displacements.
