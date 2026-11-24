@@ -5170,6 +5170,188 @@ array_size_for_constructor (val)
   return tree_low_cst (i, 1);
 }
 
+#ifdef __PDP10_H__
+/* Emit an integer-only packed constructor as a single continuous bit
+   stream.  Field positions are the laid-out tree positions, not positions
+   recomputed from the byte-pointer sizes.  The stream retains at most
+   one target byte, including across nested constructors and array rows.
+   Validate the complete constructor before committing assembler output. */
+struct pdp10_packed_stream
+{
+  HOST_WIDE_INT pos;
+  unsigned int byte;
+  int emit;
+};
+
+static void
+pdp10_packed_stream_bits (stream, value, width)
+     struct pdp10_packed_stream *stream;
+     tree value;
+     HOST_WIDE_INT width;
+{
+  while (width > 0)
+    {
+      int room = BITS_PER_UNIT - stream->pos % BITS_PER_UNIT;
+      int n = MIN (width, room);
+      HOST_WIDE_INT shift = width - n;
+      unsigned int piece = 0;
+      if (value != NULL_TREE && stream->emit)
+        {
+          /* Read at most nine bits, including a host-word boundary. */
+          int i;
+          for (i = n - 1; i >= 0; --i)
+            {
+              HOST_WIDE_INT bit = shift + i;
+              unsigned HOST_WIDE_INT word;
+              if (bit < HOST_BITS_PER_WIDE_INT)
+                word = TREE_INT_CST_LOW (value);
+              else
+                {
+                  word = TREE_INT_CST_HIGH (value);
+                  bit -= HOST_BITS_PER_WIDE_INT;
+                }
+              piece = (piece << 1) | ((word >> bit) & 1);
+            }
+        }
+      stream->byte = (stream->byte << n) | piece;
+      stream->pos += n;
+      width -= n;
+      if (stream->pos % BITS_PER_UNIT == 0)
+        {
+          if (stream->emit)
+            {
+              int old = pdp10_bits_per_unit;
+              pdp10_bits_per_unit = BITS_PER_UNIT;
+              assemble_integer (GEN_INT (stream->byte), 1, BITS_PER_UNIT, 1);
+              pdp10_bits_per_unit = old;
+            }
+          stream->byte = 0;
+        }
+    }
+}
+
+static int
+pdp10_packed_constructor_walk (stream, exp, type, start, width)
+     struct pdp10_packed_stream *stream;
+     tree exp, type;
+     HOST_WIDE_INT start, width;
+{
+  tree link;
+  HOST_WIDE_INT end = start + width;
+  if (start < stream->pos || width < 0)
+    return 0;
+  pdp10_packed_stream_bits (stream, NULL_TREE, start - stream->pos);
+  if (exp == NULL_TREE)
+    {
+      pdp10_packed_stream_bits (stream, NULL_TREE, width);
+      return 1;
+    }
+  if (INTEGRAL_TYPE_P (type) && TREE_CODE (exp) == INTEGER_CST
+      && width <= BITS_PER_WORD)
+    {
+      pdp10_packed_stream_bits (stream, exp, width);
+      return 1;
+    }
+  if (TREE_CODE (exp) != CONSTRUCTOR)
+    return 0;
+  if (TREE_CODE (type) == RECORD_TYPE || TREE_CODE (type) == UNION_TYPE)
+    {
+      for (link = CONSTRUCTOR_ELTS (exp); link; link = TREE_CHAIN (link))
+        {
+          tree field = TREE_PURPOSE (link);
+          HOST_WIDE_INT pos, bits;
+          if (!field || TREE_CODE (field) != FIELD_DECL
+              || !DECL_SIZE (field) || !host_integerp (DECL_SIZE (field), 1)
+              || !DECL_FIELD_OFFSET (field)
+              || !host_integerp (DECL_FIELD_OFFSET (field), 1)
+              || !host_integerp (DECL_FIELD_BIT_OFFSET (field), 1))
+            return 0;
+          pos = start + int_bit_position (field);
+          bits = tree_low_cst (DECL_SIZE (field), 1);
+          if (pos < start || pos > end || bits > end - pos
+              || !pdp10_packed_constructor_walk (stream, TREE_VALUE (link),
+                                                 TREE_TYPE (field), pos, bits))
+            return 0;
+        }
+    }
+  else if (TREE_CODE (type) == ARRAY_TYPE)
+    {
+      tree elem = TREE_TYPE (type);
+      tree domain = TYPE_DOMAIN (type);
+      HOST_WIDE_INT low, bits;
+      if (!domain || !TYPE_MIN_VALUE (domain)
+          || !host_integerp (TYPE_MIN_VALUE (domain), 0)
+          || !TYPE_SIZE (elem) || !host_integerp (TYPE_SIZE (elem), 1))
+        return 0;
+      low = tree_low_cst (TYPE_MIN_VALUE (domain), 0);
+      bits = tree_low_cst (TYPE_SIZE (elem), 1);
+      if (bits <= 0)
+        return 0;
+      for (link = CONSTRUCTOR_ELTS (exp); link; link = TREE_CHAIN (link))
+        {
+          tree index = TREE_PURPOSE (link);
+          HOST_WIDE_INT first, last, i;
+          if (!index)
+            return 0;
+          if (TREE_CODE (index) == RANGE_EXPR)
+            {
+              if (!host_integerp (TREE_OPERAND (index, 0), 0)
+                  || !host_integerp (TREE_OPERAND (index, 1), 0))
+                return 0;
+              first = tree_low_cst (TREE_OPERAND (index, 0), 0);
+              last = tree_low_cst (TREE_OPERAND (index, 1), 0);
+            }
+          else
+            {
+              if (!host_integerp (index, 0))
+                return 0;
+              first = last = tree_low_cst (index, 0);
+            }
+          if (first < low || last < first || last - low >= width / bits)
+            return 0;
+          for (i = first - low; i <= last - low; ++i)
+            if (!pdp10_packed_constructor_walk (stream, TREE_VALUE (link),
+                                               elem, start + i * bits, bits))
+              return 0;
+        }
+    }
+  else
+    return 0;
+  if (stream->pos > end)
+    return 0;
+  pdp10_packed_stream_bits (stream, NULL_TREE, end - stream->pos);
+  return 1;
+}
+
+static int
+pdp10_output_packed_constructor (exp, size)
+     tree exp;
+     HOST_WIDE_INT size;
+{
+  struct pdp10_packed_stream stream;
+  tree type = TREE_TYPE (exp);
+  tree inner = type;
+  while (TREE_CODE (inner) == ARRAY_TYPE)
+    inner = TREE_TYPE (inner);
+  if ((TREE_CODE (inner) != RECORD_TYPE && TREE_CODE (inner) != UNION_TYPE)
+      || !TYPE_PACKED (inner) || size < 0)
+    return 0;
+  stream.pos = 0;
+  stream.byte = 0;
+  stream.emit = 0;
+  if (!pdp10_packed_constructor_walk (&stream, exp, type, 0,
+                                      size * BITS_PER_UNIT))
+    return 0;
+  stream.pos = 0;
+  stream.byte = 0;
+  stream.emit = 1;
+  if (!pdp10_packed_constructor_walk (&stream, exp, type, 0,
+                                      size * BITS_PER_UNIT))
+    abort ();
+  return 1;
+}
+#endif
+
 /* Subroutine of output_constant, used for CONSTRUCTORs (aggregate constants).
    Generate at least SIZE bytes, padding if necessary.  */
 
@@ -5194,6 +5376,11 @@ output_constructor (exp, size, align)
 
   if (HOST_BITS_PER_WIDE_INT < BITS_PER_UNIT)
     abort ();
+#ifdef __PDP10_H__
+  if (pdp10_output_packed_constructor (exp, size))
+    return;
+#endif
+
 
   if (TREE_CODE (type) == RECORD_TYPE)
     field = TYPE_FIELDS (type);

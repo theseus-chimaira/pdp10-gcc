@@ -4026,10 +4026,149 @@ pdp10_aggregate_word_mem (mem)
   return mem;
 }
 
-/* Move a packed aggregate between word-addressed memory objects.  Split
-   at BOTH word boundaries, not at GCC's nominal nine-bit storage units.
-   Each piece is a scalar extraction followed by a scalar insertion.
-   The caller supplies an independent temporary if the objects overlap. */
+/* Construct a physical word reference.  The original MEM's object and
+   offset attributes describe a C subobject, not this containing word.
+   Do not allow reload or the target output hooks to narrow it again. */
+static rtx
+pdp10_slice_word (mem, word)
+     rtx mem;
+     HOST_WIDE_INT word;
+{
+  rtx ref = gen_rtx_MEM (SImode,
+                        memory_address (SImode,
+                          plus_constant (XEXP (mem, 0), word)));
+  MEM_VOLATILE_P (ref) = MEM_VOLATILE_P (mem);
+  set_mem_align (ref, BITS_PER_WORD);
+  return ref;
+}
+
+/* A constant subobject path in a packed declaration has a single
+   physical layout: the front end's field positions and array strides.
+   Ordinary scalar byte arrays keep their separate machine byte layout. */
+static tree
+pdp10_packed_decl_ref (exp, pos, width)
+     tree exp;
+     HOST_WIDE_INT *pos, *width;
+{
+  tree type = TREE_TYPE (exp);
+  tree t = exp;
+  int packed = 0;
+  *pos = 0;
+  if (!INTEGRAL_TYPE_P (type) || !TYPE_SIZE (type)
+      || !host_integerp (TYPE_SIZE (type), 1))
+    return NULL_TREE;
+  *width = tree_low_cst (TYPE_SIZE (type), 1);
+  if (TREE_CODE (t) == COMPONENT_REF)
+    {
+      tree field = TREE_OPERAND (t, 1);
+      if (!DECL_SIZE (field) || !host_integerp (DECL_SIZE (field), 1))
+        return NULL_TREE;
+      *width = tree_low_cst (DECL_SIZE (field), 1);
+    }
+  if (*width <= 0 || *width > BITS_PER_WORD)
+    return NULL_TREE;
+  for (;;)
+    {
+      if (TREE_CODE (t) == COMPONENT_REF)
+        {
+          tree field = TREE_OPERAND (t, 1);
+          tree parent = TREE_OPERAND (t, 0);
+          if (!DECL_FIELD_OFFSET (field)
+              || !host_integerp (DECL_FIELD_OFFSET (field), 1)
+              || !host_integerp (DECL_FIELD_BIT_OFFSET (field), 1))
+            return NULL_TREE;
+          packed |= TYPE_PACKED (TREE_TYPE (parent)) || DECL_PACKED (field);
+          *pos += int_bit_position (field);
+          t = parent;
+        }
+      else if (TREE_CODE (t) == ARRAY_REF)
+        {
+          tree index = TREE_OPERAND (t, 1);
+          tree parent = TREE_OPERAND (t, 0);
+          tree domain = TYPE_DOMAIN (TREE_TYPE (parent));
+          tree low = domain ? TYPE_MIN_VALUE (domain) : integer_zero_node;
+          tree size = TYPE_SIZE (TREE_TYPE (t));
+          if (!host_integerp (index, 0) || !low
+              || !host_integerp (low, 0) || !size
+              || !host_integerp (size, 1))
+            return NULL_TREE;
+          *pos += (tree_low_cst (index, 0) - tree_low_cst (low, 0))
+                  * tree_low_cst (size, 1);
+          t = parent;
+        }
+      else
+        break;
+    }
+  if (!packed || *pos < 0 || TREE_CODE (t) != VAR_DECL)
+    return NULL_TREE;
+  return t;
+}
+
+/* Extract a scalar from a physical bit interval, possibly spanning two
+   words.  Keep partial values right aligned until the final extension. */
+static rtx
+pdp10_packed_scalar_load (mem, pos, width, unsignedp)
+     rtx mem;
+     HOST_WIDE_INT pos, width;
+     int unsignedp;
+{
+  HOST_WIDE_INT first = MIN (width, BITS_PER_WORD - pos % BITS_PER_WORD);
+  rtx word = pdp10_slice_word (mem, pos / BITS_PER_WORD);
+  rtx value = gen_reg_rtx (SImode);
+  if (first == BITS_PER_WORD)
+    emit_move_insn (value, word);
+  else
+    emit_insn (gen_extzv (value, word, GEN_INT (first),
+                         GEN_INT (pos % BITS_PER_WORD)));
+  if (first < width)
+    {
+      HOST_WIDE_INT rest = width - first;
+      rtx tail = gen_reg_rtx (SImode);
+      emit_insn (gen_extzv (tail,
+                 pdp10_slice_word (mem, pos / BITS_PER_WORD + 1),
+                 GEN_INT (rest), const0_rtx));
+      emit_insn (gen_ashlsi3 (value, value, GEN_INT (rest)));
+      emit_insn (gen_iorsi3 (value, value, tail));
+    }
+  if (!unsignedp && width < BITS_PER_WORD)
+    {
+      rtx extended = gen_reg_rtx (SImode);
+      emit_insn (gen_sign_extendsi (extended, value,
+                                   GEN_INT (BITS_PER_WORD - width)));
+      value = extended;
+    }
+  return value;
+}
+
+static void
+pdp10_packed_scalar_store (mem, pos, width, value)
+     rtx mem, value;
+     HOST_WIDE_INT pos, width;
+{
+  HOST_WIDE_INT first = MIN (width, BITS_PER_WORD - pos % BITS_PER_WORD);
+  rtx word = pdp10_slice_word (mem, pos / BITS_PER_WORD);
+  value = force_reg (SImode, value);
+  if (first == BITS_PER_WORD)
+    emit_move_insn (word, value);
+  else if (first == width)
+    emit_insn (gen_insv (word, GEN_INT (width),
+                         GEN_INT (pos % BITS_PER_WORD), value));
+  else
+    {
+      HOST_WIDE_INT rest = width - first;
+      rtx top = gen_reg_rtx (SImode);
+      emit_insn (gen_lshrsi3 (top, value, GEN_INT (rest)));
+      emit_insn (gen_insv (word, GEN_INT (first),
+                           GEN_INT (pos % BITS_PER_WORD), top));
+      emit_insn (gen_insv (pdp10_slice_word (mem, pos / BITS_PER_WORD + 1),
+                           GEN_INT (rest), const0_rtx, value));
+    }
+}
+
+/* Copy slices at both physical word boundaries.  The caller provides an
+   independent snapshot for potentially overlapping objects.  The target
+   extraction/insertion patterns consume physical bit positions; unlike
+   generic expmed they do not select a narrower memory mode. */
 static void
 pdp10_copy_aggregate_bits (dst, dstpos, src, srcpos, bits)
      rtx dst, src;
@@ -4041,21 +4180,17 @@ pdp10_copy_aggregate_bits (dst, dstpos, src, srcpos, bits)
       HOST_WIDE_INT s = srcpos % BITS_PER_WORD;
       HOST_WIDE_INT n = MIN (bits, MIN (BITS_PER_WORD - d,
                                       BITS_PER_WORD - s));
-      rtx dw = adjust_address (dst, SImode, dstpos / BITS_PER_WORD);
-      rtx sw = adjust_address (src, SImode, srcpos / BITS_PER_WORD);
+      rtx dw = pdp10_slice_word (dst, dstpos / BITS_PER_WORD);
+      rtx sw = pdp10_slice_word (src, srcpos / BITS_PER_WORD);
       rtx part;
 
-      set_mem_align (dw, BITS_PER_WORD);
-      set_mem_align (sw, BITS_PER_WORD);
-      set_mem_alias_set (dw, 0);
-      set_mem_alias_set (sw, 0);
       if (n == BITS_PER_WORD)
         emit_move_insn (dw, sw);
       else
         {
-          part = extract_bit_field (sw, n, s, 1, NULL_RTX,
-                                    SImode, SImode, -1);
-          store_bit_field (dw, n, d, SImode, part, -1);
+          part = gen_reg_rtx (SImode);
+          emit_insn (gen_extzv (part, sw, GEN_INT (n), GEN_INT (s)));
+          emit_insn (gen_insv (dw, GEN_INT (n), GEN_INT (d), part));
         }
       dstpos += n;
       srcpos += n;
@@ -4159,6 +4294,34 @@ expand_assignment (to, from, want_value, suggest_reg)
       tree tem;
 
       push_temp_slots ();
+#if REAL_BITS_PER_UNIT == 36
+      {
+        HOST_WIDE_INT p, w;
+        tree root = pdp10_packed_decl_ref (to, &p, &w);
+        if (root && !TREE_THIS_VOLATILE (to) && !TREE_THIS_VOLATILE (root))
+          {
+            rtx mem = expand_expr (root, NULL_RTX, VOIDmode, EXPAND_NORMAL);
+            if (GET_CODE (mem) == MEM)
+              {
+                rtx v = expand_expr (from, NULL_RTX, VOIDmode, EXPAND_NORMAL);
+                v = convert_modes (SImode, TYPE_MODE (TREE_TYPE (from)),
+                                   v, TREE_UNSIGNED (TREE_TYPE (from)));
+                mem = pdp10_aggregate_word_mem (mem);
+                pdp10_packed_scalar_store (mem, p, w, v);
+                result = want_value
+                  ? convert_modes (TYPE_MODE (TREE_TYPE (to)), SImode,
+                                   pdp10_packed_scalar_load
+                                     (mem, p, w, TREE_UNSIGNED (TREE_TYPE (to))),
+                                   TREE_UNSIGNED (TREE_TYPE (to)))
+                  : NULL_RTX;
+                preserve_temp_slots (result);
+                free_temp_slots ();
+                pop_temp_slots ();
+                return result;
+              }
+          }
+      }
+#endif
       tem = get_inner_reference (to, &bitsize, &bitpos, &offset, &mode1,
 				 &unsignedp, &volatilep);
 
@@ -8000,6 +8163,22 @@ expand_expr (exp, target, tmode, modifier)
     case ARRAY_REF:
       if (TREE_CODE (TREE_TYPE (TREE_OPERAND (exp, 0))) != ARRAY_TYPE)
 	abort ();
+#if REAL_BITS_PER_UNIT == 36
+      if (modifier == EXPAND_NORMAL && !TREE_THIS_VOLATILE (exp))
+        {
+          HOST_WIDE_INT p, w;
+          tree root = pdp10_packed_decl_ref (exp, &p, &w);
+          if (root && !TREE_THIS_VOLATILE (root))
+            {
+              rtx mem = expand_expr (root, NULL_RTX, VOIDmode, EXPAND_NORMAL);
+              if (GET_CODE (mem) == MEM)
+                return convert_modes (mode, SImode,
+                         pdp10_packed_scalar_load (pdp10_aggregate_word_mem (mem),
+                                                  p, w, TREE_UNSIGNED (type)),
+                         TREE_UNSIGNED (type));
+            }
+        }
+#endif
 
 #if REAL_BITS_PER_UNIT == 36
       /* Direct access to packed exact16 array fields must keep the exact bit
@@ -8150,6 +8329,22 @@ expand_expr (exp, target, tmode, modifier)
     case COMPONENT_REF:
     case BIT_FIELD_REF:
     case ARRAY_RANGE_REF:
+#if REAL_BITS_PER_UNIT == 36
+      if (modifier == EXPAND_NORMAL && !TREE_THIS_VOLATILE (exp))
+        {
+          HOST_WIDE_INT p, w;
+          tree root = pdp10_packed_decl_ref (exp, &p, &w);
+          if (root && !TREE_THIS_VOLATILE (root))
+            {
+              rtx mem = expand_expr (root, NULL_RTX, VOIDmode, EXPAND_NORMAL);
+              if (GET_CODE (mem) == MEM)
+                return convert_modes (mode, SImode,
+                         pdp10_packed_scalar_load (pdp10_aggregate_word_mem (mem),
+                                                  p, w, TREE_UNSIGNED (type)),
+                         TREE_UNSIGNED (type));
+            }
+        }
+#endif
 #if REAL_BITS_PER_UNIT == 36
       /* On the PDP-10 a pointer into a byte-packed record carries its
          current 9-bit byte position in the pointer's P/S field.  The
