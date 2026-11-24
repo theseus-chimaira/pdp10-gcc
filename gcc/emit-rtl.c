@@ -1161,13 +1161,26 @@ gen_lowpart (mode, x)
 		   - MIN (UNITS_PER_WORD, GET_MODE_SIZE (GET_MODE (x))));
 
       if (GET_MODE_SIZE (mode) < UNITS_PER_WORD)
-	/* PDP-10: pretend it's a bit field.  */
-	return
-	  gen_rtx_SUBREG (mode,
-			  gen_rtx_ZERO_EXTRACT (word_mode, x,
-						GEN_INT (GET_MODE_BITSIZE (mode)),
-						GEN_INT (offset * BITS_PER_UNIT)),
-			  0);
+        {
+          /* PDP-10 addresses memory in words.  For a subword of a
+             multiword object, select its containing physical word
+             before constructing the bit-field extraction.  Passing
+             the original DImode MEM with a bit position >= 36 makes
+             generic RTL normalization apply a C-unit displacement
+             to a word address.  */
+          if (GET_MODE_SIZE (GET_MODE (x)) > UNITS_PER_WORD)
+            {
+              x = adjust_address (x, word_mode,
+                                  offset / (UNITS_PER_WORD
+                                            / REAL_UNITS_PER_WORD));
+              offset %= UNITS_PER_WORD;
+            }
+          return gen_rtx_SUBREG
+            (mode, gen_rtx_ZERO_EXTRACT (word_mode, x,
+                                         GEN_INT (GET_MODE_BITSIZE (mode)),
+                                         GEN_INT (offset * BITS_PER_UNIT)),
+             0);
+        }
       else
 	return adjust_address (x, mode,
 			       /* PDP-10: adjust by number of words,
