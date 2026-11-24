@@ -4338,7 +4338,10 @@ expand_assignment (to, from, want_value, suggest_reg)
 
       orig_to_rtx = to_rtx = expand_expr (tem, NULL_RTX, VOIDmode, 0);
 #if REAL_BITS_PER_UNIT == 36
-      if (TREE_CODE (tem) == VAR_DECL && AGGREGATE_TYPE_P (TREE_TYPE (tem)))
+      /* Physical bit positions need the containing word, but dynamic
+         byte indexing must retain the original byte-pointer selector. */
+      if (offset == 0 && TREE_CODE (tem) == VAR_DECL
+          && AGGREGATE_TYPE_P (TREE_TYPE (tem)))
         orig_to_rtx = to_rtx = pdp10_aggregate_word_mem (to_rtx);
 #endif
 
@@ -7434,6 +7437,37 @@ find_placeholder (exp, plist)
   return 0;
 }
 
+/* String indices denote target characters, not host storage bytes.
+   The PDP-10 lexer stores nine-bit characters high byte first in
+   two host bytes.  All constant narrow string reads must decode the
+   same representation as the assembler output path.  */
+static HOST_WIDE_INT
+string_read_length (str)
+     tree str;
+{
+#ifdef __PDP10_H__
+  if (TREE_LANG_FLAG_1 (str))
+    return TREE_STRING_LENGTH (str) / 2;
+#endif
+  return TREE_STRING_LENGTH (str);
+}
+
+static HOST_WIDE_INT
+string_read_char (str, index)
+     tree str;
+     HOST_WIDE_INT index;
+{
+#ifdef __PDP10_H__
+  if (TREE_LANG_FLAG_1 (str))
+    {
+      const unsigned char *p
+        = (const unsigned char *) TREE_STRING_POINTER (str) + 2 * index;
+      return (p[0] << 8) | p[1];
+    }
+#endif
+  return TREE_STRING_POINTER (str)[index];
+}
+
 /* expand_expr: generate code for computing expression EXP.
    An rtx for the computed value is returned.  The value is never null.
    In the case of a void EXP, const0_rtx is returned.
@@ -8144,12 +8178,13 @@ expand_expr (exp, target, tmode, modifier)
  	if (string
  	    && TREE_CODE (string) == STRING_CST
  	    && TREE_CODE (index) == INTEGER_CST
-	    && compare_tree_int (index, TREE_STRING_LENGTH (string)) < 0
+	    && compare_tree_int (index, 0) >= 0
+	    && compare_tree_int (index, string_read_length (string)) < 0
  	    && GET_MODE_CLASS (mode) == MODE_INT
  	    && GET_MODE_SIZE (mode) == 1
 	    && modifier != EXPAND_WRITE)
- 	  return gen_int_mode (TREE_STRING_POINTER (string)
-			       [TREE_INT_CST_LOW (index)], mode);
+	  return gen_int_mode (string_read_char (string,
+					 TREE_INT_CST_LOW (index)), mode);
 
 	op0 = expand_expr (exp1, NULL_RTX, VOIDmode, EXPAND_SUM);
 	op0 = memory_address (mode, op0);
@@ -8259,11 +8294,11 @@ expand_expr (exp, target, tmode, modifier)
 	if (modifier != EXPAND_CONST_ADDRESS && modifier != EXPAND_INITIALIZER
 	    && TREE_CODE (array) == STRING_CST
 	    && TREE_CODE (index) == INTEGER_CST
-	    && compare_tree_int (index, TREE_STRING_LENGTH (array)) < 0
+	    && compare_tree_int (index, 0) >= 0
+	    && compare_tree_int (index, string_read_length (array)) < 0
 	    && GET_MODE_CLASS (mode) == MODE_INT
 	    && GET_MODE_SIZE (mode) == 1)
-	  return gen_int_mode (TREE_STRING_POINTER (array)
-			       [TREE_INT_CST_LOW (index)], mode);
+	  return gen_int_mode (string_read_char (array, TREE_INT_CST_LOW (index)), mode);
 
 	/* If this is a constant index into a constant array,
 	   just get the value from the array.  Handle both the cases when
@@ -8315,16 +8350,16 @@ expand_expr (exp, target, tmode, modifier)
 					  tmode, modifier);
 		  }
 		else if (TREE_CODE (init) == STRING_CST
+			 && compare_tree_int (index, 0) >= 0
 			 && 0 > compare_tree_int (index,
-						  TREE_STRING_LENGTH (init)))
+						  string_read_length (init)))
 		  {
 		    tree type = TREE_TYPE (TREE_TYPE (init));
 		    enum machine_mode mode = TYPE_MODE (type);
 
 		    if (GET_MODE_CLASS (mode) == MODE_INT
 			&& GET_MODE_SIZE (mode) == 1)
-		      return gen_int_mode (TREE_STRING_POINTER (init)
-					   [TREE_INT_CST_LOW (index)], mode);
+		      return gen_int_mode (string_read_char (init, TREE_INT_CST_LOW (index)), mode);
 		  }
 	      }
 	  }
@@ -8504,7 +8539,8 @@ expand_expr (exp, target, tmode, modifier)
 	}
 
 #if REAL_BITS_PER_UNIT == 36
-        if (TREE_CODE (tem) == VAR_DECL && AGGREGATE_TYPE_P (TREE_TYPE (tem))
+        if (offset == 0 && TREE_CODE (tem) == VAR_DECL
+            && AGGREGATE_TYPE_P (TREE_TYPE (tem))
             && modifier != EXPAND_CONST_ADDRESS
             && modifier != EXPAND_INITIALIZER)
           orig_op0 = op0 = pdp10_aggregate_word_mem (op0);
