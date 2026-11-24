@@ -8073,7 +8073,12 @@ pdp10_output_maybe_bitptr_hi (operands, sign_extend)
   int i;
   rtx ops[3];
 
-  if (GET_CODE (mem) != MEM || GET_MODE (mem) != HImode)
+  /* OWGBP encodes the width in its six-bit selector, not a local
+     P/S field.  Native extended HImode loads and stores use the
+     normal LDB/DPB path; the local S=1 stream helper assumes an
+     IOWD stack and cannot represent arbitrary global bit positions.
+     Extended exact-width packed pointers need their own representation. */
+  if (TARGET_EXTENDED || GET_CODE (mem) != MEM || GET_MODE (mem) != HImode)
     return NULL;
   addr = XEXP (mem, 0);
   if (REG_P (addr))
