@@ -3737,6 +3737,17 @@ fold_rtx (x, insn)
 		if (size <= 0 || pos < 0 || pos + size > 36)
 		  abort ();
 
+                /* S=1 describes a logical bit address, not a one-bit
+                   C object.  An exact16 indirect access still spans 16
+                   bits.  A single ZERO_EXTRACT is valid only if the
+                   entire element fits in this physical word.  */
+                if (size == 1)
+                  {
+                    if (mode != HImode || pos + 16 > BITS_PER_WORD)
+                      return x;
+                    size = 16;
+                  }
+
 		word_offset = offset & 0777777;
 		word_offset ^= 0400000;
 		word_offset -= 0400000;
@@ -3823,6 +3834,12 @@ fold_rtx (x, insn)
 		  pos = 36 - local_size - (local_ps >> 6);
 		  if (pos < 0 || pos + local_size > 36)
 		    return x;
+                  if (local_size == 1)
+                    {
+                      if (mode != HImode || pos + 16 > BITS_PER_WORD)
+                        return x;
+                      local_size = 16;
+                    }
 
 		  word_offset = raw_offset & 0777777;
 		  word_offset ^= 0400000;
