@@ -118,6 +118,11 @@ DEFTREECODE (COMPOUND_LITERAL_EXPR, "compound_literal_expr", 'e', 1)
    scope, the CLEANUP_EXPR must be run.  */
 DEFTREECODE (CLEANUP_STMT, "cleanup_stmt", 'e', 2)
 
+/* PDP-10 pointer difference in C storage units, before division by
+   the element size. Preserve both typed operands: their raw integer
+   encodings are not linear addresses. */
+DEFTREECODE (PDP10_PTR_DIFF_EXPR, "pdp10_ptr_diff_expr", '2', 2)
+
 /*
 Local variables:
 mode:c

@@ -2735,8 +2735,15 @@ pointer_diff (op0, op1)
      Do not do default conversions on the minus operator
      in case restype is a short type.  */
 
-  op0 = build_binary_op (MINUS_EXPR, convert (restype, op0),
-			 convert (restype, op1), 0);
+#ifdef __PDP10_H__
+  /* Preserve the semantic subtraction after same-base folding. */
+  if (POINTER_TYPE_P (TREE_TYPE (op0))
+      && POINTER_TYPE_P (TREE_TYPE (op1)))
+    op0 = build (PDP10_PTR_DIFF_EXPR, restype, op0, op1);
+  else
+#endif
+    op0 = build_binary_op (MINUS_EXPR, convert (restype, op0),
+			   convert (restype, op1), 0);
   /* This generates an error if op1 is pointer to incomplete type.  */
   if (!COMPLETE_OR_VOID_TYPE_P (TREE_TYPE (TREE_TYPE (orig_op1))))
     error ("arithmetic on pointer to an incomplete type");

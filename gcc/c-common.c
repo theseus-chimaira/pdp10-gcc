@@ -3794,6 +3794,10 @@ c_expand_expr (exp, target, tmode, modifier)
 {
   switch (TREE_CODE (exp))
     {
+#ifdef __PDP10_H__
+    case PDP10_PTR_DIFF_EXPR:
+      return pdp10_expand_pointer_diff (exp, target);
+#endif
     case STMT_EXPR:
       {
 	tree rtl_expr;

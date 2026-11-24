@@ -4014,8 +4014,6 @@ static int	pdp10_reorg_word_repack_spill_blt PARAMS ((rtx insn));
 static int	pdp10_reorg_word_repack_dmove_direct PARAMS ((rtx insn));
 static int	pdp10_reorg_word_repack_dmove PARAMS ((rtx insn));
 static void	pdp10_reorg_word_repack_copies PARAMS ((rtx first));
-static int	pdp10_reorg_folded_subbp_sum PARAMS ((rtx insn));
-static void	pdp10_reorg_folded_subbp_sums PARAMS ((rtx first));
 
 static void
 convert_voidp_callback (pfile)
@@ -4519,108 +4517,6 @@ pdp10_reorg_word_repack_copies (first)
     }
 }
 
-static int
-pdp10_reorg_folded_subbp_sum (insn)
-     rtx insn;
-{
-  rtx seq[9];
-  rtx dest;
-  rtx src;
-  rtx sum;
-  rtx ptr;
-  rtx tmp;
-  rtx base;
-  rtx diff;
-  rtx x;
-  int i;
-
-  seq[0] = insn;
-  for (i = 1; i < 9; i++)
-    {
-      seq[i] = next_real_insn (seq[i - 1]);
-      if (seq[i] == 0)
-        return 0;
-    }
-
-  if (!pdp10_reorg_set_parts (seq[0], &dest, &src)
-      || !REG_P (dest)
-      || GET_CODE (src) != PLUS
-      || !rtx_equal_p (XEXP (src, 0), dest)
-      || !REG_P (XEXP (src, 1)))
-    return 0;
-  sum = dest;
-  ptr = XEXP (src, 1);
-
-  if (!pdp10_reorg_set_parts (seq[1], &tmp, &src)
-      || !REG_P (tmp)
-      || !rtx_equal_p (src, ptr))
-    return 0;
-
-  if (!pdp10_reorg_set_parts (seq[2], &base, &src)
-      || !REG_P (base)
-      || !CONSTANT_P (src)
-      || !pdp10_const_byte_pointer_p (src))
-    return 0;
-
-  if (!pdp10_reorg_set_parts (seq[3], &dest, &src)
-      || !rtx_equal_p (dest, tmp)
-      || GET_CODE (src) != MINUS
-      || !rtx_equal_p (XEXP (src, 0), tmp)
-      || !rtx_equal_p (XEXP (src, 1), base))
-    return 0;
-
-  if (!pdp10_reorg_set_parts (seq[4], &dest, &src)
-      || GET_CODE (src) != UNSPEC
-      || XINT (src, 1) != 12)
-    return 0;
-
-  if (!pdp10_reorg_set_parts (seq[5], &diff, &src)
-      || !REG_P (diff))
-    return 0;
-
-  if (!pdp10_reorg_set_parts (seq[6], &dest, &src)
-      || !rtx_equal_p (dest, diff)
-      || GET_CODE (src) != ASHIFTRT)
-    return 0;
-
-  if (!pdp10_reorg_set_parts (seq[7], &dest, &src)
-      || !rtx_equal_p (dest, diff)
-      || GET_CODE (src) != PLUS)
-    return 0;
-  x = XEXP (src, 1);
-  if (GET_CODE (x) != MEM)
-    return 0;
-  x = XEXP (x, 0);
-  if (GET_CODE (x) != PLUS
-      || GET_CODE (XEXP (x, 1)) != SYMBOL_REF
-      || strcmp (XSTR (XEXP (x, 1), 0), "%BADL9") != 0)
-    return 0;
-
-  if (!pdp10_reorg_set_parts (seq[8], &dest, &src)
-      || !rtx_equal_p (dest, sum)
-      || GET_CODE (src) != PLUS
-      || !rtx_equal_p (XEXP (src, 0), sum)
-      || !rtx_equal_p (XEXP (src, 1), diff))
-    return 0;
-
-  delete_insn (seq[0]);
-  return 1;
-}
-
-static void
-pdp10_reorg_folded_subbp_sums (first)
-     rtx first;
-{
-  rtx insn;
-
-  for (insn = next_real_insn (first); insn; insn = next_real_insn (insn))
-    {
-      if (INSN_DELETED_P (insn))
-        continue;
-      pdp10_reorg_folded_subbp_sum (insn);
-    }
-}
-
 /* Called by the MACHINE_DEPENDENT_REORG macro.
 
    This is ran as the last optimization pass.  (If there was a delayed
@@ -4632,7 +4528,6 @@ pdp10_machine_dependent_reorg (first)
 {
   rtx insn;
 
-  pdp10_reorg_folded_subbp_sums (first);
   pdp10_reorg_word_repack_copies (first);
 
   if (!optimize)
@@ -9632,7 +9527,15 @@ pdp10_output_lshiftrt_memory (insn, operands)
       && INTVAL (operands[2]) == 27
       && GET_MODE (mem) == SImode
       && MEM_ALIGN (mem) >= BITS_PER_WORD
-      && pdp10_frame_address_p (XEXP (mem, 0)))
+      && (pdp10_frame_address_p (XEXP (mem, 0))
+          /* The same physical word form occurs for static native
+             character arrays. The symbolic word displacement has
+             already been selected, just as for a frame address. */
+          || (CONSTANT_ADDRESS_P (XEXP (mem, 0))
+              && MEM_EXPR (mem) != NULL_TREE
+              && TREE_CODE (MEM_EXPR (mem)) == VAR_DECL
+              && TREE_CODE (TREE_TYPE (MEM_EXPR (mem))) == ARRAY_TYPE
+              && pdp10_bytesize (TREE_TYPE (MEM_EXPR (mem))) == BITS_PER_UNIT)))
     return output_bitfield_move (asm_out_file, insn, 0, 0, operands[0],
                                  mem, BITS_PER_UNIT, 0);
 
@@ -13342,6 +13245,32 @@ expand_subtract_pointers (mode, target, op0, type0, op1, type1)
           emit_label (done);
           emit_move_insn (target, result);
         }
+      else if (!TARGET_EXTENDED
+               && (pdp10_bytesize (type) == 9 || pdp10_bytesize (type) == 18))
+        {
+          /* Local word and slot coordinates. For P=27,18,9,0, P>>3
+             gives the reverse nine-bit slot; P=18,0 uses P>>4.
+             Return C storage units (two per halfword). */
+          int half = pdp10_bytesize (type) == 18;
+          rtx y0 = gen_reg_rtx (Pmode), y1 = gen_reg_rtx (Pmode);
+          rtx p0 = gen_reg_rtx (Pmode), p1 = gen_reg_rtx (Pmode);
+          rtx delta = gen_reg_rtx (Pmode);
+          op0 = force_reg (Pmode, op0);
+          op1 = force_reg (Pmode, op1);
+          emit_insn (gen_HRRZ (y0, op0));
+          emit_insn (gen_HRRZ (y1, op1));
+          emit_insn (gen_subsi3 (delta, y0, y1));
+          emit_insn (gen_ashlsi3_pointer (delta, delta,
+                                           GEN_INT (half ? 1 : 2)));
+          emit_insn (gen_lshrsi3 (p0, op0, GEN_INT (half ? 34 : 33)));
+          emit_insn (gen_lshrsi3 (p1, op1, GEN_INT (half ? 34 : 33)));
+          emit_insn (gen_addsi3 (delta, delta, p1));
+          emit_insn (gen_subsi3 (delta, delta, p0));
+          if (half)
+            emit_insn (gen_ashlsi3_pointer (target, delta, GEN_INT (1)));
+          else
+            emit_move_insn (target, delta);
+        }
       else if (HAVE_SUBBP)
 	{
 	  if (!register_operand (op0, Pmode))
@@ -13446,6 +13375,29 @@ expand_subtract_pointers (mode, target, op0, type0, op1, type1)
     target = convert_to_mode (mode, target, 0);
 
   return target;
+}
+
+/* Expand the typed C pointer difference. Evaluate each operand once,
+   preserving its value before expanding the other operand. */
+rtx
+pdp10_expand_pointer_diff (exp, target)
+     tree exp;
+     rtx target;
+{
+  tree a = TREE_OPERAND (exp, 0), b = TREE_OPERAND (exp, 1);
+  rtx p = expand_expr (a, NULL_RTX, Pmode, EXPAND_NORMAL);
+  rtx q;
+  p = protect_from_queue (p, 0);
+  if (!CONSTANT_P (p))
+    p = copy_to_mode_reg (Pmode, p);
+  q = expand_expr (b, NULL_RTX, Pmode, EXPAND_NORMAL);
+  q = protect_from_queue (q, 0);
+  if (!CONSTANT_P (q))
+    q = copy_to_mode_reg (Pmode, q);
+  if (!target || !register_operand (target, Pmode))
+    target = gen_reg_rtx (Pmode);
+  return expand_subtract_pointers (Pmode, target, p, TREE_TYPE (a),
+                                    q, TREE_TYPE (b));
 }
 
 
@@ -14350,16 +14302,6 @@ pdp10_expand_folded_ptr_sum (mode, target, exp)
       rtx d;
       if (GET_MODE (p) != Pmode && GET_MODE (p) != VOIDmode)
         p = convert_to_mode (Pmode, p, 1);
-      if (optimize == 1
-          && terms.n_int == 1
-          && TREE_CODE (pdp10_strip_all_conversions (terms.int_terms[0]))
-             == VAR_DECL)
-        {
-          rtx rawp = p;
-          if (!register_operand (rawp, SImode))
-            rawp = force_reg (SImode, rawp);
-          emit_insn (gen_subsi3 (acc, acc, rawp));
-        }
       d = expand_subtract_pointers (SImode, gen_reg_rtx (SImode),
                                     p, TREE_TYPE (pexp), b,
                                     TREE_TYPE (pexp));
