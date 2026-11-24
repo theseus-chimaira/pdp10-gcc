@@ -4099,7 +4099,10 @@ pdp10_packed_decl_ref (exp, pos, width)
       else
         break;
     }
-  if (!packed || *pos < 0 || TREE_CODE (t) != VAR_DECL)
+  if (!packed || *pos < 0
+      || (TREE_CODE (t) != VAR_DECL
+          && !(TREE_CODE (t) == INDIRECT_REF && !TARGET_EXTENDED
+               && pdp10_continuous_record_p (TREE_TYPE (t)))))
     return NULL_TREE;
   return t;
 }
@@ -4162,6 +4165,127 @@ pdp10_packed_scalar_store (mem, pos, width, value)
                            GEN_INT (pos % BITS_PER_WORD), top));
       emit_insn (gen_insv (pdp10_slice_word (mem, pos / BITS_PER_WORD + 1),
                            GEN_INT (rest), const0_rtx, value));
+    }
+}
+
+/* Lower a packed indirect reference without losing the record's byte
+   selector.  Advance to the containing C byte, then extract its physical
+   word and residual bit position.  Word-aligned records use the existing
+   constant-slice path; byte-aligned records need at most two word accesses.
+   Do not read the following word unless the field actually crosses it. */
+static rtx
+pdp10_indirect_packed_scalar (root, pos, width, unsignedp, value)
+     tree root;
+     HOST_WIDE_INT pos, width;
+     int unsignedp;
+     rtx value;
+{
+  rtx ptr, addr, mem, bit, first, done, right;
+  rtx word, next;
+  ptr = force_reg (Pmode, expand_expr (TREE_OPERAND (root, 0),
+                                      NULL_RTX, Pmode, EXPAND_NORMAL));
+  if (pdp10_bytesize (TREE_TYPE (root)) == BITS_PER_WORD)
+    {
+      mem = gen_rtx_MEM (SImode, ptr);
+      if (value)
+        {
+          pdp10_packed_scalar_store (mem, pos, width, value);
+          return value;
+        }
+      return pdp10_packed_scalar_load (mem, pos, width, unsignedp);
+    }
+  if (pos / BITS_PER_UNIT)
+    ptr = pdp10_expand_addbp_elements (unsigned_char_type_node, gen_reg_rtx (Pmode),
+                                      ptr, GEN_INT (pos / BITS_PER_UNIT));
+  ptr = force_reg (Pmode, ptr);
+  /* Native nine-bit fields never straddle a physical word.  Use
+     LDB/DPB directly rather than materializing a mask and shift. */
+  if (width == BITS_PER_UNIT && pos % BITS_PER_UNIT == 0)
+    {
+      rtx byte = gen_rtx_MEM (QImode, memory_address (QImode, ptr));
+      set_mem_align (byte, BITS_PER_UNIT);
+      if (value)
+        {
+          emit_move_insn (byte, convert_modes (QImode, SImode, value, 1));
+          return value;
+        }
+      return convert_modes (SImode, QImode, byte, unsignedp);
+    }
+  addr = gen_reg_rtx (Pmode);
+  emit_insn (gen_HRRZ (addr, ptr));
+  mem = gen_rtx_MEM (SImode, addr);
+  word = pdp10_slice_word (mem, 0);
+  next = pdp10_slice_word (mem, 1);
+  bit = gen_reg_rtx (SImode);
+  first = gen_reg_rtx (SImode);
+  emit_insn (gen_lshrsi3 (bit, ptr, GEN_INT (30)));
+  emit_move_insn (first, GEN_INT (27 + pos % BITS_PER_UNIT));
+  emit_insn (gen_subsi3 (bit, first, bit));
+  done = gen_label_rtx ();
+  right = gen_reg_rtx (SImode);
+  if (!value)
+    {
+      rtx result = gen_reg_rtx (SImode);
+      rtx tail = gen_reg_rtx (SImode);
+      emit_move_insn (result, word);
+      emit_insn (gen_ashlsi3 (result, result, bit));
+      emit_cmp_and_jump_insns (bit, GEN_INT (BITS_PER_WORD - width),
+                               LE, NULL_RTX, SImode, 0, done);
+      emit_move_insn (right, GEN_INT (BITS_PER_WORD));
+      emit_insn (gen_subsi3 (right, right, bit));
+      emit_move_insn (tail, next);
+      emit_insn (gen_lshrsi3 (tail, tail, right));
+      emit_insn (gen_iorsi3 (result, result, tail));
+      emit_label (done);
+      if (width < BITS_PER_WORD)
+        {
+          if (unsignedp)
+            emit_insn (gen_lshrsi3 (result, result,
+                                   GEN_INT (BITS_PER_WORD - width)));
+          else
+            emit_insn (gen_ashrsi3 (result, result,
+                                   GEN_INT (BITS_PER_WORD - width)));
+        }
+      return result;
+    }
+  else
+    {
+      rtx data = gen_reg_rtx (SImode);
+      rtx mask = gen_reg_rtx (SImode);
+      rtx part = gen_reg_rtx (SImode);
+      rtx clear = gen_reg_rtx (SImode);
+      rtx old = gen_reg_rtx (SImode);
+      value = force_reg (SImode, value);
+      emit_move_insn (mask, constm1_rtx);
+      if (width < BITS_PER_WORD)
+        {
+          emit_insn (gen_ashlsi3 (data, value,
+                                  GEN_INT (BITS_PER_WORD - width)));
+          emit_insn (gen_ashlsi3 (mask, mask,
+                                  GEN_INT (BITS_PER_WORD - width)));
+        }
+      else
+        emit_move_insn (data, value);
+      emit_insn (gen_lshrsi3 (part, data, bit));
+      emit_insn (gen_lshrsi3 (clear, mask, bit));
+      emit_insn (gen_one_cmplsi2 (clear, clear));
+      emit_move_insn (old, word);
+      emit_insn (gen_andsi3 (old, old, clear));
+      emit_insn (gen_iorsi3 (old, old, part));
+      emit_move_insn (word, old);
+      emit_cmp_and_jump_insns (bit, GEN_INT (BITS_PER_WORD - width),
+                               LE, NULL_RTX, SImode, 0, done);
+      emit_move_insn (right, GEN_INT (BITS_PER_WORD));
+      emit_insn (gen_subsi3 (right, right, bit));
+      emit_insn (gen_ashlsi3 (part, data, right));
+      emit_insn (gen_ashlsi3 (clear, mask, right));
+      emit_insn (gen_one_cmplsi2 (clear, clear));
+      emit_move_insn (old, next);
+      emit_insn (gen_andsi3 (old, old, clear));
+      emit_insn (gen_iorsi3 (old, old, part));
+      emit_move_insn (next, old);
+      emit_label (done);
+      return value;
     }
 }
 
@@ -4235,6 +4359,33 @@ expand_assignment (to, from, want_value, suggest_reg)
           {
             rtx mem;
             push_temp_slots ();
+            if (TREE_CODE (root) == INDIRECT_REF)
+              {
+                rtx v = expand_expr (from, NULL_RTX, VOIDmode, EXPAND_NORMAL);
+                v = convert_modes (SImode, TYPE_MODE (TREE_TYPE (from)),
+                                   v, TREE_UNSIGNED (TREE_TYPE (from)));
+                pdp10_indirect_packed_scalar (root, p, w,
+                                              TREE_UNSIGNED (TREE_TYPE (to)), v);
+                if (want_value && w < BITS_PER_WORD)
+                  {
+                    rtx narrow = gen_reg_rtx (SImode);
+                    emit_insn (gen_ashlsi3 (narrow, force_reg (SImode, v),
+                                             GEN_INT (BITS_PER_WORD - w)));
+                    if (TREE_UNSIGNED (TREE_TYPE (to)))
+                      emit_insn (gen_lshrsi3 (narrow, narrow,
+                                             GEN_INT (BITS_PER_WORD - w)));
+                    else
+                      emit_insn (gen_ashrsi3 (narrow, narrow,
+                                             GEN_INT (BITS_PER_WORD - w)));
+                    v = narrow;
+                  }
+                result = want_value ? convert_modes (TYPE_MODE (TREE_TYPE (to)),
+                           SImode, v, TREE_UNSIGNED (TREE_TYPE (to))) : NULL_RTX;
+                preserve_temp_slots (result);
+                free_temp_slots ();
+                pop_temp_slots ();
+                return result;
+              }
             mem = expand_expr (root, NULL_RTX, VOIDmode, EXPAND_NORMAL);
             if (GET_CODE (mem) == MEM)
               {
@@ -8210,7 +8361,13 @@ expand_expr (exp, target, tmode, modifier)
           tree root = pdp10_packed_decl_ref (exp, &p, &w);
           if (root && !TREE_THIS_VOLATILE (root))
             {
-              rtx mem = expand_expr (root, NULL_RTX, VOIDmode, EXPAND_NORMAL);
+              rtx mem;
+              if (TREE_CODE (root) == INDIRECT_REF)
+                return convert_modes (mode, SImode,
+                         pdp10_indirect_packed_scalar (root, p, w,
+                                                    TREE_UNSIGNED (type), NULL_RTX),
+                         TREE_UNSIGNED (type));
+              mem = expand_expr (root, NULL_RTX, VOIDmode, EXPAND_NORMAL);
               if (GET_CODE (mem) == MEM)
                 return convert_modes (mode, SImode,
                          pdp10_packed_scalar_load (pdp10_aggregate_word_mem (mem),
@@ -8376,7 +8533,13 @@ expand_expr (exp, target, tmode, modifier)
           tree root = pdp10_packed_decl_ref (exp, &p, &w);
           if (root && !TREE_THIS_VOLATILE (root))
             {
-              rtx mem = expand_expr (root, NULL_RTX, VOIDmode, EXPAND_NORMAL);
+              rtx mem;
+              if (TREE_CODE (root) == INDIRECT_REF)
+                return convert_modes (mode, SImode,
+                         pdp10_indirect_packed_scalar (root, p, w,
+                                                    TREE_UNSIGNED (type), NULL_RTX),
+                         TREE_UNSIGNED (type));
+              mem = expand_expr (root, NULL_RTX, VOIDmode, EXPAND_NORMAL);
               if (GET_CODE (mem) == MEM)
                 return convert_modes (mode, SImode,
                          pdp10_packed_scalar_load (pdp10_aggregate_word_mem (mem),

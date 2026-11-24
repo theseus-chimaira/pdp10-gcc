@@ -12266,6 +12266,52 @@ static rtx	expand_subtract_pointers PARAMS ((enum machine_mode mode,
 /* Return the value of the S field in byte pointers used to point to
    variables of type TYPE.  A return value of 36 means that a word
    pointer should be used.  */
+/* Packed records containing non-native-width integer members or explicit
+   bit-fields use the front end's continuous bit layout.  Their pointer
+   stride is determined by the record extent, not the widest member.
+   Preserve the older homogeneous native-byte record representation. */
+int
+pdp10_continuous_record_p (type)
+     tree type;
+{
+  tree field;
+  int has9 = 0, has18 = 0;
+  if (TREE_CODE (type) != RECORD_TYPE || !TYPE_PACKED (type)
+      || !TYPE_SIZE (type) || !host_integerp (TYPE_SIZE (type), 1))
+    return 0;
+  for (field = TYPE_FIELDS (type); field; field = TREE_CHAIN (field))
+    {
+      tree ft;
+      if (TREE_CODE (field) != FIELD_DECL)
+        continue;
+      if (DECL_BIT_FIELD (field))
+        return 1;
+      ft = TREE_TYPE (field);
+      while (TREE_CODE (ft) == ARRAY_TYPE)
+        ft = TREE_TYPE (ft);
+      if (INTEGRAL_TYPE_P (ft))
+        {
+          has9 |= TYPE_PRECISION (ft) == 9;
+          has18 |= TYPE_PRECISION (ft) == 18;
+        }
+      if (INTEGRAL_TYPE_P (ft)
+          && (TYPE_PRECISION (ft) == 16 || TYPE_PRECISION (ft) == 32))
+        return 1;
+      if (TREE_CODE (ft) == RECORD_TYPE && pdp10_continuous_record_p (ft))
+        return 1;
+    }
+  if (has9 && has18)
+    return 1;
+  /* A record of nonword extent cannot use a word pointer when an
+     element is selected from an array of such records. */
+  if (tree_low_cst (TYPE_SIZE (type), 1) % BITS_PER_WORD)
+    for (field = TYPE_FIELDS (type); field; field = TREE_CHAIN (field))
+      if (TREE_CODE (field) == FIELD_DECL
+          && pdp10_bytesize (TREE_TYPE (field)) >= BITS_PER_WORD)
+        return 1;
+  return 0;
+}
+
 int
 pdp10_bytesize (type)
      tree type;
@@ -12288,6 +12334,11 @@ pdp10_bytesize (type)
       tree field;
       int field_size;
       int best_size = 0;
+
+      /* Match KCC's packed-record pointer ABI.  Even a whole-word
+         extent may start in the middle of a word when embedded. */
+      if (!TARGET_EXTENDED && pdp10_continuous_record_p (type))
+        return BITS_PER_UNIT;
 
       /* A record containing any word-sized field is addressed as a
          word object.  If all fields are PDP-10 byte objects, keep the
@@ -15667,6 +15718,52 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
     }
   else if (!pdp10_dynamic_ref_base_bitpos (object, &base_tree, &bitpos))
     return NULL_RTX;
+
+  /* Packed exact16 member arrays have a continuous bit stride,
+     even when the first element happens to fit in a physical word.
+     A record pointer retains its byte position, which must be included
+     before installing the logical S=1 selector. */
+  if (bytesize == 16 && TREE_CODE (base_tree) == INDIRECT_REF
+      && pdp10_continuous_record_p (TREE_TYPE (base_tree)))
+    {
+      rtx ptr = force_reg (Pmode,
+                  expand_expr (TREE_OPERAND (base_tree, 0), NULL_RTX,
+                               Pmode, EXPAND_NORMAL));
+      reg = gen_reg_rtx (Pmode);
+      if (pdp10_bytesize (TREE_TYPE (base_tree)) == BITS_PER_WORD)
+        {
+          if (bitpos / BITS_PER_WORD)
+            emit_insn (gen_addsi3 (reg, ptr,
+                        GEN_INT (bitpos / BITS_PER_WORD)));
+          else
+            emit_move_insn (reg, ptr);
+          ps = ((BITS_PER_WORD - bitpos % BITS_PER_WORD - 1) << 6) + 1;
+          emit_TLO (reg, reg, ps << 6);
+        }
+      else
+        {
+          int delta = ((8 - (int) (bitpos % BITS_PER_UNIT)) << 12)
+                      - (8 << 6);
+          if (bitpos / BITS_PER_UNIT)
+            ptr = pdp10_expand_addbp_units (9, gen_reg_rtx (Pmode), ptr,
+                                           GEN_INT (bitpos / BITS_PER_UNIT));
+          emit_ADD (reg, ptr, delta);
+        }
+      if (dyn_index != NULL_TREE)
+        {
+          rtx idx = force_reg (Pmode, expand_expr (dyn_index, NULL_RTX,
+                                               Pmode, EXPAND_NORMAL));
+          if (dyn_index_scale != 1)
+            {
+              rtx scaled = gen_reg_rtx (Pmode);
+              emit_insn (gen_mulsi3 (scaled, idx, GEN_INT (dyn_index_scale)));
+              idx = scaled;
+            }
+          return pdp10_expand_addbp_elements (dyn_elem_type,
+                                             gen_reg_rtx (Pmode), reg, idx);
+        }
+      return reg;
+    }
 
   byte_pos = bitpos % BITS_PER_WORD;
 
