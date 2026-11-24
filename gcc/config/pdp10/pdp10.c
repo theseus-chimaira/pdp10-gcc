@@ -6630,6 +6630,42 @@ pdp10_gas_print_symbolic_local_word (x)
   return 1;
 }
 
+/* A global address relocation covers 30 bits, not just RH18.  Do not
+   mix its addend with the selector by printing a raw symbolic .long. */
+static int
+pdp10_gas_print_symbolic_global_word (x)
+     rtx x;
+{
+  rtx base;
+  pdp10_word36 encoded;
+  unsigned int selector;
+  HOST_WIDE_INT offset;
+
+  if (!TARGET_EXTENDED
+      || !pdp10_decompose_symbolic_word36 (x, &base, &encoded)
+      || base == NULL_RTX)
+    return 0;
+
+  selector = (unsigned int) (encoded >> 30);
+  offset = (HOST_WIDE_INT) (encoded & ADDRESS_MASK);
+  /* A plain negative displacement is sign extended in the RTL. */
+  if (selector == 077)
+    selector = 0;
+  if (selector != 0 && (selector < 045 || selector > 076))
+    return 0;
+  if (selector != 0)
+    fprintf (asm_out_file, "\tOWGBP %o,", selector);
+  else
+    fputs ("\tGIW ", asm_out_file);
+  print_symbolic_ref (asm_out_file, base);
+  if (offset & ((HOST_WIDE_INT) 1 << 29))
+    offset -= (HOST_WIDE_INT) 1 << 30;
+  if (offset > 0)
+    fputc ('+', asm_out_file);
+  pdp10_print_offset30 (asm_out_file, offset);
+  return 1;
+}
+
 static bool
 pdp10_assemble_integer (x, size, aligned_p)
      rtx x;
@@ -6650,6 +6686,17 @@ pdp10_assemble_integer (x, size, aligned_p)
     {
       pdp10_byte_count += size;
       return true;
+    }
+
+  if (aligned_p && size == 4 && TARGET_EXTENDED)
+    {
+      pdp10_output_byte (asm_out_file, NULL_RTX, 0);
+      if (pdp10_gas_print_symbolic_global_word (x))
+        {
+          fputc ('\n', asm_out_file);
+          pdp10_byte_count += size;
+          return true;
+        }
     }
 
   if (aligned_p
@@ -16637,7 +16684,19 @@ pdp10_convert_pointer (exp, op0, target, mod, stack, not_null)
   }
 
   if (!op0)
-    op0 = expand_expr (TREE_OPERAND (exp, 0), NULL_RTX, Pmode, 0);
+    op0 = expand_expr (TREE_OPERAND (exp, 0), NULL_RTX, Pmode,
+                       modifier == EXPAND_INITIALIZER ? modifier : 0);
+
+  /* An initializer has no function context.  Resolve constant byte
+     arithmetic before converting its pointer representation; expanding
+     the operand in normal mode can allocate pseudos and crash cc1. */
+  if (modifier == EXPAND_INITIALIZER && GET_CODE (op0) == UNSPEC
+      && XINT (op0, 1) == UNSPEC_ADJBP)
+    {
+      rtx folded = pdp10_simplify_unspec (op0, NULL_RTX);
+      if (folded != NULL_RTX)
+        op0 = folded;
+    }
 
   if (have_subword_word && subword_word != 0 && from == 36)
     op0 = plus_constant (op0, subword_word);
@@ -16659,8 +16718,8 @@ pdp10_convert_pointer (exp, op0, target, mod, stack, not_null)
 	    return NULL_RTX;
 	}
       else if (!TARGET_EXTENDED
-               || !VALID_OWGBP_SELECTOR_BYTE_SIZE_P (from)
-               || !VALID_OWGBP_SELECTOR_BYTE_SIZE_P (to))
+               || (from != 36 && !VALID_OWGBP_SELECTOR_BYTE_SIZE_P (from))
+               || (to != 36 && !VALID_OWGBP_SELECTOR_BYTE_SIZE_P (to)))
 	{
 	  ps = (offset >> 24) & 07777;
 	  addr = offset & ADDRESS_MASK;
@@ -16811,8 +16870,8 @@ pdp10_convert_ptr (exp, op0, target, from, to, not_null)
       if (pdp10_decompose_symbolic_word36 (op0, &base, &offset))
 	{
 	  if (!TARGET_EXTENDED
-              || !VALID_OWGBP_SELECTOR_BYTE_SIZE_P (from)
-              || !VALID_OWGBP_SELECTOR_BYTE_SIZE_P (to))
+              || (from != 36 && !VALID_OWGBP_SELECTOR_BYTE_SIZE_P (from))
+              || (to != 36 && !VALID_OWGBP_SELECTOR_BYTE_SIZE_P (to)))
 	    {
 	      ps = (offset >> 24) & 07777;
 	      addr = offset & ADDRESS_MASK;
@@ -17104,19 +17163,21 @@ adjust_ps (ps, adjust)
 
       n = BITS_PER_WORD / s;
       oldps = ps - base;
-      ps = (*adjust + oldps) % n;
-      if (ps < 0)
-	{
-	  ps += n;
-	  *adjust -= n;
-	}
-      else if (ps < oldps)
-	{
-	  *adjust += n;
-	}
-      ps += base;
-      ps <<= 6;
+      /* Divide the total slot index, not the displacement alone.  A
+         negative displacement within the same word must not carry. */
+      ps = (*adjust % n) + oldps;
       *adjust /= n;
+      if (ps < 0)
+        {
+          ps += n;
+          --*adjust;
+        }
+      else if (ps >= n)
+        {
+          ps -= n;
+          ++*adjust;
+        }
+      ps = (ps + base) << 6;
     }
   else
     {
