@@ -4228,6 +4228,39 @@ expand_assignment (to, from, want_value, suggest_reg)
     }
 
 #if REAL_BITS_PER_UNIT == 36
+      {
+        HOST_WIDE_INT p, w;
+        tree root = pdp10_packed_decl_ref (to, &p, &w);
+        if (root && !TREE_THIS_VOLATILE (to) && !TREE_THIS_VOLATILE (root))
+          {
+            rtx mem;
+            push_temp_slots ();
+            mem = expand_expr (root, NULL_RTX, VOIDmode, EXPAND_NORMAL);
+            if (GET_CODE (mem) == MEM)
+              {
+                rtx v = expand_expr (from, NULL_RTX, VOIDmode, EXPAND_NORMAL);
+                v = convert_modes (SImode, TYPE_MODE (TREE_TYPE (from)),
+                                   v, TREE_UNSIGNED (TREE_TYPE (from)));
+                mem = pdp10_aggregate_word_mem (mem);
+                pdp10_packed_scalar_store (mem, p, w, v);
+                result = want_value
+                  ? convert_modes (TYPE_MODE (TREE_TYPE (to)), SImode,
+                                   pdp10_packed_scalar_load
+                                     (mem, p, w, TREE_UNSIGNED (TREE_TYPE (to))),
+                                   TREE_UNSIGNED (TREE_TYPE (to)))
+                  : NULL_RTX;
+                preserve_temp_slots (result);
+                free_temp_slots ();
+                pop_temp_slots ();
+                return result;
+              }
+            free_temp_slots ();
+            pop_temp_slots ();
+          }
+      }
+#endif
+
+#if REAL_BITS_PER_UNIT == 36
   /* Match the read-side byte-address construction below.  A field in a
      packed record reached through an indirect pointer must be stored at
      its true 9-bit byte address, which may not be word aligned.  The
@@ -4294,34 +4327,6 @@ expand_assignment (to, from, want_value, suggest_reg)
       tree tem;
 
       push_temp_slots ();
-#if REAL_BITS_PER_UNIT == 36
-      {
-        HOST_WIDE_INT p, w;
-        tree root = pdp10_packed_decl_ref (to, &p, &w);
-        if (root && !TREE_THIS_VOLATILE (to) && !TREE_THIS_VOLATILE (root))
-          {
-            rtx mem = expand_expr (root, NULL_RTX, VOIDmode, EXPAND_NORMAL);
-            if (GET_CODE (mem) == MEM)
-              {
-                rtx v = expand_expr (from, NULL_RTX, VOIDmode, EXPAND_NORMAL);
-                v = convert_modes (SImode, TYPE_MODE (TREE_TYPE (from)),
-                                   v, TREE_UNSIGNED (TREE_TYPE (from)));
-                mem = pdp10_aggregate_word_mem (mem);
-                pdp10_packed_scalar_store (mem, p, w, v);
-                result = want_value
-                  ? convert_modes (TYPE_MODE (TREE_TYPE (to)), SImode,
-                                   pdp10_packed_scalar_load
-                                     (mem, p, w, TREE_UNSIGNED (TREE_TYPE (to))),
-                                   TREE_UNSIGNED (TREE_TYPE (to)))
-                  : NULL_RTX;
-                preserve_temp_slots (result);
-                free_temp_slots ();
-                pop_temp_slots ();
-                return result;
-              }
-          }
-      }
-#endif
       tem = get_inner_reference (to, &bitsize, &bitpos, &offset, &mode1,
 				 &unsignedp, &volatilep);
 
