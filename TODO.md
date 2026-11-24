@@ -21,6 +21,19 @@ upstream historical maintenance notes rather than work specific to this fork.
 
 ## Optimizer and code-size work
 
+- [x] Correct the executable nested-function trampoline stack address.
+  Avoid rounding PDP-10 word addresses as four nine-bit storage
+  units, while preserving a compact word-aligned BLT template copy.
+  The original 33 timeout cells now pass in the full 44-cell GCC
+  trampoline test. See
+  `docs/P10-TRAMPOLINE-STACK-ALIGNMENT-20261124-v21.md`.
+
+- [ ] Analyze the separate GCC wide-integer (`950612-1.c`) and packed
+  aggregate by-value (`gnu-packed-byvalue.c`) timeout clusters. The
+  wide-int KI10/O2 reproducer still fails after 200 million guest
+  steps; the packed-by-value 44-cell GCC matrix still has 27 timeouts
+  and 17 runtime failures. Do not relabel either as a slow PASS.
+
 - [x] Fix speculation of an opaque, untyped reverse-IBP search into
   the native short16 pointer branch. Lower S=1 pointer adjustments
   through typed visible RTL, preserving pointer selector bits and

@@ -7196,7 +7196,15 @@ expand_function_end (filename, line, end_bindings)
 	{
 	  initial_trampoline
 	    = gen_rtx_MEM (BLKmode, assemble_trampoline_template ());
+	  /* Some word-addressed targets must suppress address rounding in
+	     C storage units even though the actual trampoline consists of
+	     aligned machine words.  Keep the template copy alignment
+	     independent of the runtime address-rounding requirement.  */
+#ifdef TRAMPOLINE_COPY_ALIGNMENT
+	  set_mem_align (initial_trampoline, TRAMPOLINE_COPY_ALIGNMENT);
+#else
 	  set_mem_align (initial_trampoline, TRAMPOLINE_ALIGNMENT);
+#endif
 
 	  ggc_add_rtx_root (&initial_trampoline, 1);
 	}

@@ -1289,6 +1289,25 @@ do {									  \
    integer.  */
 #define TRAMPOLINE_SIZE (TARGET_SMALL ? 8 : TARGET_SMALLISH ? 12 : 16)
 
+/* GCC's generic trampoline rounder performs address arithmetic in C
+   addressable units.  PDP-10 stack/code addresses, however, already
+   denote 36-bit *words*.  Applying the default FUNCTION_BOUNDARY (36)
+   as a divisor of BITS_PER_UNIT (9) rounds a word address upward to a
+   four-word boundary, which can place the trampoline beyond its
+   allocated stack slot.  A subsequent PUSHJ then overwrites the
+   trampoline with the return PC.  Stack slots are already word-aligned
+   by STACKVAR_BOUNDARY/STACK_BOUNDARY; no additional four-word rounding
+   is required for the executable code address.  Express this fact to
+   the generic runtime rounder using one effective-address unit.  */
+#define TRAMPOLINE_ALIGNMENT BITS_PER_UNIT
+
+/* The template and stack trampoline still occupy complete 36-bit words.
+   Preserve the two-word BLT copy instead of lowering an eight-storage-
+   unit trampoline into individual 9-bit LDB/DPB instructions.  The
+   runtime address rounding above and the actual copy alignment are
+   distinct for a word-addressed machine.  */
+#define TRAMPOLINE_COPY_ALIGNMENT BITS_PER_WORD
+
 /* A C statement to initialize the variable parts of a trampoline.  */
 #define INITIALIZE_TRAMPOLINE(ADDR, FNADDR, CXT)			 \
 do {								 \
