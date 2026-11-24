@@ -198,7 +198,7 @@ static int	pdp10_decompose_symbolic_constant PARAMS ((rtx x, rtx *basep,
 					     HOST_WIDE_INT *offsetp));
 static int	pdp10_decompose_symbolic_word36 PARAMS ((rtx x, rtx *basep,
 					   pdp10_word36 *offsetp));
-static int	pdp10_const_word36_byte_pointer_p PARAMS ((rtx x));
+int	pdp10_const_word36_byte_pointer_p PARAMS ((rtx x));
 static int	pdp10_const_logical_bit_pointer_p PARAMS ((rtx x));
 static int	pdp10_reg_likely_byte_pointer_p PARAMS ((rtx reg, rtx insn));
 int	pdp10_const_double_0_operand PARAMS ((rtx op, enum machine_mode mode));
@@ -3234,7 +3234,7 @@ pdp10_decompose_symbolic_word36 (x, basep, offsetp)
     }
 }
 
-static int
+int
 pdp10_const_word36_byte_pointer_p (x)
      rtx x;
 {
@@ -10565,6 +10565,38 @@ pdp10_output_addsi (insn, operands, which_alternative)
     case 2:
       return "subi %0,%N2";
     case 3:
+      /* Indexed word addresses fit MOVEI's 18-bit effective-address
+         field.  An indexed *byte pointer* does not: MOVEI discards
+         the P/S selector in the left half, so subsequent IBP or
+         pointer subtraction operates on an invalid byte pointer.
+
+         Form the indexed 18-bit Y field with MOVEI, then install the
+         original P/S and index fields with HRLI.  MOVEI reads the
+         index before modifying the destination, so this is correct
+         even when operand 0 and operand 1 use the same AC.  Splitting
+         the halves also prevents a word-address carry from changing
+         the byte-pointer selector.  Do not change extended pointers.
+         Keep the companion length attribute at two words.  */
+      if (!TARGET_EXTENDED
+          && pdp10_const_word36_byte_pointer_p (operands[2]))
+        {
+          rtx base;
+          pdp10_word36 encoded;
+          rtx ops[3];
+
+          if (!pdp10_decompose_symbolic_word36
+                  (operands[2], &base, &encoded)
+              || base == NULL_RTX)
+            abort ();
+
+          ops[0] = operands[0];
+          ops[1] = operands[1];
+          ops[2] = plus_constant
+            (base, (HOST_WIDE_INT) (encoded & ADDRESS_MASK));
+          output_asm_insn ("movei %0,%2(%1)", ops);
+          operands[2] = GEN_INT ((HOST_WIDE_INT) (encoded >> 18));
+          return "hrli %0,%2";
+        }
       return TARGET_EXTENDED ? "xmovei %0,%2(%1)" : "movei %0,%2(%1)";
     case 4:
       return "add %0,[%X2]";

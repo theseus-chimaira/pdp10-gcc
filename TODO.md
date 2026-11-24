@@ -21,6 +21,14 @@ upstream historical maintenance notes rather than work specific to this fork.
 
 ## Optimizer and code-size work
 
+- [x] Correct indexed local byte-pointer construction in GCC's
+  `*addsi3` emitter. A register-indexed full POINT constant must
+  retain P/S: generate MOVEI of the word address followed by HRLI
+  of its selector, accurately reporting the two-word sequence.
+  New 36-profile v19 C89 test passes. The old broad O1 test now
+  reaches later bugs (8 timeouts and 1 KS10 run failure), not a full
+  pass. See `docs/P10-INDEXED-CONSTANT-BYTEPOINTER-20261124-v19.md`.
+
 - [x] Correct GCC short16 dynamic pointer scaling, constant POINT 16
   address construction, optimized 16-bit signed loads and KS10 native
   ADJBP result-register aliasing. The permanent PDP-10 testkit v18

@@ -2698,7 +2698,14 @@
 ;     && !(register_operand (operands[2], SImode)
 ;	  || (const_int_operand (operands[2], SImode)
 ;	      && (INTVAL (operands[2]) == 1 || INTVAL (operands[2]) == -1))))"
-  "*return pdp10_output_addsi (insn, operands, which_alternative);")
+  "*return pdp10_output_addsi (insn, operands, which_alternative);"
+  [(set (attr "length")
+	(if_then_else
+	 (and (eq_attr "alternative" "3")
+	      (ne (symbol_ref "!TARGET_EXTENDED && pdp10_const_word36_byte_pointer_p (operands[2])")
+	          (const_int 0)))
+	 (const_int 2)
+	 (const_int 1)))])
 
 (define_insn "*ADDI_reg"
   [(set (match_operand:SI 0 "register_operand" "=r")
