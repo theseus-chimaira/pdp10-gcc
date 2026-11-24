@@ -21,6 +21,18 @@ upstream historical maintenance notes rather than work specific to this fork.
 
 ## Optimizer and code-size work
 
+- [x] Fix the nonterminating packed BLKmode byte-copy loop by binding
+  count decrement and backward branch into one RTL/SOJN operation.
+  The 27 old GCC packed-byvalue timeouts are gone; the source now
+  reports 44 independent packed-argument runtime failures rather than
+  any timeouts. Dedicated termination regression: 36/36 GCC PASS.
+  See `docs/P10-PACKED-BYTE-COPY-COUNTED-LOOP-20261124-v23.md`.
+
+- [ ] Repair the packed-argument-by-value field extraction/ABI defect
+  in `gnu-packed-byvalue.c`; v23 correctly exposes 44 runtime failures
+  without losing the timeout diagnosis. Do not weaken the field-value
+  oracle to make these tests pass.
+
 - [x] Remove the invalid out-of-line AOJA literal branch from doubleword
   negation patterns. Use direct SKIPN/ADDI correction of the high word,
   including 71-bit sign-copy semantics; no extra runtime helper or

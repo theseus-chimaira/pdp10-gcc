@@ -11739,9 +11739,15 @@ expand_byte_copy (destination, source, length)
 
   pdp10_emit_ibp1 (src, src);
   pdp10_emit_ibp1 (dst, dst);
-  emit_insn (gen_addsi3 (count, count, constm1_rtx));
-  emit_cmp_and_jump_insn_1 (count, CONST0_RTX (SImode), SImode, NE, 0,
-                            loop);
+  /* This is one indivisible counted-loop operation on the PDP-10.
+     Do not emit a separate subtraction and conditional jump.  When
+     a packed aggregate copy is part of a by-value argument, the
+     libcall-related RTL sequencing can move that subtraction out
+     of the copy loop, leaving a JUMPN on an unchanged count and an
+     unbounded IBP/LDB/DPB loop.  The existing SOJN pattern binds the
+     update and back edge together and is also smaller and faster.  */
+  emit_jump_insn (gen_decrement_and_branch_until_zero (count, loop,
+                                                       GEN_NE));
 
   return 1;
 }
