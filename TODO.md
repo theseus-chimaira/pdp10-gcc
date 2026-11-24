@@ -25,7 +25,8 @@ upstream historical maintenance notes rather than work specific to this fork.
   loads (`0245` at O1; `0344` at O2/Os). Distinguish actual scalar
   slots from pointers *to* bytes, and decode POINT 18 half selector
   before choosing HL/HR. Full 36-profile pointer test and dedicated
-  v27 regression both pass 36/36 in independent strict checkpoints.
+  v27 regression both pass 36/36 in independent strict checkpoints;
+  ten adjacent regression sources pass 392/392 (464/464 total).
   See `docs/P10-KS10-SIGNED-BYTEPTR-LOAD-20261124-v27.md`.
 
 - [x] Fix the nonterminating packed BLKmode byte-copy loop by binding
@@ -77,7 +78,8 @@ upstream historical maintenance notes rather than work specific to this fork.
   through typed visible RTL, preserving pointer selector bits and
   normalizing multiples of 36 bits without loops. All 16 prior
   `runtime-byte-pointer-diff.c` simulator timeouts are gone; the source
-  now has 33/36 GCC PASS, with 3 KS10 optimized load bugs open.
+  then had 33/36 GCC PASS; the three remaining KS10 optimized load
+  bugs were subsequently repaired in v27.
   Dedicated v20 regression: 36/36 PASS. Earlier regressions: 216/216
   PASS. See `docs/P10-LOGICAL-BITPOINTER-SPECULATION-20261124-v20.md`.
 

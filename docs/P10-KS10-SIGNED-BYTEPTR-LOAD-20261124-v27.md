@@ -47,9 +47,18 @@ These results correct the last three historically recorded optimized
 KS10 byte-pointer assertions. Other compiler tests must be checked
 independently; this is not a claim of a full compiler matrix PASS.
 
-Six adjacent GCC sources covering the original packed by-value
-cases, v26 field extraction, v18/v19/v20 pointer adjustments, and
-v23 packed-copy termination were also rerun from scratch:
-**224/224 PASS**, strict exit policy, no green checkpoints skipped.
-Across the two 36-cell primary runs and this independent adjacent
-selection, v27 has **296/296 passing GCC cells**.
+An additional independent ten-source adjacent regression sweep
+reexecuted v17-v23 unsigned-division, short16, byte-pointer,
+packed-copy, historical wide-integer and v26 packed-byvalue tests:
+**392/392 GCC PASS** with strict exit policy and no old PASS skipped.
+Across the two 36-profile primary suites and this selection, the
+final installed v27 compiler passed **464/464** fresh distinct GCC
+cells. These tests are not a full compiler matrix sweep.
+
+Final installed `cc1` SHA256:
+`b4a24517da632efb8134b81c38f1f18d4779c0ee16dc51c2ddb89814b939e151`.
+
+An additional six-source subset of these adjacent cases was also
+independently run in `workdir/pdp10-byteptr-ks10-v27-independent-adjacent`:
+**224/224 PASS**. This is overlapping evidence, not another 224
+distinct cells to add to the 464-cell verification total.
