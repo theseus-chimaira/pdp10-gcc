@@ -3259,6 +3259,23 @@ pdp10_const_word36_byte_pointer_p (x)
   return ps != 0;
 }
 
+/* Recover the physical word address of a proven local first-byte
+   pointer.  Do not guess alignment from a pointer's C type. */
+rtx
+pdp10_first_byte_word_address (x)
+     rtx x;
+{
+  rtx base;
+  pdp10_word36 offset;
+
+  if (TARGET_EXTENDED
+      || !pdp10_decompose_symbolic_word36 (x, &base, &offset)
+      || base == NULL_RTX
+      || (offset >> 18) != 0331100)
+    return NULL_RTX;
+  return plus_constant (base, offset & 0777777);
+}
+
 /* Return nonzero if X is the internal local S=1 byte-pointer form used
    for a logical exact-width pointer into a non-byte-aligned packed object.
    This representation is deliberately local even on extended targets: the

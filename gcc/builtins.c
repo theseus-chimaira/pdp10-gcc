@@ -502,7 +502,6 @@ pdp10_builtin_memcpy_read_str (data_arg, offset, mode)
 
   c[0] = 0;
   c[1] = 0;
-  ch = 1;
   for (i = 0; i < GET_MODE_SIZE (mode); i++)
     {
       j = i;
@@ -514,8 +513,7 @@ pdp10_builtin_memcpy_read_str (data_arg, offset, mode)
       j *= BITS_PER_UNIT;
       if (j > 2 * HOST_BITS_PER_WIDE_INT)
         abort ();
-      if (ch)
-        ch = pdp10_builtin_string_char (data, (unsigned HOST_WIDE_INT) offset + i);
+      ch = pdp10_builtin_string_char (data, (unsigned HOST_WIDE_INT) offset + i);
       c[j / HOST_BITS_PER_WIDE_INT] |= ch << (j % HOST_BITS_PER_WIDE_INT);
 #if HOST_BITS_PER_WIDE_INT % BITS_PER_UNIT != 0
       if (j < HOST_BITS_PER_WIDE_INT
@@ -2164,7 +2162,52 @@ expand_builtin_memcpy (arglist, target, mode)
       if (src_align == 0)
         return 0;
 
+#ifdef __PDP10_H__
+      /* Short literal copies to a known first-byte address need neither
+         a byte loop nor a runtime call.  Store full physical words and
+         preserve the trailing bytes with a single insertion.  The
+         original pointer is also the memcpy result.  Restrict this
+         path to constant addresses and at most four words. */
+      if (TREE_CONSTANT (dest) && !TREE_SIDE_EFFECTS (dest)
+          && host_integerp (len, 1)
+          && tree_low_cst (len, 1) <= 4 * UNITS_PER_WORD
+          && pdp10_builtin_string_data_init (src, &pdp10_src_str)
+          && (unsigned HOST_WIDE_INT) tree_low_cst (len, 1)
+             <= pdp10_src_str.len)
+        {
+          rtx original = expand_expr (dest, NULL_RTX, ptr_mode, EXPAND_SUM);
+          rtx word_addr = pdp10_first_byte_word_address (original);
+          if (word_addr)
+            {
+              HOST_WIDE_INT n = tree_low_cst (len, 1);
+              HOST_WIDE_INT off;
+              for (off = 0; off < n; off += UNITS_PER_WORD)
+                {
+                  int i, count = MIN (UNITS_PER_WORD, n - off);
+                  unsigned HOST_WIDE_INT bits = 0;
+                  rtx mem, val;
+                  for (i = 0; i < count; ++i)
+                    bits = (bits << BITS_PER_UNIT)
+                      | pdp10_builtin_string_char (&pdp10_src_str, off + i);
+                  mem = gen_rtx_MEM (SImode, memory_address (SImode,
+                            plus_constant (word_addr, off / UNITS_PER_WORD)));
+                  set_mem_align (mem, BITS_PER_WORD);
+                  val = gen_int_mode (bits, SImode);
+                  if (count == UNITS_PER_WORD)
+                    emit_move_insn (mem, val);
+                  else
+                    emit_insn (gen_insv (mem, GEN_INT (count * BITS_PER_UNIT),
+                                        const0_rtx, force_reg (SImode, val)));
+                }
+              return force_operand (original, NULL_RTX);
+            }
+        }
+#endif
+
       dest_mem = get_memory_rtx (dest);
+      /* Keep the actual C pointer, including its byte position.  Block
+         lowering may convert its private address to a word address. */
+      dest_addr = force_operand (XEXP (dest_mem, 0), NULL_RTX);
       len_rtx = expand_expr (len, NULL_RTX, VOIDmode, 0);
       set_mem_align (dest_mem, dest_align);
 #ifdef __PDP10_H__
@@ -2212,28 +2255,18 @@ expand_builtin_memcpy (arglist, target, mode)
       if (dest_align == BITS_PER_WORD && src_align == BITS_PER_WORD
 	  && GET_CODE (len_rtx) == CONST_INT)
 	{
-	  dest = convert_to_int_ptr (dest);
-	  dest_mem = get_memory_rtx (dest);
-	  set_mem_align (dest_mem, dest_align);
+          rtx word_addr = pdp10_convert_ptr (NULL_TREE, dest_addr,
+                                              NULL_RTX, 9, 36, 1);
+          dest_mem = replace_equiv_address (dest_mem, word_addr);
+          set_mem_align (dest_mem, dest_align);
 	  src = convert_to_int_ptr (src);
 	}
 
       src_mem = get_memory_rtx (src);
       set_mem_align (src_mem, src_align);
 
-      /* Copy word part most expediently.  */
-      dest_addr = emit_block_move (dest_mem, src_mem, len_rtx);
-
-      if (dest_addr == 0)
-	{
-	  dest_addr = force_operand (XEXP (dest_mem, 0), NULL_RTX);
-	  if (MEM_EXPR (dest_mem))
-	    {
-	      if (pdp10_bytesize (TREE_TYPE (MEM_EXPR (dest_mem))) < 32)
-		dest_addr = pdp10_convert_ptr (NULL_TREE, dest_addr, NULL_RTX,
-					       36, 9, 1);
-	    }
-	}
+      /* The block copy must not change the value returned by memcpy. */
+      emit_block_move (dest_mem, src_mem, len_rtx);
 
       return dest_addr;
     }
