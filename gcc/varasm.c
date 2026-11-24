@@ -5451,7 +5451,19 @@ output_constructor (exp, size, align)
 	      total_bytes += fieldsize;
 	    }
 	}
-      else if (field == 0 || !DECL_BIT_FIELD (field))
+      else if (field == 0 || (!DECL_BIT_FIELD (field)
+#ifdef __PDP10_H__
+               /* A size(32) member occupies 32 bits starting at its
+                  declared position, not a right-justified word scalar.
+                  Emit it through the bit-field stream so the four
+                  padding bits follow the value, as in field accesses. */
+               && !(TREE_CODE (TREE_TYPE (field)) == INTEGER_TYPE
+                    && TYPE_PRECISION (TREE_TYPE (field)) == 32
+                    && DECL_SIZE (field)
+                    && host_integerp (DECL_SIZE (field), 1)
+                    && tree_low_cst (DECL_SIZE (field), 1) == 32)
+#endif
+               ))
 	{
 	  /* An element that is not a bit-field.  */
 
