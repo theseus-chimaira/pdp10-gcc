@@ -1049,6 +1049,11 @@ pdp10_data_padding (decl, x)
       ps = ps_base_for_bytesize (bytesize) + o;
       ps <<= 6;
     }
+  else if (bytesize == 16 && TREE_CODE (decl) == VAR_DECL
+           && !AGGREGATE_TYPE_P (TREE_TYPE (decl)))
+    /* A standalone exact16 object is right justified.  Match the
+       address conversion's scalar selector, not array byte number 1. */
+    ps = 16;
   else
     ps = ((36 - bytesize * o - bytesize) << 6) + bytesize;
 
@@ -8142,12 +8147,19 @@ pdp10_output_maybe_bitptr_hi (operands, sign_extend)
   ASM_GENERATE_INTERNAL_LABEL (l_done, "BPD", n);
 
   ops[0] = scratch;
+  /* A saved scratch word changes SP-relative parameter addresses.
+     Read the pointer exactly once, using its adjusted stack slot.
+     Subsequent selector inspection uses the saved pointer at 0(SP). */
+  if (ptrsrc_word
+      && reg_mentioned_p (stack_pointer_rtx, XEXP (ptrsrc, 0)))
+    ptrsrc = gen_rtx_MEM (SImode,
+                          plus_constant (XEXP (ptrsrc, 0), -1));
   ops[1] = ptrsrc;
   output_asm_insn ("push 017,%0", ops);
   if (ptrsrc_word)
     {
       output_asm_insn ("push 017,%W1", ops);
-      output_asm_insn ("move %0,%W1", ops);
+      output_asm_insn ("move %0,0(017)", ops);
     }
   else if (known_logical_bitptr)
     {

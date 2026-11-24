@@ -11309,7 +11309,13 @@ expand_increment (exp, post, ignore)
       return post ? op0 : temp;
     }
 
-  if (post)
+  /* Exact16 pointer increments require a representation test and
+     potentially multiple instructions.  A queued raw ADJBP would
+     interpret C storage units as physical bit or byte positions.
+     Use the normal typed multi-instruction increment path instead. */
+  if (post
+      && !(POINTER_TYPE_P (TREE_TYPE (incremented))
+           && pdp10_bytesize (TREE_TYPE (TREE_TYPE (incremented))) == 16))
     {
       /* We have a true reference to the value in OP0.
 	 If there is an insn to add or subtract in this mode, queue it.
