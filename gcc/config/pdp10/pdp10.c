@@ -12941,6 +12941,9 @@ expand_add_or_sub_pointer (target, op0, type0, op1, type1, add)
          Leave already-unscaled odd counts intact.  */
       if (pdp10_bytesize (type) == 16 && n % 2 == 0)
         n /= 2;
+      if (pdp10_bytesize (type) == 16
+          && pdp10_const_logical_bit_pointer_p (op0))
+        n *= 16;
 
       adjust = (int) n;
 
@@ -13073,7 +13076,56 @@ expand_subtract_pointers (mode, target, op0, type0, op1, type1)
     }
   else
     {
-      if (HAVE_SUBBP)
+      /* A local exact16 pointer can carry either native S=16 or a
+         continuous S=1 packed bit address.  Compute the latter in
+         physical bits, then convert to the two C units per element
+         expected by the front end's exact division.  Both operands
+         designate the same array for defined C pointer subtraction. */
+      if (pdp10_bytesize (type) == 16 && !TARGET_EXTENDED)
+        {
+          rtx p0, p1, y0, y1, selector;
+          rtx native = gen_label_rtx ();
+          rtx done = gen_label_rtx ();
+          rtx result = gen_reg_rtx (Pmode);
+
+          op0 = force_reg (Pmode, op0);
+          op1 = force_reg (Pmode, op1);
+          y0 = gen_reg_rtx (Pmode);
+          y1 = gen_reg_rtx (Pmode);
+          emit_insn (gen_HRRZ (y0, op0));
+          emit_insn (gen_HRRZ (y1, op1));
+          selector = gen_reg_rtx (Pmode);
+          emit_insn (gen_lshrsi3 (selector, op0, GEN_INT (24)));
+          emit_insn (gen_andsi3 (selector, selector, GEN_INT (077)));
+          emit_cmp_and_jump_insn_1 (selector, GEN_INT (1), Pmode,
+                                    NE, 0, native);
+
+          p0 = gen_reg_rtx (Pmode);
+          p1 = gen_reg_rtx (Pmode);
+          emit_insn (gen_subsi3 (result, y0, y1));
+          emit_insn (gen_mulsi3 (result, result, GEN_INT (36)));
+          emit_insn (gen_lshrsi3 (p0, op0, GEN_INT (30)));
+          emit_insn (gen_lshrsi3 (p1, op1, GEN_INT (30)));
+          emit_insn (gen_subsi3 (result, result, p0));
+          emit_insn (gen_addsi3 (result, result, p1));
+          emit_insn (gen_ashrsi3_pointer (result, result, GEN_INT (3)));
+          emit_jump_insn (gen_jump (done));
+          emit_barrier ();
+
+          emit_label (native);
+          /* POINT 16 has P=20 or P=4.  The byte index is
+             (20-P)/16.  Return storage units, not elements. */
+          emit_insn (gen_subsi3 (result, y0, y1));
+          emit_insn (gen_ashlsi3_pointer (result, result, GEN_INT (2)));
+          emit_insn (gen_lshrsi3 (p0, op0, GEN_INT (30)));
+          emit_insn (gen_lshrsi3 (p1, op1, GEN_INT (30)));
+          emit_insn (gen_subsi3 (p1, p1, p0));
+          emit_insn (gen_ashrsi3_pointer (p1, p1, GEN_INT (3)));
+          emit_insn (gen_addsi3 (result, result, p1));
+          emit_label (done);
+          emit_move_insn (target, result);
+        }
+      else if (HAVE_SUBBP)
 	{
 	  if (!register_operand (op0, Pmode))
 	    op0 = force_reg (Pmode, op0);
@@ -13116,59 +13168,6 @@ expand_subtract_pointers (mode, target, op0, type0, op1, type1)
 	  int shift, mul;
 	  rtx sym, mem;
 
-	  if (bytesize == 16 && !TARGET_EXTENDED)
-	    {
-	      /* Local PDP-10 16-bit byte pointers have two byte positions per
-	         word, but their P/S selectors are not the same as 18-bit
-	         halfword pointers.  Reusing the %BADLH KCC table corrupts the
-	         high bits of the result.  For the local PDP-6/KA10 case, compute
-	         the element difference directly:
-
-	           2 * (Y0 - Y1) + pos0 - pos1
-
-	         where pos is 0 for POINT 16,Y,15 and 1 for POINT 16,Y,31.
-	         The 020000 left-half bit is set in the first selector and clear
-	         in the second.  */
-	      rtx y0 = gen_reg_rtx (Pmode);
-	      rtx y1 = gen_reg_rtx (Pmode);
-	      rtx bits = gen_reg_rtx (Pmode);
-	      rtx lab;
-
-	      if (GET_MODE (op0) != Pmode)
-	        op0 = convert_to_mode (Pmode, op0, 1);
-	      if (GET_MODE (op1) != Pmode)
-	        op1 = convert_to_mode (Pmode, op1, 1);
-	      if (!register_operand (op0, Pmode))
-	        op0 = force_reg (Pmode, op0);
-	      if (!register_operand (op1, Pmode))
-	        op1 = force_reg (Pmode, op1);
-
-	      emit_insn (gen_HRRZ (y0, op0));
-	      emit_insn (gen_HRRZ (y1, op1));
-	      emit_insn (gen_subsi3 (target, y0, y1));
-	      emit_insn (gen_ashlsi3_pointer (target, target, GEN_INT (1)));
-
-	      emit_move_insn (bits, op0);
-	      emit_insn (gen_andsi3 (bits, bits, GEN_INT (0200000000000)));
-	      lab = gen_label_rtx ();
-	      emit_cmp_and_jump_insn_1 (bits, CONST0_RTX (SImode), SImode, NE, 0, lab);
-	      emit_insn (gen_addsi3 (target, target, GEN_INT (1)));
-	      emit_label (lab);
-
-	      emit_move_insn (bits, op1);
-	      emit_insn (gen_andsi3 (bits, bits, GEN_INT (0200000000000)));
-	      lab = gen_label_rtx ();
-	      emit_cmp_and_jump_insn_1 (bits, CONST0_RTX (SImode), SImode, NE, 0, lab);
-	      emit_insn (gen_addsi3 (target, target, GEN_INT (-1)));
-	      emit_label (lab);
-
-	      /* Return PDP-10 storage units here.  The generic pointer-difference
-	         conversion that follows divides by TYPE_SIZE_UNIT for short16,
-	         producing the C element count.  */
-	      emit_insn (gen_ashlsi3_pointer (target, target, GEN_INT (1)));
-
-	      goto subtract_done;
-	    }
 
 	  if (bytesize == 16)
 	    bytesize = 18;
@@ -13219,7 +13218,6 @@ expand_subtract_pointers (mode, target, op0, type0, op1, type1)
 	    emit_insn (gen_ashlsi3_pointer (diff, diff, GEN_INT (1)));
 
 	  emit_move_insn (target, diff);
-	subtract_done: ;
 	}
     }
 
