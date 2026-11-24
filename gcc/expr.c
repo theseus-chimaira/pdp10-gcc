@@ -4193,65 +4193,17 @@ pdp10_packed_scalar_store (mem, pos, width, value)
     }
 }
 
-/* Lower a packed indirect reference without losing the record's byte
-   selector.  Advance to the containing C byte, then extract its physical
-   word and residual bit position.  Word-aligned records use the existing
-   constant-slice path; byte-aligned records need at most two word accesses.
-   Do not read the following word unless the field actually crosses it. */
+/* Access a scalar at an explicit physical bit position.  A crossing
+   field uses the second word only when its bits are needed. */
 static rtx
-pdp10_indirect_packed_scalar (root, dynamic, pos, width, unsignedp, value)
-     tree root, dynamic;
-     HOST_WIDE_INT pos, width;
+pdp10_physical_scalar (mem, bit, width, unsignedp, value)
+     rtx mem, bit, value;
+     HOST_WIDE_INT width;
      int unsignedp;
-     rtx value;
 {
-  rtx ptr, addr, mem, bit, first, done, right;
-  rtx word, next;
-  if (TREE_CODE (root) == INDIRECT_REF)
-    ptr = expand_expr (TREE_OPERAND (root, 0),
-                       NULL_RTX, Pmode, EXPAND_NORMAL);
-  else
-    {
-      tree ptype = build_pointer_type (TREE_TYPE (root));
-      tree address = build1 (ADDR_EXPR, ptype, root);
-      ptr = pdp10_expand_ADDR_EXP (address, ptype, NULL_RTX,
-                                   0, EXPAND_NORMAL);
-    }
-  ptr = force_reg (Pmode, ptr);
-  if (dynamic)
-    {
-      rtx delta = expand_expr (dynamic, NULL_RTX, Pmode, EXPAND_NORMAL);
-      ptr = pdp10_expand_addbp_elements (unsigned_char_type_node,
-                                         gen_reg_rtx (Pmode), ptr, delta);
-      ptr = force_reg (Pmode, ptr);
-    }
-  if (pos / BITS_PER_UNIT)
-    ptr = pdp10_expand_addbp_elements (unsigned_char_type_node, gen_reg_rtx (Pmode),
-                                      ptr, GEN_INT (pos / BITS_PER_UNIT));
-  ptr = force_reg (Pmode, ptr);
-  /* Native nine-bit fields never straddle a physical word.  Use
-     LDB/DPB directly rather than materializing a mask and shift. */
-  if (width == BITS_PER_UNIT && pos % BITS_PER_UNIT == 0)
-    {
-      rtx byte = gen_rtx_MEM (QImode, memory_address (QImode, ptr));
-      set_mem_align (byte, BITS_PER_UNIT);
-      if (value)
-        {
-          emit_move_insn (byte, convert_modes (QImode, SImode, value, 1));
-          return value;
-        }
-      return convert_modes (SImode, QImode, byte, unsignedp);
-    }
-  addr = gen_reg_rtx (Pmode);
-  emit_insn (gen_HRRZ (addr, ptr));
-  mem = gen_rtx_MEM (SImode, addr);
-  word = pdp10_slice_word (mem, 0);
-  next = pdp10_slice_word (mem, 1);
-  bit = gen_reg_rtx (SImode);
-  first = gen_reg_rtx (SImode);
-  emit_insn (gen_lshrsi3 (bit, ptr, GEN_INT (30)));
-  emit_move_insn (first, GEN_INT (27 + pos % BITS_PER_UNIT));
-  emit_insn (gen_subsi3 (bit, first, bit));
+  rtx word = pdp10_slice_word (mem, 0);
+  rtx next = pdp10_slice_word (mem, 1);
+  rtx done, right;
   done = gen_label_rtx ();
   right = gen_reg_rtx (SImode);
   if (!value)
@@ -4320,6 +4272,116 @@ pdp10_indirect_packed_scalar (root, dynamic, pos, width, unsignedp, value)
     }
 }
 
+/* Lower a packed indirect reference without losing the record's byte
+   selector.  Advance to the containing C byte, then extract its physical
+   word and residual bit position.  Word-aligned records use the existing
+   constant-slice path; byte-aligned records need at most two word accesses.
+   Do not read the following word unless the field actually crosses it. */
+static rtx
+pdp10_indirect_packed_scalar (root, dynamic, pos, width, unsignedp, value)
+     tree root, dynamic;
+     HOST_WIDE_INT pos, width;
+     int unsignedp;
+     rtx value;
+{
+  rtx ptr, addr, mem, bit, first;
+  if (TREE_CODE (root) == INDIRECT_REF)
+    ptr = expand_expr (TREE_OPERAND (root, 0),
+                       NULL_RTX, Pmode, EXPAND_NORMAL);
+  else
+    {
+      tree ptype = build_pointer_type (TREE_TYPE (root));
+      tree address = build1 (ADDR_EXPR, ptype, root);
+      ptr = pdp10_expand_ADDR_EXP (address, ptype, NULL_RTX,
+                                   0, EXPAND_NORMAL);
+    }
+  ptr = force_reg (Pmode, ptr);
+  if (dynamic)
+    {
+      rtx delta = expand_expr (dynamic, NULL_RTX, Pmode, EXPAND_NORMAL);
+      ptr = pdp10_expand_addbp_elements (unsigned_char_type_node,
+                                         gen_reg_rtx (Pmode), ptr, delta);
+      ptr = force_reg (Pmode, ptr);
+    }
+  if (pos / BITS_PER_UNIT)
+    ptr = pdp10_expand_addbp_elements (unsigned_char_type_node, gen_reg_rtx (Pmode),
+                                      ptr, GEN_INT (pos / BITS_PER_UNIT));
+  ptr = force_reg (Pmode, ptr);
+  /* Native nine-bit fields never straddle a physical word.  Use
+     LDB/DPB directly rather than materializing a mask and shift. */
+  if (width == BITS_PER_UNIT && pos % BITS_PER_UNIT == 0)
+    {
+      rtx byte = gen_rtx_MEM (QImode, memory_address (QImode, ptr));
+      set_mem_align (byte, BITS_PER_UNIT);
+      if (value)
+        {
+          emit_move_insn (byte, convert_modes (QImode, SImode, value, 1));
+          return value;
+        }
+      return convert_modes (SImode, QImode, byte, unsignedp);
+    }
+  addr = gen_reg_rtx (Pmode);
+  emit_insn (gen_HRRZ (addr, ptr));
+  mem = gen_rtx_MEM (SImode, addr);
+  bit = gen_reg_rtx (SImode);
+  first = gen_reg_rtx (SImode);
+  emit_insn (gen_lshrsi3 (bit, ptr, GEN_INT (30)));
+  emit_move_insn (first, GEN_INT (27 + pos % BITS_PER_UNIT));
+  emit_insn (gen_subsi3 (bit, first, bit));
+  return pdp10_physical_scalar (mem, bit, width, unsignedp, value);
+}
+
+/* Exact32 pointers can denote native right-justified word slots or
+   S=1 logical packed bit positions.  Lower the typed dereference while
+   the source type is still available; ordinary SImode MEMs must never
+   carry logical byte selectors. */
+static rtx
+pdp10_exact32_access (exp, value)
+     tree exp;
+     rtx value;
+{
+  rtx ptr, selector, addr, bit, mem, native_mem;
+  rtx native = gen_label_rtx ();
+  rtx done = gen_label_rtx ();
+  rtx result = value ? value : gen_reg_rtx (SImode);
+  int unsignedp = TREE_UNSIGNED (TREE_TYPE (exp));
+
+  ptr = force_reg (Pmode, expand_expr (TREE_OPERAND (exp, 0),
+                                      NULL_RTX, Pmode, EXPAND_NORMAL));
+  selector = gen_reg_rtx (Pmode);
+  emit_insn (gen_lshrsi3 (selector, ptr, GEN_INT (24)));
+  emit_insn (gen_andsi3 (selector, selector, GEN_INT (077)));
+  emit_cmp_and_jump_insns (selector, const1_rtx, NE, NULL_RTX,
+                           SImode, 0, native);
+  addr = gen_reg_rtx (Pmode);
+  emit_insn (gen_HRRZ (addr, ptr));
+  mem = gen_rtx_MEM (SImode, memory_address (SImode, addr));
+  MEM_VOLATILE_P (mem) = TREE_THIS_VOLATILE (exp);
+  bit = gen_reg_rtx (SImode);
+  emit_insn (gen_lshrsi3 (bit, ptr, GEN_INT (30)));
+  {
+    rtx last = force_reg (SImode, GEN_INT (35));
+    emit_insn (gen_subsi3 (bit, last, bit));
+  }
+  if (value)
+    pdp10_physical_scalar (mem, bit, 32, unsignedp, value);
+  else
+    emit_move_insn (result,
+                   pdp10_physical_scalar (mem, bit, 32, unsignedp, NULL_RTX));
+  emit_jump_insn (gen_jump (done));
+  emit_barrier ();
+  emit_label (native);
+  native_mem = gen_rtx_MEM (SImode, memory_address (SImode, ptr));
+  MEM_VOLATILE_P (native_mem) = TREE_THIS_VOLATILE (exp);
+  set_mem_align (native_mem, BITS_PER_WORD);
+  if (value)
+    emit_move_insn (native_mem, value);
+  else
+    emit_move_insn (result, native_mem);
+  emit_label (done);
+  return result;
+}
+
 /* Copy slices at both physical word boundaries.  The caller provides an
    independent snapshot for potentially overlapping objects.  The target
    extraction/insertion patterns consume physical bit positions; unlike
@@ -4383,6 +4445,34 @@ expand_assignment (to, from, want_value, suggest_reg)
     }
 
 #if REAL_BITS_PER_UNIT == 36
+  if (TREE_CODE (to) == INDIRECT_REF
+      && pdp10_exact32_type_p (TREE_TYPE (to)))
+    {
+      rtx v;
+      push_temp_slots ();
+      v = expand_expr (from, NULL_RTX, SImode, EXPAND_NORMAL);
+      v = convert_modes (SImode, TYPE_MODE (TREE_TYPE (from)),
+                         v, TREE_UNSIGNED (TREE_TYPE (from)));
+      v = force_reg (SImode, v);
+      /* A same-mode conversion does not narrow a 36-bit arithmetic
+         result to its declared 32-bit precision.  Normalize the value
+         before both native storage and returning the assignment value. */
+      {
+        rtx narrowed = gen_reg_rtx (SImode);
+        if (TREE_UNSIGNED (TREE_TYPE (to)))
+          emit_insn (gen_zero_extendsi (narrowed, v, GEN_INT (4)));
+        else
+          emit_insn (gen_sign_extendsi (narrowed, v, GEN_INT (4)));
+        v = narrowed;
+      }
+      pdp10_exact32_access (to, v);
+      result = want_value ? v : NULL_RTX;
+      preserve_temp_slots (result);
+      free_temp_slots ();
+      pop_temp_slots ();
+      return result;
+    }
+
       {
         HOST_WIDE_INT p, w;
         tree dynamic;
@@ -6466,6 +6556,10 @@ get_inner_reference (exp, pbitsize, pbitpos, poffset, pmode,
   tree bit_offset = bitsize_zero_node;
   tree placeholder_ptr = 0;
   tree tem;
+  /* Native exact32 array elements occupy a whole right-justified word,
+     unlike an exact32 array embedded in a packed record. */
+  int native32_array = TREE_CODE (exp) == ARRAY_REF
+    && pdp10_exact32_type_p (TREE_TYPE (exp));
 
   /* First get the mode, signedness, and size.  We do this from just the
      outermost expression.  */
@@ -6511,6 +6605,9 @@ get_inner_reference (exp, pbitsize, pbitpos, poffset, pmode,
 	{
 	  tree field = TREE_OPERAND (exp, 1);
 	  tree this_offset = DECL_FIELD_OFFSET (field);
+          if (DECL_PACKED (field)
+              || TYPE_PACKED (TREE_TYPE (TREE_OPERAND (exp, 0))))
+            native32_array = 0;
 
 	  /* If this field hasn't been filled in yet, don't go
 	     past it.  This should only happen when folding expressions
@@ -6639,6 +6736,9 @@ get_inner_reference (exp, pbitsize, pbitpos, poffset, pmode,
     *pbitpos = tree_low_cst (tem, 0), *poffset = 0;
   else
     *pbitpos = tree_low_cst (bit_offset, 0), *poffset = offset;
+
+  if (native32_array && *pbitpos % BITS_PER_WORD == 0)
+    *pbitsize = BITS_PER_WORD;
 
   if (GET_MODE_BITSIZE (mode) != *pbitsize)
     mode = VOIDmode;
@@ -8369,6 +8469,12 @@ expand_expr (exp, target, tmode, modifier)
 	  return gen_int_mode (string_read_char (string,
 					 TREE_INT_CST_LOW (index)), mode);
 
+#if REAL_BITS_PER_UNIT == 36
+        if (pdp10_exact32_type_p (type)
+            && (modifier == EXPAND_NORMAL || modifier == EXPAND_SUM))
+          return pdp10_exact32_access (exp, NULL_RTX);
+#endif
+
 	op0 = expand_expr (exp1, NULL_RTX, VOIDmode, EXPAND_SUM);
 	op0 = memory_address (mode, op0);
 	temp = gen_rtx_MEM (mode, op0);
@@ -9767,7 +9873,13 @@ expand_expr (exp, target, tmode, modifier)
 		= immed_double_const (TREE_INT_CST_LOW (TREE_OPERAND (exp, 0)),
 				      (HOST_WIDE_INT) 0,
 				      TYPE_MODE (TREE_TYPE (TREE_OPERAND (exp, 1))));
-	      op1 = plus_constant (op1, INTVAL (constant_part));
+	      if (POINTER_TYPE_P (type)
+                  && pdp10_exact32_type_p (TREE_TYPE (type))
+                  && pdp10_const_logical_bit_pointer_p (op1))
+                op1 = pdp10_expand_addbp_elements (TREE_TYPE (type),
+                         NULL_RTX, op1, constant_part);
+              else
+                op1 = plus_constant (op1, INTVAL (constant_part));
 	      if (modifier != EXPAND_SUM && modifier != EXPAND_INITIALIZER)
 		op1 = force_operand (op1, target);
 	      return op1;
@@ -9800,7 +9912,13 @@ expand_expr (exp, target, tmode, modifier)
 		= immed_double_const (TREE_INT_CST_LOW (TREE_OPERAND (exp, 1)),
 				      (HOST_WIDE_INT) 0,
 				      TYPE_MODE (TREE_TYPE (TREE_OPERAND (exp, 0))));
-	      op0 = plus_constant (op0, INTVAL (constant_part));
+	      if (POINTER_TYPE_P (type)
+                  && pdp10_exact32_type_p (TREE_TYPE (type))
+                  && pdp10_const_logical_bit_pointer_p (op0))
+                op0 = pdp10_expand_addbp_elements (TREE_TYPE (type),
+                         NULL_RTX, op0, constant_part);
+              else
+                op0 = plus_constant (op0, INTVAL (constant_part));
 	      if (modifier != EXPAND_SUM && modifier != EXPAND_INITIALIZER)
 		op0 = force_operand (op0, target);
 	      return op0;
@@ -9860,6 +9978,15 @@ expand_expr (exp, target, tmode, modifier)
 	  else
 	    op1 = gen_rtx_PLUS (mode, constant_term, XEXP (op1, 1));
 	}
+
+      /* The native exact32 ABI uses word offsets, but a packed
+         constant has a logical S=1 bit stride.  EXPAND_INITIALIZER
+         must fold that stride without emitting instructions. */
+      if (POINTER_TYPE_P (type) && pdp10_exact32_type_p (TREE_TYPE (type))
+          && (pdp10_const_logical_bit_pointer_p (op0)
+              || (!CONSTANT_P (op0) && modifier != EXPAND_INITIALIZER)))
+        return pdp10_expand_addbp_elements (TREE_TYPE (type),
+                                           NULL_RTX, op0, op1);
 
       if (POINTER_TYPE_P (type)
 	  && pdp10_bytesize (TREE_TYPE (type)) < BITS_PER_WORD)
@@ -9982,7 +10109,12 @@ expand_expr (exp, target, tmode, modifier)
 		  return folded ? folded : adjusted;
 		}
 #endif
-	      return plus_constant (op0, - INTVAL (op1));
+	      if (POINTER_TYPE_P (type)
+          && pdp10_exact32_type_p (TREE_TYPE (type))
+          && pdp10_const_logical_bit_pointer_p (op0))
+        return pdp10_expand_addbp_elements (TREE_TYPE (type), NULL_RTX,
+                                           op0, GEN_INT (-INTVAL (op1)));
+      return plus_constant (op0, - INTVAL (op1));
 	    }
 	  else
 	    return gen_rtx_MINUS (mode, op0, op1);
@@ -11428,6 +11560,8 @@ expand_increment (exp, post, ignore)
   /* Stabilize any component ref that might need to be
      evaluated more than once below.  */
   if (!post
+      || (TREE_CODE (incremented) == INDIRECT_REF
+          && pdp10_exact32_type_p (TREE_TYPE (incremented)))
       || TREE_CODE (incremented) == BIT_FIELD_REF
       || (TREE_CODE (incremented) == COMPONENT_REF
 	  && (TREE_CODE (TREE_OPERAND (incremented, 0)) != INDIRECT_REF
@@ -11548,7 +11682,8 @@ expand_increment (exp, post, ignore)
      Use the normal typed multi-instruction increment path instead. */
   if (post
       && !(POINTER_TYPE_P (TREE_TYPE (incremented))
-           && pdp10_bytesize (TREE_TYPE (TREE_TYPE (incremented))) == 16))
+           && (pdp10_bytesize (TREE_TYPE (TREE_TYPE (incremented))) == 16
+               || pdp10_exact32_type_p (TREE_TYPE (TREE_TYPE (incremented))))))
     {
       /* We have a true reference to the value in OP0.
 	 If there is an insn to add or subtract in this mode, queue it.

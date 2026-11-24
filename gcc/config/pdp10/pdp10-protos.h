@@ -210,6 +210,8 @@ extern int	pdp10_expand_cmpstrsi PARAMS ((rtx *operands));
 
 /* Pointer Arithmetic.  */
 extern int	pdp10_bytesize PARAMS ((tree type));
+extern int pdp10_const_logical_bit_pointer_p PARAMS ((rtx));
+extern int pdp10_exact32_type_p PARAMS ((tree));
 extern int pdp10_continuous_record_p PARAMS ((tree));
 extern rtx	pdp10_expand_addbp3 PARAMS ((tree type, rtx target, rtx op0,
 					     rtx op1));

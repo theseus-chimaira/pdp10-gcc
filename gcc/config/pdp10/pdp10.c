@@ -199,7 +199,7 @@ static int	pdp10_decompose_symbolic_constant PARAMS ((rtx x, rtx *basep,
 static int	pdp10_decompose_symbolic_word36 PARAMS ((rtx x, rtx *basep,
 					   pdp10_word36 *offsetp));
 int	pdp10_const_word36_byte_pointer_p PARAMS ((rtx x));
-static int	pdp10_const_logical_bit_pointer_p PARAMS ((rtx x));
+
 static int	pdp10_reg_likely_byte_pointer_p PARAMS ((rtx reg, rtx insn));
 int	pdp10_const_double_0_operand PARAMS ((rtx op, enum machine_mode mode));
 static int	pdp10_qi_mem_logical_offset PARAMS ((rtx mem, HOST_WIDE_INT *offp, int *unsignedp));
@@ -3281,7 +3281,7 @@ pdp10_first_byte_word_address (x)
    This representation is deliberately local even on extended targets: the
    one-bit selector carries the exact bit position which an architectural
    16-bit byte pointer cannot represent.  */
-static int
+int
 pdp10_const_logical_bit_pointer_p (x)
      rtx x;
 {
@@ -12395,6 +12395,32 @@ pdp10_bytesize (type)
   return size == 32 ? 36 : size;
 }
 
+/* Exact32 objects normally occupy word slots, but packed fields can
+   carry a local S=1 logical address.  Keep the native pointer ABI. */
+int
+pdp10_exact32_type_p (type)
+     tree type;
+{
+  return !TARGET_EXTENDED && INTEGRAL_TYPE_P (type)
+    && TYPE_PRECISION (type) == 32;
+}
+
+/* A packed exact32 field or its array element has continuous bit stride. */
+static int
+pdp10_packed_exact32_ref_p (object)
+     tree object;
+{
+  tree type = TREE_TYPE (object);
+  while (TREE_CODE (type) == ARRAY_TYPE)
+    type = TREE_TYPE (type);
+  if (!pdp10_exact32_type_p (type))
+    return 0;
+  if (TREE_CODE (object) == ARRAY_REF)
+    object = TREE_OPERAND (object, 0);
+  return TREE_CODE (object) == COMPONENT_REF
+    && pdp10_continuous_record_p (TREE_TYPE (TREE_OPERAND (object, 0)));
+}
+
 /* Emit a dummy move instruction which will be optimized away later.
    The purpose of this instruction is to fool GCC into not generating
    a REG_EQUAL note for a previously emitted (sequence of)
@@ -12771,6 +12797,8 @@ pdp10_expand_addbp_elements (type, target, op0, op1)
      rtx op1;
 {
   int byte_size = pdp10_bytesize (type);
+  int exact32 = pdp10_exact32_type_p (type);
+  int logical_width = exact32 ? 32 : byte_size;
 
   /* ushort16 pointers are self-describing at the KCC/GCC ABI boundary:
      native objects use S=16, while non-byte-aligned packed arrays decay to
@@ -12778,24 +12806,20 @@ pdp10_expand_addbp_elements (type, target, op0, op1)
      known to use the logical representation, so scale an exact16 element
      step to sixteen one-bit pointer positions before generic byte-pointer
      lowering can mistake it for one architectural 16-bit byte.  */
-  if (byte_size == 16
+  if ((byte_size == 16 || exact32)
       && CONSTANT_P (op0)
       && pdp10_const_logical_bit_pointer_p (op0))
     {
       rtx scaled;
 
-      if (!target || !register_operand (target, Pmode)
-          || reg_overlap_mentioned_p (target, op1))
-        target = gen_reg_rtx (Pmode);
-
       if (GET_CODE (op1) == CONST_INT)
-        scaled = GEN_INT (INTVAL (op1) * byte_size);
+        scaled = GEN_INT (INTVAL (op1) * logical_width);
       else
         {
           if (!register_operand (op1, Pmode))
             op1 = force_reg (Pmode, op1);
           scaled = gen_reg_rtx (Pmode);
-          emit_insn (gen_mulsi3 (scaled, op1, GEN_INT (byte_size)));
+          emit_insn (gen_mulsi3 (scaled, op1, GEN_INT (logical_width)));
         }
 
       {
@@ -12812,6 +12836,9 @@ pdp10_expand_addbp_elements (type, target, op0, op1)
               return folded;
           }
 
+        if (!target || !register_operand (target, Pmode)
+            || reg_overlap_mentioned_p (target, op1))
+          target = gen_reg_rtx (Pmode);
         emit_insn (gen_rtx_SET (VOIDmode, target, adjusted));
       }
       return target;
@@ -12819,7 +12846,7 @@ pdp10_expand_addbp_elements (type, target, op0, op1)
 
   /* For a reloaded pointer the representation is only known at run time.
      Inspect S and select the physical element stride accordingly.  */
-  if (byte_size == 16 && !CONSTANT_P (op0))
+  if ((byte_size == 16 || exact32) && !CONSTANT_P (op0))
     {
       rtx selector = gen_reg_rtx (Pmode);
       rtx scaled;
@@ -12846,11 +12873,11 @@ pdp10_expand_addbp_elements (type, target, op0, op1)
                                 native_label);
 
       if (GET_CODE (op1) == CONST_INT)
-        scaled = GEN_INT (INTVAL (op1) * byte_size);
+        scaled = GEN_INT (INTVAL (op1) * logical_width);
       else
         {
           scaled = gen_reg_rtx (Pmode);
-          emit_insn (gen_mulsi3 (scaled, op1, GEN_INT (byte_size)));
+          emit_insn (gen_mulsi3 (scaled, op1, GEN_INT (logical_width)));
         }
       if (!register_operand (scaled, Pmode) && GET_CODE (scaled) != CONST_INT)
         scaled = force_reg (Pmode, scaled);
@@ -12888,7 +12915,10 @@ pdp10_expand_addbp_elements (type, target, op0, op1)
       emit_barrier ();
 
       emit_label (native_label);
-      pdp10_expand_addbp_units (byte_size, target, op0, op1);
+      if (exact32)
+        emit_insn (gen_addsi3 (target, op0, force_reg (Pmode, op1)));
+      else
+        pdp10_expand_addbp_units (byte_size, target, op0, op1);
       emit_label (done_label);
       return target;
     }
@@ -13006,6 +13036,17 @@ expand_add_or_sub_pointer (target, op0, type0, op1, type1, add)
     }
 
   type = TREE_TYPE (POINTER_TYPE_P (type0) ? type0 : type1);
+
+  /* Exact32 pointer increments arrive in word/element units, since
+     the front end uses the ordinary four-C-byte object extent. */
+  if (pdp10_exact32_type_p (type)
+      && (!CONSTANT_P (op0) || pdp10_const_logical_bit_pointer_p (op0))
+      && !neg)
+    {
+      if (!add)
+        op1 = expand_simple_unop (Pmode, NEG, op1, NULL_RTX, 0);
+      return pdp10_expand_addbp_elements (type, target, op0, op1);
+    }
 
   /* A static pointer initializer has no active function in which to
      allocate a pseudo register.  Constant word-pointer arithmetic is
@@ -13152,11 +13193,12 @@ expand_subtract_pointers (mode, target, op0, type0, op1, type1)
      tree type1 ATTRIBUTE_UNUSED;
 {
   tree type = TREE_TYPE (type0);
+  int exact32 = pdp10_exact32_type_p (type);
 
   if (!target)
     target = gen_reg_rtx (Pmode);
 
-  if (WORD_TYPE_P (type))
+  if (WORD_TYPE_P (type) && !exact32)
     {
       /* Calculate the difference between two word pointers by
 	 subtracting and multiplying by the number of storage units
@@ -13173,7 +13215,7 @@ expand_subtract_pointers (mode, target, op0, type0, op1, type1)
          physical bits, then convert to the two C units per element
          expected by the front end's exact division.  Both operands
          designate the same array for defined C pointer subtraction. */
-      if (pdp10_bytesize (type) == 16 && !TARGET_EXTENDED)
+      if ((pdp10_bytesize (type) == 16 || exact32) && !TARGET_EXTENDED)
         {
           rtx p0, p1, y0, y1, selector;
           rtx native = gen_label_rtx ();
@@ -13209,11 +13251,14 @@ expand_subtract_pointers (mode, target, op0, type0, op1, type1)
              (20-P)/16.  Return storage units, not elements. */
           emit_insn (gen_subsi3 (result, y0, y1));
           emit_insn (gen_ashlsi3_pointer (result, result, GEN_INT (2)));
-          emit_insn (gen_lshrsi3 (p0, op0, GEN_INT (30)));
-          emit_insn (gen_lshrsi3 (p1, op1, GEN_INT (30)));
-          emit_insn (gen_subsi3 (p1, p1, p0));
-          emit_insn (gen_ashrsi3_pointer (p1, p1, GEN_INT (3)));
-          emit_insn (gen_addsi3 (result, result, p1));
+          if (!exact32)
+            {
+              emit_insn (gen_lshrsi3 (p0, op0, GEN_INT (30)));
+              emit_insn (gen_lshrsi3 (p1, op1, GEN_INT (30)));
+              emit_insn (gen_subsi3 (p1, p1, p0));
+              emit_insn (gen_ashrsi3_pointer (p1, p1, GEN_INT (3)));
+              emit_insn (gen_addsi3 (result, result, p1));
+            }
           emit_label (done);
           emit_move_insn (target, result);
         }
@@ -15030,6 +15075,8 @@ pdp10_initializer_ref_bitpos (exp, basep, bitposp)
           }
         else if (!pdp10_initializer_ref_bitpos (array, basep, &base_bits))
           return 0;
+        if (pdp10_packed_exact32_ref_p (exp))
+          elem_bits = 32;
         *bitposp = base_bits + (pdp10_word36) idx * elem_bits;
         return 1;
       }
@@ -15305,7 +15352,12 @@ pdp10_initializer_byte_pointer (exp)
       bytesize = pdp10_normalize_pointer_bytesize
         (pdp10_bytesize (TREE_TYPE (ptr_type)));
     }
-  if (!VALID_OWGBP_BYTE_SIZE_P (bytesize))
+  if (pdp10_packed_exact32_ref_p (object))
+    {
+      bytesize = 32;
+      logical_bitptr = 1;
+    }
+  if (!logical_bitptr && !VALID_OWGBP_BYTE_SIZE_P (bytesize))
     return NULL_RTX;
 
   /* struct-subword-packed-component-addr-bytepos-v24:
@@ -15338,6 +15390,13 @@ pdp10_initializer_byte_pointer (exp)
         }
       else if (!pdp10_initializer_ref_bitpos (object, &base_tree, &bitpos))
         return NULL_RTX;
+    }
+  else if (logical_bitptr && TREE_CODE (object) == COMPONENT_REF)
+    {
+      if (!pdp10_initializer_ref_bitpos (TREE_OPERAND (object, 0),
+                                         &base_tree, &bitpos))
+        return NULL_RTX;
+      bitpos += int_bit_position (TREE_OPERAND (object, 1));
     }
   else if (!pdp10_initializer_ref_bitpos (object, &base_tree, &bitpos))
     return NULL_RTX;
@@ -15560,6 +15619,8 @@ pdp10_dynamic_ref_base_bitpos (exp, basep, bitposp)
               return 0;
 
             *basep = record_base;
+            if (pdp10_packed_exact32_ref_p (exp))
+              elem_bits = 32;
             *bitposp = base_bits + field_bits
               + (pdp10_word36) idx * elem_bits;
             return 1;
@@ -15574,6 +15635,8 @@ pdp10_dynamic_ref_base_bitpos (exp, basep, bitposp)
           return 0;
         if (!pdp10_initializer_type_bitsize (TREE_TYPE (exp), &elem_bits))
           return 0;
+        if (pdp10_packed_exact32_ref_p (exp))
+          elem_bits = 32;
         *bitposp = base_bits + (pdp10_word36) idx * elem_bits;
         return 1;
       }
@@ -15647,7 +15710,13 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
     return NULL_RTX;
 
   bytesize = pdp10_normalize_pointer_bytesize (bytesize);
-  if (!VALID_OWGBP_BYTE_SIZE_P (bytesize) || bytesize >= BITS_PER_WORD)
+  if (pdp10_packed_exact32_ref_p (object))
+    {
+      bytesize = 32;
+      logical_bitptr = 1;
+    }
+  if (!logical_bitptr
+      && (!VALID_OWGBP_BYTE_SIZE_P (bytesize) || bytesize >= BITS_PER_WORD))
     return NULL_RTX;
   if (TARGET_EXTENDED && VALID_OWGBP_SELECTOR_BYTE_SIZE_P (bytesize))
     return NULL_RTX;
@@ -15687,7 +15756,9 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
           record_type = TREE_TYPE (record_type);
         if (record_type != 0 && POINTER_TYPE_P (record_type))
           record_type = TREE_TYPE (record_type);
-        if (!pdp10_initializer_record_field_bitpos (record_type,
+        if (logical_bitptr && pdp10_continuous_record_p (record_type))
+          field_bits = int_bit_position (field);
+        else if (!pdp10_initializer_record_field_bitpos (record_type,
                                                     field, &field_bits))
           return NULL_RTX;
         bitpos = base_bits + field_bits;
@@ -15724,7 +15795,9 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
 
         if (record_type != 0 && POINTER_TYPE_P (record_type))
           record_type = TREE_TYPE (record_type);
-        if (!pdp10_initializer_record_field_bitpos (record_type,
+        if (logical_bitptr && pdp10_continuous_record_p (record_type))
+          field_bits = int_bit_position (field);
+        else if (!pdp10_initializer_record_field_bitpos (record_type,
                                                     field, &field_bits))
           return NULL_RTX;
         bitpos = base_bits + field_bits;
@@ -15740,7 +15813,7 @@ pdp10_dynamic_addr_expr_byte_pointer (exp, bytesize)
      even when the first element happens to fit in a physical word.
      A record pointer retains its byte position, which must be included
      before installing the logical S=1 selector. */
-  if (bytesize == 16 && TREE_CODE (base_tree) == INDIRECT_REF
+  if ((bytesize == 16 || logical_bitptr) && TREE_CODE (base_tree) == INDIRECT_REF
       && pdp10_continuous_record_p (TREE_TYPE (base_tree)))
     {
       rtx ptr = force_reg (Pmode,
