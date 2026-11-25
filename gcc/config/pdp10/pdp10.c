@@ -190,6 +190,10 @@ static void	pdp10_split_integer_double PARAMS ((rtx x,
 					       unsigned HOST_WIDE_INT *word0p,
 					       unsigned HOST_WIDE_INT *word1p));
 static int	pdp10_const_byte_pointer_p PARAMS ((rtx x));
+static int pdp10_wide_global_reloc PARAMS ((rtx, rtx *, int *, long long *));
+static int pdp10_global_reloc_parts PARAMS ((rtx, rtx *, int *, long long *));
+static rtx pdp10_make_global_reloc PARAMS ((rtx, int, long long));
+static void pdp10_print_wide_global_reloc PARAMS ((FILE *, rtx, int, long long));
 static int pdp10_const_software_pointer_p PARAMS ((rtx x));
 static int	pdp10_extract_word36_constant PARAMS ((rtx x,
 					      pdp10_word36 *valuep));
@@ -2398,6 +2402,17 @@ pdp10_print_operand (stream, x, code)
   int flags = code & ~0xff;
   code &= 0xff;
 
+  {
+    rtx base;
+    int tag;
+    long long addend;
+    if (pdp10_wide_global_reloc (x, &base, &tag, &addend))
+      {
+        pdp10_print_wide_global_reloc (stream, base, code == 'W' ? 0 : tag, addend);
+        return;
+      }
+  }
+
   switch (code)
     {
       /* Optionally print a space.  */
@@ -3271,6 +3286,78 @@ pdp10_decompose_symbolic_word36 (x, basep, offsetp)
     }
 }
 
+/* Keep the tag and signed displacement in independent RTL operands when
+   a symbolic pointer cannot fit in the old signed 30-bit addend field. */
+static int
+pdp10_wide_global_reloc (x, base, tag, addend)
+     rtx x, *base;
+     int *tag;
+     long long *addend;
+{
+  if (!TARGET_EXTENDED || !x || GET_CODE (x) != CONST) return 0;
+  x = XEXP (x, 0);
+  if (GET_CODE (x) != UNSPEC || XINT (x, 1) != UNSPEC_GLOBAL_RELOC)
+    return 0;
+  *base = XVECEXP (x, 0, 0);
+  *tag = INTVAL (XVECEXP (x, 0, 1));
+  *addend = INTVAL (XVECEXP (x, 0, 2));
+  return 1;
+}
+
+static int
+pdp10_global_reloc_parts (x, base, tag, addend)
+     rtx x, *base;
+     int *tag;
+     long long *addend;
+{
+  pdp10_word36 encoded;
+  if (pdp10_wide_global_reloc (x, base, tag, addend)) return 1;
+  if (!pdp10_decompose_symbolic_word36 (x, base, &encoded) || !*base)
+    return 0;
+  *tag = encoded >> 30;
+  if (*tag == 077) *tag = 0;
+  *addend = encoded & ADDRESS_MASK;
+  if (*addend & (1LL << 29)) *addend -= 1LL << 30;
+  return 1;
+}
+
+static rtx
+pdp10_make_global_reloc (base, tag, addend)
+     rtx base;
+     int tag;
+     long long addend;
+{
+  /* No symbol can resolve a displacement outside the address space. */
+  if (addend < -(long long) ADDRESS_MASK || addend > (long long) ADDRESS_MASK)
+    {
+      error ("global pointer relocation addend exceeds address space");
+      return const0_rtx;
+    }
+  if (addend >= -(1LL << 29) && addend < (1LL << 29))
+    {
+      if (!tag) return plus_constant (base, (HOST_WIDE_INT) addend);
+      return pdp10_plus_constant_word36 (base,
+             ((pdp10_word36) tag << 30) | ((pdp10_word36) addend & ADDRESS_MASK));
+    }
+  return gen_rtx_CONST (Pmode, gen_rtx_UNSPEC (Pmode,
+      gen_rtvec (3, base, GEN_INT (tag), GEN_INT ((HOST_WIDE_INT) addend)),
+      UNSPEC_GLOBAL_RELOC));
+}
+
+static void
+pdp10_print_wide_global_reloc (stream, base, tag, addend)
+     FILE *stream;
+     rtx base;
+     int tag;
+     long long addend;
+{
+  fprintf (stream, "%%GADDR(%o,", tag);
+  print_symbolic_ref (stream, base);
+  if (addend) fprintf (stream, "%c0%llo", addend < 0 ? '-' : '+',
+                       (unsigned long long) (addend < 0 ? -addend : addend));
+  fputc (')', stream);
+}
+
 int
 pdp10_const_word36_byte_pointer_p (x)
      rtx x;
@@ -3278,6 +3365,14 @@ pdp10_const_word36_byte_pointer_p (x)
   rtx base;
   pdp10_word36 offset;
   pdp10_word36 ps;
+
+  if (TARGET_EXTENDED)
+    {
+      int tag;
+      long long addend;
+      if (pdp10_wide_global_reloc (x, &base, &tag, &addend))
+        return tag != 0;
+    }
 
   if (!pdp10_decompose_symbolic_word36 (x, &base, &offset)
       || base == NULL_RTX)
@@ -3332,6 +3427,14 @@ pdp10_const_logical_bit_pointer_p (x)
   int ps;
   int p;
   int s;
+
+  if (TARGET_EXTENDED)
+    {
+      int tag;
+      long long addend;
+      if (pdp10_wide_global_reloc (x, &base, &tag, &addend))
+        return tag >= 1 && tag <= 044;
+    }
 
   if (!pdp10_decompose_symbolic_word36 (x, &base, &offset)
       || base == NULL_RTX)
@@ -6684,6 +6787,17 @@ pdp10_gas_print_symbolic_global_word (x)
   pdp10_word36 encoded;
   unsigned int selector;
   HOST_WIDE_INT offset;
+
+  {
+    int tag;
+    long long addend;
+    if (pdp10_wide_global_reloc (x, &base, &tag, &addend))
+      {
+        fputs ("\t.long ", asm_out_file);
+        pdp10_print_wide_global_reloc (asm_out_file, base, tag, addend);
+        return 1;
+      }
+  }
 
   if (!TARGET_EXTENDED
       || !pdp10_decompose_symbolic_word36 (x, &base, &encoded)
@@ -12892,20 +13006,14 @@ pdp10_expand_addbp3 (type, target, op0, op1)
   return pdp10_expand_addbp_elements (type, target, op0, op1);
 }
 
-/* Advance a constant software pointer by a signed element count.
-   The address is a signed addend for symbolic operands, otherwise an
-   unsigned 30-bit coordinate. Use one host calculation for tree and RTL
-   folding so the generic C-unit arithmetic cannot corrupt the tag. */
-static pdp10_word36
-pdp10_global_exact_constant_add (encoded, n, width, symbolic)
-     pdp10_word36 encoded;
-     long long n;
-     int width, symbolic;
+/* Advance exact-width coordinates independently of the RTL encoding.
+   Only absolute pointer words wrap at 30 bits. */
+static void
+pdp10_global_exact_coordinates (address, tag, n, width)
+     long long *address, *tag, n;
+     int width;
 {
-  long long a = encoded & ADDRESS_MASK;
-  long long t = encoded >> 30;
-  if (symbolic && (a & (1LL << 29))) a -= 1LL << 30;
-  if (width == 32 && symbolic && t == 077) t = 0;
+  long long a = *address, t = *tag;
   if (width == 32 && t == 0)
     a += n;
   else if (width == 16 && (t == 045 || t == 054))
@@ -12924,13 +13032,34 @@ pdp10_global_exact_constant_add (encoded, n, width, symbolic)
       if (b < 0) { --a; b += 36; }
       t = b + 1;
     }
-  /* A tagged symbolic constant has only a signed 30-bit addend.
-     Check before masking: otherwise +2^29 becomes -2^29 and the
-     assembler emits a valid but incorrect relocation. A wider symbolic
-     RTL representation is required to express such an adjustment. */
-  if (symbolic && (a < -(1LL << 29) || a >= (1LL << 29)))
-    error ("global pointer relocation addend out of signed 30-bit range");
+  *address = a;
+  *tag = t;
+}
+
+static pdp10_word36
+pdp10_global_exact_constant_add (encoded, n, width)
+     pdp10_word36 encoded;
+     long long n;
+     int width;
+{
+  long long a = encoded & ADDRESS_MASK, t = encoded >> 30;
+  pdp10_global_exact_coordinates (&a, &t, n, width);
   return ((pdp10_word36) t << 30) | ((pdp10_word36) a & ADDRESS_MASK);
+}
+
+static rtx
+pdp10_global_exact_symbolic_add (pointer, n, width)
+     rtx pointer;
+     long long n;
+     int width;
+{
+  rtx base;
+  int tag;
+  long long a, t;
+  if (!pdp10_global_reloc_parts (pointer, &base, &tag, &a)) return NULL_RTX;
+  t = tag;
+  pdp10_global_exact_coordinates (&a, &t, n, width);
+  return pdp10_make_global_reloc (base, (int) t, a);
 }
 
 /* Read a target word from an INTEGER_CST on either 32- or 64-bit hosts. */
@@ -13012,7 +13141,7 @@ pdp10_fold_global_scalar_add (pointer, count, subtract)
   if (subtract) n = -n;
   w = pdp10_tree_word36 (pointer);
   if (width == 16 || width == 32)
-    w = pdp10_global_exact_constant_add (w, n, width, 0);
+    w = pdp10_global_exact_constant_add (w, n, width);
   else if (!pdp10_global_native_constant_add (w, n, width, 0, &w))
     return NULL_TREE;
 #if HOST_BITS_PER_WIDE_INT >= 36
@@ -13132,21 +13261,15 @@ pdp10_global_exact32_add (op0, op1)
 {
   rtx base, tag, addr, q, r, result, native, done, positive, normalized;
   pdp10_word36 encoded;
-  if (GET_CODE (op1) == CONST_INT
-      && pdp10_decompose_symbolic_word36 (op0, &base, &encoded))
+  if (GET_CODE (op1) == CONST_INT)
     {
-      HOST_WIDE_INT a;
-      encoded = pdp10_global_exact_constant_add (encoded, INTVAL (op1),
-                                                 32, base != NULL_RTX);
-      if (base != NULL_RTX && (encoded >> 30) == 0)
-        {
-          a = (HOST_WIDE_INT) (encoded & ADDRESS_MASK);
-          if (a & (HWINT (1) << 29)) a -= HWINT (1) << 30;
-          return plus_constant (base, a);
-        }
-      return base != NULL_RTX ? pdp10_plus_constant_word36 (base, encoded)
-        : pdp10_gen_word36_constant (encoded);
+      result = pdp10_global_exact_symbolic_add (op0, INTVAL (op1), 32);
+      if (result) return result;
     }
+  if (GET_CODE (op1) == CONST_INT
+      && pdp10_decompose_symbolic_word36 (op0, &base, &encoded) && !base)
+    return pdp10_gen_word36_constant
+      (pdp10_global_exact_constant_add (encoded, INTVAL (op1), 32));
   op0 = force_reg (Pmode, op0);
   op1 = force_reg (Pmode, op1);
   tag = gen_reg_rtx (Pmode); addr = gen_reg_rtx (Pmode);
@@ -13193,14 +13316,15 @@ pdp10_global_exact16_add (op0, op1)
 {
   rtx base, tag, addr, q, r, result, native, done, positive, normalized;
   pdp10_word36 encoded;
-  if (GET_CODE (op1) == CONST_INT
-      && pdp10_decompose_symbolic_word36 (op0, &base, &encoded))
+  if (GET_CODE (op1) == CONST_INT)
     {
-      encoded = pdp10_global_exact_constant_add (encoded, INTVAL (op1),
-                                                 16, base != NULL_RTX);
-      return base ? pdp10_plus_constant_word36 (base, encoded)
-        : pdp10_gen_word36_constant (encoded);
+      result = pdp10_global_exact_symbolic_add (op0, INTVAL (op1), 16);
+      if (result) return result;
     }
+  if (GET_CODE (op1) == CONST_INT
+      && pdp10_decompose_symbolic_word36 (op0, &base, &encoded) && !base)
+    return pdp10_gen_word36_constant
+      (pdp10_global_exact_constant_add (encoded, INTVAL (op1), 16));
   op0 = force_reg (Pmode, op0);
   op1 = force_reg (Pmode, op1);
   tag = gen_reg_rtx (Pmode); addr = gen_reg_rtx (Pmode);
@@ -13516,7 +13640,12 @@ expand_add_or_sub_pointer (target, op0, type0, op1, type1, add)
       && !neg)
     {
       if (!add)
-        op1 = expand_simple_unop (Pmode, NEG, op1, NULL_RTX, 0);
+        {
+          if (TARGET_EXTENDED && GET_CODE (op1) == CONST_INT)
+            op1 = GEN_INT (-INTVAL (op1));
+          else
+            op1 = expand_simple_unop (Pmode, NEG, op1, NULL_RTX, 0);
+        }
       return pdp10_expand_addbp_elements (type, target, op0, op1);
     }
 

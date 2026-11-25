@@ -507,9 +507,10 @@
 				;   Operand 0 is the source address.
 				;   Operand 1 is the destination address.
    (UNSPEC_MULSI_LOW	21)
-   (UNSPEC_DF_NORMALIZE 22)])	; Canonicalize low word after MUL (SImode):
+   (UNSPEC_DF_NORMALIZE 22)	; Canonicalize low word after MUL (SImode):
 				;   Operand 0 is the raw low word.
 				;   Operand 1 is the raw high word.
+   (UNSPEC_GLOBAL_RELOC 23)])	; Symbol, selector, signed word displacement.
 
 (define_constants
   [(VUNSPEC_BLOCKAGE	0)
