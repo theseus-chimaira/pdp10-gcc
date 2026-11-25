@@ -4468,20 +4468,33 @@ pdp10_exact32_access (exp, value)
   ptr = force_reg (Pmode, expand_expr (TREE_OPERAND (exp, 0),
                                       NULL_RTX, Pmode, EXPAND_NORMAL));
   selector = gen_reg_rtx (Pmode);
-  emit_insn (gen_lshrsi3 (selector, ptr, GEN_INT (24)));
-  emit_insn (gen_andsi3 (selector, selector, GEN_INT (077)));
-  emit_cmp_and_jump_insns (selector, const1_rtx, NE, NULL_RTX,
-                           SImode, 0, native);
-  addr = gen_reg_rtx (Pmode);
-  emit_insn (gen_HRRZ (addr, ptr));
+  if (TARGET_EXTENDED)
+    {
+      emit_insn (gen_lshrsi3 (selector, ptr, GEN_INT (30)));
+      emit_cmp_and_jump_insns (selector, const0_rtx, EQ, NULL_RTX,
+                               SImode, 0, native);
+      addr = gen_reg_rtx (Pmode);
+      emit_insn (gen_andsi3 (addr, ptr, GEN_INT (07777777777UL)));
+      bit = gen_reg_rtx (SImode);
+      emit_insn (gen_addsi3 (bit, selector, GEN_INT (-1)));
+    }
+  else
+    {
+      emit_insn (gen_lshrsi3 (selector, ptr, GEN_INT (24)));
+      emit_insn (gen_andsi3 (selector, selector, GEN_INT (077)));
+      emit_cmp_and_jump_insns (selector, const1_rtx, NE, NULL_RTX,
+                               SImode, 0, native);
+      addr = gen_reg_rtx (Pmode);
+      emit_insn (gen_HRRZ (addr, ptr));
+      bit = gen_reg_rtx (SImode);
+      emit_insn (gen_lshrsi3 (bit, ptr, GEN_INT (30)));
+      {
+        rtx last = force_reg (SImode, GEN_INT (35));
+        emit_insn (gen_subsi3 (bit, last, bit));
+      }
+    }
   mem = gen_rtx_MEM (SImode, memory_address (SImode, addr));
   MEM_VOLATILE_P (mem) = TREE_THIS_VOLATILE (exp);
-  bit = gen_reg_rtx (SImode);
-  emit_insn (gen_lshrsi3 (bit, ptr, GEN_INT (30)));
-  {
-    rtx last = force_reg (SImode, GEN_INT (35));
-    emit_insn (gen_subsi3 (bit, last, bit));
-  }
   if (value)
     pdp10_physical_scalar (mem, bit, 32, unsignedp, value);
   else
@@ -13253,6 +13266,17 @@ do_store_flag (exp, target, mode, only_cheap)
         unsignedp = pdp10_uns0;
       else
         unsignedp = pdp10_uns1;
+    }
+#endif
+
+#ifdef __PDP10_H__
+  if (TARGET_EXTENDED && POINTER_TYPE_P (type)
+      && pdp10_exact32_type_p (TREE_TYPE (type)) && code != EQ && code != NE)
+    {
+      op0 = pdp10_global_exact32_order (op0);
+      op1 = pdp10_global_exact32_order (op1);
+      code = signed_condition (code);
+      unsignedp = 0;
     }
 #endif
 
