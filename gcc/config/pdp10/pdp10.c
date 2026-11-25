@@ -12892,6 +12892,84 @@ pdp10_expand_addbp3 (type, target, op0, op1)
   return pdp10_expand_addbp_elements (type, target, op0, op1);
 }
 
+/* Advance a constant software pointer by a signed element count.
+   The address is a signed addend for symbolic operands, otherwise an
+   unsigned 30-bit coordinate. Use one host calculation for tree and RTL
+   folding so the generic C-unit arithmetic cannot corrupt the tag. */
+static pdp10_word36
+pdp10_global_exact_constant_add (encoded, n, width, symbolic)
+     pdp10_word36 encoded;
+     long long n;
+     int width, symbolic;
+{
+  long long a = encoded & ADDRESS_MASK;
+  long long t = encoded >> 30;
+  if (symbolic && (a & (1LL << 29))) a -= 1LL << 30;
+  if (width == 32 && symbolic && t == 077) t = 0;
+  if (width == 32 && t == 0)
+    a += n;
+  else if (width == 16 && (t == 045 || t == 054))
+    {
+      n += t == 054;
+      a += n / 2;
+      t = n % 2;
+      if (t < 0) { --a; t += 2; }
+      t = t ? 054 : 045;
+    }
+  else
+    {
+      long long b = t - 1 + width * (n % 9);
+      a += (width / 4) * (n / 9) + b / 36;
+      b %= 36;
+      if (b < 0) { --a; b += 36; }
+      t = b + 1;
+    }
+  return ((pdp10_word36) t << 30) | ((pdp10_word36) a & ADDRESS_MASK);
+}
+
+/* Read a target word from an INTEGER_CST on either 32- or 64-bit hosts. */
+static pdp10_word36
+pdp10_tree_word36 (value)
+     tree value;
+{
+  pdp10_word36 w = (unsigned HOST_WIDE_INT) TREE_INT_CST_LOW (value);
+#if HOST_BITS_PER_WIDE_INT < 36
+  w |= (pdp10_word36) TREE_INT_CST_HIGH (value) << HOST_BITS_PER_WIDE_INT;
+#endif
+  return w & PDP10_WORD36_MASK;
+}
+
+/* Called before pointer_int_sum scales the element count into C units.
+   Raw integer-cast pointer constants are a target ABI extension. */
+tree
+pdp10_fold_global_exact_add (pointer, count, subtract)
+     tree pointer, count;
+     int subtract;
+{
+  tree type = TREE_TYPE (TREE_TYPE (pointer)), result;
+  int width;
+  pdp10_word36 w;
+  long long n;
+  if (!TARGET_EXTENDED || !INTEGRAL_TYPE_P (type)
+      || TREE_CODE (pointer) != INTEGER_CST || TREE_CODE (count) != INTEGER_CST)
+    return NULL_TREE;
+  width = TYPE_PRECISION (type);
+  if (width != 16 && width != 32) return NULL_TREE;
+  w = pdp10_tree_word36 (count);
+  n = (long long) w;
+  if (w & ((pdp10_word36) 1 << 35)) n -= 1LL << 36;
+  if (subtract) n = -n;
+  w = pdp10_global_exact_constant_add (pdp10_tree_word36 (pointer), n, width, 0);
+#if HOST_BITS_PER_WIDE_INT >= 36
+  result = build_int_2 ((HOST_WIDE_INT) w, 0);
+#else
+  result = build_int_2 ((HOST_WIDE_INT) w,
+                        (HOST_WIDE_INT) (w >> HOST_BITS_PER_WIDE_INT));
+#endif
+  TREE_TYPE (result) = TREE_TYPE (pointer);
+  return result;
+}
+
 /* Exact32 software pointers use tag 0 for native word slots and
    tags 1..36 for continuous bit positions.  Nine elements advance
    eight words.  The residual displacement is at most 32 bits; one
@@ -12905,22 +12983,15 @@ pdp10_global_exact32_add (op0, op1)
   if (GET_CODE (op1) == CONST_INT
       && pdp10_decompose_symbolic_word36 (op0, &base, &encoded))
     {
-      long long n = INTVAL (op1);
-      long long a = encoded & ADDRESS_MASK;
-      long long t = encoded >> 30;
-      if (base != NULL_RTX && (a & (1LL << 29))) a -= 1LL << 30;
-      if (t == 077 && base != NULL_RTX) t = 0;
-      if (!t) a += n;
-      else
+      HOST_WIDE_INT a;
+      encoded = pdp10_global_exact_constant_add (encoded, INTVAL (op1),
+                                                 32, base != NULL_RTX);
+      if (base != NULL_RTX && (encoded >> 30) == 0)
         {
-          a += n - n / 9;
-          t -= 4 * (n % 9);
-          if (t <= 0) { --a; t += 36; }
-          if (t > 36) { ++a; t -= 36; }
+          a = (HOST_WIDE_INT) (encoded & ADDRESS_MASK);
+          if (a & (HWINT (1) << 29)) a -= HWINT (1) << 30;
+          return plus_constant (base, a);
         }
-      encoded = ((pdp10_word36) t << 30) | ((pdp10_word36) a & ADDRESS_MASK);
-      if (base != NULL_RTX && t == 0)
-        return plus_constant (base, (HOST_WIDE_INT) a);
       return base != NULL_RTX ? pdp10_plus_constant_word36 (base, encoded)
         : pdp10_gen_word36_constant (encoded);
     }
@@ -12973,26 +13044,8 @@ pdp10_global_exact16_add (op0, op1)
   if (GET_CODE (op1) == CONST_INT
       && pdp10_decompose_symbolic_word36 (op0, &base, &encoded))
     {
-      long long n = INTVAL (op1), a = encoded & ADDRESS_MASK;
-      long long t = encoded >> 30;
-      if (base && (a & (1LL << 29))) a -= 1LL << 30;
-      if (t == 045 || t == 054)
-        {
-          n += t == 054;
-          a += n / 2;
-          t = n % 2;
-          if (t < 0) { --a; t += 2; }
-          t = t ? 054 : 045;
-        }
-      else
-        {
-          long long b = t - 1 + 16 * (n % 9);
-          a += 4 * (n / 9) + b / 36;
-          b %= 36;
-          if (b < 0) { --a; b += 36; }
-          t = b + 1;
-        }
-      encoded = ((pdp10_word36) t << 30) | ((pdp10_word36) a & ADDRESS_MASK);
+      encoded = pdp10_global_exact_constant_add (encoded, INTVAL (op1),
+                                                 16, base != NULL_RTX);
       return base ? pdp10_plus_constant_word36 (base, encoded)
         : pdp10_gen_word36_constant (encoded);
     }

@@ -2140,6 +2140,13 @@ pointer_int_sum (resultcode, ptrop, intop)
   else
     size_exp = size_in_bytes (TREE_TYPE (result_type));
 
+#ifdef __PDP10_H__
+  /* Encoded pointer words are not linear C-unit coordinates. Fold
+     absolute exact-width constants before generic scaling and folding. */
+  folded = pdp10_fold_global_exact_add (ptrop, intop, resultcode == MINUS_EXPR);
+  if (folded) return folded;
+#endif
+
   /* If what we are about to multiply by the size of the elements
      contains a constant term, apply distributive law
      and multiply that constant term separately.
