@@ -2683,6 +2683,11 @@ pointer_diff (op0, op1)
 	pedwarn ("pointer to a function used in subtraction");
     }
 
+#ifdef __PDP10_H__
+  folded = pdp10_fold_global_exact_diff (op0, op1, restype);
+  if (folded) return folded;
+#endif
+
   /* If the conversion to ptrdiff_type does anything like widening or
      converting a partial to an integral mode, we get a convert_expression
      that is in the way to do any simplifications.

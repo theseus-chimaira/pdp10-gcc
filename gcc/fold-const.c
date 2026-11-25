@@ -4390,6 +4390,12 @@ fold (expr)
   if (kind == 'c')
     return t;
 
+#ifdef __PDP10_H__
+  /* Preserve the target pointer type before stripping no-op casts. */
+  tem = pdp10_fold_global_exact_compare (t);
+  if (tem) return tem;
+#endif
+
 #ifdef MAX_INTEGER_COMPUTATION_MODE
   check_max_integer_computation_mode (expr);
 #endif

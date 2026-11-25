@@ -216,6 +216,8 @@ extern rtx pdp10_expand_pointer_diff PARAMS ((tree, rtx));
 extern int pdp10_const_logical_bit_pointer_p PARAMS ((rtx));
 extern int pdp10_exact32_type_p PARAMS ((tree));
 extern tree pdp10_fold_global_exact_add PARAMS ((tree, tree, int));
+extern tree pdp10_fold_global_exact_diff PARAMS ((tree, tree, tree));
+extern tree pdp10_fold_global_exact_compare PARAMS ((tree));
 extern rtx pdp10_global_exact32_order PARAMS ((rtx));
 extern rtx pdp10_global_void_compare PARAMS ((rtx));
 extern void pdp10_gas_file_end PARAMS ((FILE *));

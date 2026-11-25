@@ -12970,6 +12970,92 @@ pdp10_fold_global_exact_add (pointer, count, subtract)
   return result;
 }
 
+/* Fold absolute same-array pointer differences in element units.
+   Distinct storage forms are not interchangeable array coordinates. */
+tree
+pdp10_fold_global_exact_diff (left, right, type)
+     tree left, right, type;
+{
+  tree target, result;
+  pdp10_word36 a, b;
+  long long d, ta, tb;
+  int width;
+  if (!TARGET_EXTENDED || TREE_CODE (left) != INTEGER_CST
+      || TREE_CODE (right) != INTEGER_CST
+      || !POINTER_TYPE_P (TREE_TYPE (left))
+      || !POINTER_TYPE_P (TREE_TYPE (right)))
+    return NULL_TREE;
+  target = TREE_TYPE (TREE_TYPE (left));
+  if (!INTEGRAL_TYPE_P (target)) return NULL_TREE;
+  width = TYPE_PRECISION (target);
+  target = TREE_TYPE (TREE_TYPE (right));
+  if (!INTEGRAL_TYPE_P (target) || TYPE_PRECISION (target) != width
+      || (width != 16 && width != 32)) return NULL_TREE;
+  a = pdp10_tree_word36 (left); b = pdp10_tree_word36 (right);
+  ta = a >> 30; tb = b >> 30;
+  d = (long long) (a & ADDRESS_MASK) - (long long) (b & ADDRESS_MASK);
+  if (width == 32 && ta == 0 && tb == 0)
+    ;
+  else if (width == 16 && (ta == 045 || ta == 054)
+           && (tb == 045 || tb == 054))
+    d = 2 * d + (ta == 054) - (tb == 054);
+  else if (ta >= 1 && ta <= 36 && tb >= 1 && tb <= 36)
+    {
+      d = 36 * d + ta - tb;
+      if (d % width) return NULL_TREE;
+      d /= width;
+    }
+  else return NULL_TREE;
+  result = build_int_2 ((HOST_WIDE_INT) d,
+#if HOST_BITS_PER_WIDE_INT < 36
+                        (HOST_WIDE_INT) (d >> HOST_BITS_PER_WIDE_INT));
+#else
+                        d < 0 ? -1 : 0);
+#endif
+  TREE_TYPE (result) = type;
+  return result;
+}
+
+/* Compare constant exact-width pointers in the same address-first
+   order used by the runtime rotate-and-bias lowering. Equality still
+   compares the encoded words. Do not change generic integer folding. */
+tree
+pdp10_fold_global_exact_compare (exp)
+     tree exp;
+{
+  tree left, right, target, result;
+  pdp10_word36 a, b;
+  int width, value;
+  enum tree_code code = TREE_CODE (exp);
+  if (!TARGET_EXTENDED || TREE_CODE_CLASS (code) != '<') return NULL_TREE;
+  left = TREE_OPERAND (exp, 0); right = TREE_OPERAND (exp, 1);
+  if (TREE_CODE (left) != INTEGER_CST || TREE_CODE (right) != INTEGER_CST
+      || !POINTER_TYPE_P (TREE_TYPE (left))
+      || !POINTER_TYPE_P (TREE_TYPE (right))) return NULL_TREE;
+  target = TREE_TYPE (TREE_TYPE (left));
+  if (!INTEGRAL_TYPE_P (target)) return NULL_TREE;
+  width = TYPE_PRECISION (target);
+  target = TREE_TYPE (TREE_TYPE (right));
+  if (!INTEGRAL_TYPE_P (target) || TYPE_PRECISION (target) != width
+      || (width != 16 && width != 32)) return NULL_TREE;
+  a = pdp10_tree_word36 (left); b = pdp10_tree_word36 (right);
+  a = ((a & ADDRESS_MASK) << 6) | (a >> 30);
+  b = ((b & ADDRESS_MASK) << 6) | (b >> 30);
+  switch (code)
+    {
+    case EQ_EXPR: value = a == b; break;
+    case NE_EXPR: value = a != b; break;
+    case LT_EXPR: value = a < b; break;
+    case LE_EXPR: value = a <= b; break;
+    case GT_EXPR: value = a > b; break;
+    case GE_EXPR: value = a >= b; break;
+    default: return NULL_TREE;
+    }
+  result = build_int_2 (value, 0);
+  TREE_TYPE (result) = TREE_TYPE (exp);
+  return result;
+}
+
 /* Exact32 software pointers use tag 0 for native word slots and
    tags 1..36 for continuous bit positions.  Nine elements advance
    eight words.  The residual displacement is at most 32 bits; one
