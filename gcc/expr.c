@@ -4488,18 +4488,19 @@ pdp10_global_exact16_access (exp, ptr, value)
    the source type is still available; ordinary SImode MEMs must never
    carry logical byte selectors. */
 static rtx
-pdp10_exact32_access (exp, value)
+pdp10_exact32_access (exp, ptr, value)
      tree exp;
-     rtx value;
+     rtx ptr, value;
 {
-  rtx ptr, selector, addr, bit, mem, native_mem;
+  rtx selector, addr, bit, mem, native_mem;
   rtx native = gen_label_rtx ();
   rtx done = gen_label_rtx ();
   rtx result = value ? value : gen_reg_rtx (SImode);
   int unsignedp = TREE_UNSIGNED (TREE_TYPE (exp));
 
-  ptr = force_reg (Pmode, expand_expr (TREE_OPERAND (exp, 0),
-                                      NULL_RTX, Pmode, EXPAND_NORMAL));
+  if (!ptr)
+    ptr = expand_expr (TREE_OPERAND (exp, 0), NULL_RTX, Pmode, EXPAND_NORMAL);
+  ptr = force_reg (Pmode, ptr);
   selector = gen_reg_rtx (Pmode);
   if (TARGET_EXTENDED)
     {
@@ -4638,7 +4639,7 @@ expand_assignment (to, from, want_value, suggest_reg)
           || TREE_CODE (to) == COMPONENT_REF))
     {
       rtx ptr = TREE_CODE (to) == INDIRECT_REF ? NULL_RTX
-        : pdp10_global_exact16_address (to, 0);
+        : pdp10_global_exact_address (to, 0);
       if (ptr || TREE_CODE (to) == INDIRECT_REF)
         {
           rtx v = expand_expr (from, NULL_RTX, SImode, EXPAND_NORMAL);
@@ -4661,32 +4662,39 @@ expand_assignment (to, from, want_value, suggest_reg)
       if (mem != NULL_RTX)
         return store_expr (from, mem, want_value);
     }
-  if (TREE_CODE (to) == INDIRECT_REF
-      && pdp10_exact32_type_p (TREE_TYPE (to)))
+  if (pdp10_exact32_type_p (TREE_TYPE (to))
+      && (TREE_CODE (to) == INDIRECT_REF
+          || (TARGET_EXTENDED && (TREE_CODE (to) == ARRAY_REF
+                                  || TREE_CODE (to) == COMPONENT_REF))))
     {
-      rtx v;
-      push_temp_slots ();
-      v = expand_expr (from, NULL_RTX, SImode, EXPAND_NORMAL);
-      v = convert_modes (SImode, TYPE_MODE (TREE_TYPE (from)),
-                         v, TREE_UNSIGNED (TREE_TYPE (from)));
-      v = force_reg (SImode, v);
-      /* A same-mode conversion does not narrow a 36-bit arithmetic
-         result to its declared 32-bit precision.  Normalize the value
-         before both native storage and returning the assignment value. */
-      {
-        rtx narrowed = gen_reg_rtx (SImode);
-        if (TREE_UNSIGNED (TREE_TYPE (to)))
-          emit_insn (gen_zero_extendsi (narrowed, v, GEN_INT (4)));
-        else
-          emit_insn (gen_sign_extendsi (narrowed, v, GEN_INT (4)));
-        v = narrowed;
-      }
-      pdp10_exact32_access (to, v);
-      result = want_value ? v : NULL_RTX;
-      preserve_temp_slots (result);
-      free_temp_slots ();
-      pop_temp_slots ();
-      return result;
+      rtx ptr = TREE_CODE (to) == INDIRECT_REF ? NULL_RTX
+        : pdp10_global_exact_address (to, 0);
+      if (ptr || TREE_CODE (to) == INDIRECT_REF)
+        {
+          rtx v;
+          push_temp_slots ();
+          v = expand_expr (from, NULL_RTX, SImode, EXPAND_NORMAL);
+          v = convert_modes (SImode, TYPE_MODE (TREE_TYPE (from)),
+                             v, TREE_UNSIGNED (TREE_TYPE (from)));
+          v = force_reg (SImode, v);
+          /* A same-mode conversion does not narrow a 36-bit arithmetic
+             result to its declared 32-bit precision.  Normalize the value
+             before both native storage and returning the assignment value. */
+          {
+            rtx narrowed = gen_reg_rtx (SImode);
+            if (TREE_UNSIGNED (TREE_TYPE (to)))
+              emit_insn (gen_zero_extendsi (narrowed, v, GEN_INT (4)));
+            else
+              emit_insn (gen_sign_extendsi (narrowed, v, GEN_INT (4)));
+            v = narrowed;
+          }
+          pdp10_exact32_access (to, ptr, v);
+          result = want_value ? v : NULL_RTX;
+          preserve_temp_slots (result);
+          free_temp_slots ();
+          pop_temp_slots ();
+          return result;
+        }
     }
 
       {
@@ -8701,7 +8709,7 @@ expand_expr (exp, target, tmode, modifier)
                      TREE_UNSIGNED (type));
         if (pdp10_exact32_type_p (type)
             && (modifier == EXPAND_NORMAL || modifier == EXPAND_SUM))
-          return pdp10_exact32_access (exp, NULL_RTX);
+          return pdp10_exact32_access (exp, NULL_RTX, NULL_RTX);
 #endif
 
 	op0 = expand_expr (exp1, NULL_RTX, VOIDmode, EXPAND_SUM);
@@ -8723,10 +8731,17 @@ expand_expr (exp, target, tmode, modifier)
 	abort ();
 #if REAL_BITS_PER_UNIT == 36
       if (TARGET_EXTENDED && code == ARRAY_REF
+          && pdp10_exact32_type_p (type)
+          && (modifier == EXPAND_NORMAL || modifier == EXPAND_SUM))
+        {
+          rtx ptr = pdp10_global_exact_address (exp, 0);
+          if (ptr) return pdp10_exact32_access (exp, ptr, NULL_RTX);
+        }
+      if (TARGET_EXTENDED && code == ARRAY_REF
           && INTEGRAL_TYPE_P (type) && TYPE_PRECISION (type) == 16
           && (modifier == EXPAND_NORMAL || modifier == EXPAND_SUM))
         {
-          rtx ptr = pdp10_global_exact16_address (exp, 0);
+          rtx ptr = pdp10_global_exact_address (exp, 0);
           if (ptr)
             return convert_modes (mode, SImode,
                        pdp10_global_exact16_access (exp, ptr, NULL_RTX),
@@ -8922,10 +8937,17 @@ expand_expr (exp, target, tmode, modifier)
     case ARRAY_RANGE_REF:
 #if REAL_BITS_PER_UNIT == 36
       if (TARGET_EXTENDED && code == COMPONENT_REF
+          && pdp10_exact32_type_p (type)
+          && (modifier == EXPAND_NORMAL || modifier == EXPAND_SUM))
+        {
+          rtx ptr = pdp10_global_exact_address (exp, 0);
+          if (ptr) return pdp10_exact32_access (exp, ptr, NULL_RTX);
+        }
+      if (TARGET_EXTENDED && code == COMPONENT_REF
           && INTEGRAL_TYPE_P (type) && TYPE_PRECISION (type) == 16
           && (modifier == EXPAND_NORMAL || modifier == EXPAND_SUM))
         {
-          rtx ptr = pdp10_global_exact16_address (exp, 0);
+          rtx ptr = pdp10_global_exact_address (exp, 0);
           if (ptr)
             return convert_modes (mode, SImode,
                        pdp10_global_exact16_access (exp, ptr, NULL_RTX),
@@ -13360,7 +13382,21 @@ do_store_flag (exp, target, mode, only_cheap)
 #endif
 
 #ifdef __PDP10_H__
-  if (TARGET_EXTENDED && POINTER_TYPE_P (type)
+  if (TARGET_EXTENDED && !(target_flags & OPT_VOIDP)
+      && POINTER_TYPE_P (type) && VOID_TYPE_P (TREE_TYPE (type))
+      && op0 != const0_rtx && op1 != const0_rtx)
+    {
+      op0 = pdp10_global_void_compare (op0);
+      op1 = pdp10_global_void_compare (op1);
+      if (code != EQ && code != NE)
+        {
+          op0 = pdp10_global_exact32_order (op0);
+          op1 = pdp10_global_exact32_order (op1);
+        }
+      code = signed_condition (code);
+      unsignedp = 0;
+    }
+  else if (TARGET_EXTENDED && POINTER_TYPE_P (type)
       && (pdp10_exact32_type_p (TREE_TYPE (type))
           || pdp10_bytesize (TREE_TYPE (type)) == 16)
       && code != EQ && code != NE)

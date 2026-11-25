@@ -1749,7 +1749,7 @@ so that they use relative addresses.  */
    appropriate text to go at the end of an assembler file.  */
 #ifndef ASM_FILE_END
 #ifdef __PDP10_GAS_H__
-#define ASM_FILE_END(STREAM) pdp10_output_byte ((STREAM), 0, 0)
+#define ASM_FILE_END(STREAM) pdp10_gas_file_end (STREAM)
 #else
 #define ASM_FILE_END(STREAM) do { } while (0)
 #endif

@@ -15745,7 +15745,7 @@ pdp10_initializer_byte_pointer (exp)
   if (TARGET_EXTENDED && POINTER_TYPE_P (ptr_type)
       && pdp10_bytesize (TREE_TYPE (ptr_type)) == 16)
     {
-      rtx addr = pdp10_global_exact16_address (object, 1);
+      rtx addr = pdp10_global_exact_address (object, 1);
       if (addr) return addr;
     }
   if (TREE_CODE (object) != ARRAY_REF
@@ -16891,6 +16891,193 @@ maybe_warn_about_pointer_conversion (exp, from, to)
 #define maybe_warn_about_pointer_conversion(EXP, FROM, TO)
 #endif
 
+/* Extended void pointers retain canonical 9-bit addresses for standard
+   C objects and preserve the exact-width and subbyte extension tags.
+   Decode a tag only when the destination needs another representation.
+   The before-first hardware selectors 045/054 are reserved for native
+   exact16; 061/067/074 are not canonical C object addresses. */
+static int
+pdp10_global_tag_position (tag)
+     int tag;
+{
+  if (tag == 0 || tag == 045) return 0;
+  if (tag <= 044) return tag - 1;
+  if (tag == 054) return 16;
+  if (tag >= 046 && tag <= 053) return (tag - 046) * 6;
+  if (tag >= 055 && tag <= 060) return (tag - 055) * 8;
+  if (tag >= 062 && tag <= 066) return (tag - 062) * 7;
+  if (tag >= 070 && tag <= 073) return (tag - 070) * 9;
+  if (tag >= 075 && tag <= 076) return (tag - 075) * 18;
+  return 0;
+}
+
+/* TO=1 denotes the comparison coordinate. Preserve packed tags for
+   exact-width targets. Word-aligned nonpacked addresses become native
+   slots. Misaligned casts to architectural byte types are lossy. */
+static int
+pdp10_global_cast_tag (tag, to)
+     int tag, to;
+{
+  int pos = pdp10_global_tag_position (tag);
+  int slot;
+  if (to == 1) return pos + 1;
+  if (to == 36) return 0;
+  if (to == 16 || to == 32)
+    {
+      if (tag >= 1 && tag <= 044) return tag;
+      if (to == 16)
+        {
+          if (pos == 0) return 045;
+          if (pos == 16) return 054;
+        }
+      else if (pos == 0) return 0;
+      return pos + 1;
+    }
+  slot = pos / to;
+  if (slot >= 36 / to) slot = 36 / to - 1;
+  return ps_base_for_bytesize (to) + slot;
+}
+
+/* One packed six-bit lookup table per used destination, eleven words
+   each. Constant folding and dynamic conversions use the same mapping. */
+static unsigned char pdp10_global_cast_tables[37];
+
+static rtx
+pdp10_global_pointer_cast (op, to, initializer, not_null)
+     rtx op;
+     int to, initializer, not_null;
+{
+  rtx base, addr, idx, ptr, mem, byte, selector, result, done;
+  pdp10_word36 encoded;
+  char label[32];
+  if (to == 0) return op;
+  if (pdp10_decompose_symbolic_word36 (op, &base, &encoded))
+    {
+      int tag = encoded >> 30;
+      if (!base && encoded == 0) return const0_rtx;
+      if (base && tag == 077) tag = 0;
+      encoded = ((pdp10_word36) pdp10_global_cast_tag (tag, to) << 30)
+        | (encoded & ADDRESS_MASK);
+      if (base && to == 36)
+        {
+          HOST_WIDE_INT off = (HOST_WIDE_INT) (encoded & ADDRESS_MASK);
+          if (off & (HWINT (1) << 29)) off -= HWINT (1) << 30;
+          return plus_constant (base, off);
+        }
+      return base ? pdp10_plus_constant_word36 (base, encoded)
+        : pdp10_gen_word36_constant (encoded);
+    }
+  if (initializer) return NULL_RTX;
+  op = force_reg (Pmode, protect_from_queue (op, 0));
+  result = gen_reg_rtx (Pmode);
+  emit_insn (gen_andsi3 (result, op, GEN_INT (ADDRESS_MASK)));
+  if (to == 36) return result;
+  done = gen_label_rtx ();
+  if (!not_null)
+    emit_cmp_and_jump_insn_1 (op, const0_rtx, Pmode, EQ, 0, done);
+  pdp10_global_cast_tables[to] = 1;
+  ASM_GENERATE_INTERNAL_LABEL (label, "PC", to);
+  base = gen_rtx_SYMBOL_REF (Pmode, xstrdup (label));
+  ptr = pdp10_plus_constant_word36 (base, (pdp10_word36) 046 << 30);
+  idx = gen_reg_rtx (Pmode);
+  emit_insn (gen_lshrsi3 (idx, op, GEN_INT (30)));
+  emit_insn (gen_ADJBP (idx, ptr, idx));
+  mem = gen_rtx_MEM (QImode, idx);
+  set_mem_align (mem, 6);
+  RTX_UNCHANGING_P (mem) = 1;
+  byte = gen_reg_rtx (QImode);
+  emit_move_insn (byte, mem);
+  selector = force_reg (Pmode, convert_modes (Pmode, QImode, byte, 1));
+  addr = gen_reg_rtx (Pmode);
+  emit_insn (gen_ashlsi3 (addr, selector, GEN_INT (30)));
+  emit_insn (gen_iorsi3 (result, result, addr));
+  if (!not_null) emit_label (done);
+  return result;
+}
+
+/* Ordinary C void pointers retain their character-pointer ABI. The
+   exact32 native word slot uses it too, while packed exact-width and
+   explicit subbyte pointers require the original tag for round trips. */
+static rtx
+pdp10_global_to_void (op, source, initializer, not_null)
+     rtx op;
+     int source, initializer, not_null;
+{
+  rtx base, result, done;
+  pdp10_word36 encoded;
+  int tag;
+  if (source != 18 && source != 36 && source != 32) return op;
+  if (pdp10_decompose_symbolic_word36 (op, &base, &encoded))
+    {
+      tag = encoded >> 30;
+      if (base && tag == 077) tag = 0;
+      if (source == 32 && tag != 0) return op;
+      return pdp10_global_pointer_cast (op, 9, initializer, not_null);
+    }
+  if (initializer) return NULL_RTX;
+  result = copy_to_mode_reg (Pmode, protect_from_queue (op, 0));
+  if (source == 18)
+    {
+      /* 075/076 -> 070/072, including null. */
+      emit_TLZ (result, result, 0050000);
+      return result;
+    }
+  done = gen_label_rtx ();
+  if (!not_null)
+    emit_cmp_and_jump_insn_1 (result, const0_rtx, Pmode, EQ, 0, done);
+  if (source == 32)
+    {
+      rtx tag = gen_reg_rtx (Pmode);
+      emit_insn (gen_lshrsi3 (tag, result, GEN_INT (30)));
+      emit_cmp_and_jump_insn_1 (tag, const0_rtx, Pmode, NE, 0, done);
+    }
+  emit_TLO (result, result, 0700000);
+  emit_label (done);
+  return result;
+}
+
+/* Flush ordinary packed constants, then emit referenced tables only. */
+void
+pdp10_gas_file_end (file)
+     FILE *file;
+{
+  int to, tag, i;
+  pdp10_output_byte (file, 0, 0);
+  for (to = 1; to < 37; ++to)
+    if (pdp10_global_cast_tables[to])
+      {
+        data_section ();
+        ASM_OUTPUT_INTERNAL_LABEL (file, "PC", to);
+        for (tag = 0; tag < 64; tag += 6)
+          {
+            pdp10_word36 word = 0;
+            for (i = 0; i < 6; ++i)
+              word = (word << 6) | (tag + i < 64
+                         ? pdp10_global_cast_tag (tag + i, to) : 0);
+            fprintf (file, "\t.long 0%012llo\n", word);
+          }
+      }
+}
+
+static int
+pdp10_global_cast_kind (type)
+     tree type;
+{
+  while (TREE_CODE (type) == ARRAY_TYPE) type = TREE_TYPE (type);
+  if (VOID_TYPE_P (type)) return 0;
+  if (pdp10_exact32_type_p (type)) return 32;
+  return pdp10_bytesize (type);
+}
+
+/* Compare void pointers by their physical coordinates, without losing
+   the representation of the stored pointer. */
+rtx
+pdp10_global_void_compare (op)
+     rtx op;
+{
+  return pdp10_global_pointer_cast (op, 1, 0, 0);
+}
+
 /* Emit instructions to perform the pointer conversion in EXP.  Store
    the result in TARGET if convenient, and return the result.  If OP0
    is not NULL_RTX, it's RTL for the unconverted pointer.  */
@@ -16987,6 +17174,29 @@ pdp10_convert_pointer (exp, op0, target, mod, stack, not_null)
   if (!(POINTER_TYPE_P (TREE_TYPE (exp))
 	 && (stack || POINTER_TYPE_P (TREE_TYPE (TREE_OPERAND (exp, 0))))))
     return NULL_RTX;
+
+  if (TARGET_EXTENDED && !stack)
+    {
+      int source = pdp10_global_cast_kind
+        (TREE_TYPE (TREE_TYPE (TREE_OPERAND (exp, 0))));
+      int dest = pdp10_global_cast_kind (TREE_TYPE (TREE_TYPE (exp)));
+      if (source == dest && (source == 0 || source == 16 || source == 32))
+        return NULL_RTX;
+      if ((!(target_flags & OPT_VOIDP) && (source == 0 || dest == 0))
+          || source == 16 || source == 32 || dest == 16 || dest == 32)
+        {
+          if ((target_flags & OPT_VOIDP) && (source == 0 || dest == 0))
+            return NULL_RTX;
+          if (!op0)
+            op0 = expand_expr (TREE_OPERAND (exp, 0), NULL_RTX, Pmode,
+                     modifier == EXPAND_INITIALIZER ? modifier : EXPAND_NORMAL);
+          if (dest == 0)
+            return pdp10_global_to_void (op0, source,
+                                modifier == EXPAND_INITIALIZER, not_null);
+          return pdp10_global_pointer_cast (op0, dest,
+                                modifier == EXPAND_INITIALIZER, not_null);
+        }
+    }
 
   {
     rtx init_addr = pdp10_initializer_byte_pointer (exp);
@@ -17457,22 +17667,25 @@ pdp10_global_native_ref_address (object)
   return ptr;
 }
 
-/* Build a software exact16 pointer from a declared storage coordinate.
-   Native arrays are two-per-word; packed members are continuous bits.
-   A standalone scalar is right justified at physical bit 20. */
+/* Build a software exact-width pointer from a declared storage coordinate.
+   Native exact16 arrays are two-per-word; packed members are continuous.
+   A standalone exact16 scalar is right justified at bit 20.
+   Native exact32 references retain their existing word-address path. */
 rtx
-pdp10_global_exact16_address (object, initializer)
+pdp10_global_exact_address (object, initializer)
      tree object;
      int initializer;
 {
   tree t = object, type = TREE_TYPE (object), index = NULL_TREE;
   HOST_WIDE_INT pos = 0;
-  int packed = 0, array = 0, tag;
+  int packed = 0, array = 0, tag, width;
   rtx addr, base, mem, ptr;
   pdp10_word36 encoded;
   if (!TARGET_EXTENDED) return NULL_RTX;
   while (TREE_CODE (type) == ARRAY_TYPE) type = TREE_TYPE (type);
-  if (!INTEGRAL_TYPE_P (type) || TYPE_PRECISION (type) != 16)
+  if (!INTEGRAL_TYPE_P (type)) return NULL_RTX;
+  width = TYPE_PRECISION (type);
+  if (width != 16 && (width != 32 || !pdp10_packed_exact32_ref_p (object)))
     return NULL_RTX;
   while (TREE_CODE (t) == ARRAY_REF || TREE_CODE (t) == COMPONENT_REF)
     {
@@ -17492,7 +17705,7 @@ pdp10_global_exact16_address (object, initializer)
               || TREE_CODE (TREE_TYPE (t)) == RECORD_TYPE)
             return NULL_RTX;
           array = 1;
-          if (host_integerp (idx, 0)) pos += 16 * tree_low_cst (idx, 0);
+          if (host_integerp (idx, 0)) pos += width * tree_low_cst (idx, 0);
           else
             {
               if (index || initializer) return NULL_RTX;
@@ -17537,8 +17750,11 @@ pdp10_global_exact16_address (object, initializer)
       emit_TLO (ptr, ptr, tag << 12);
     }
   if (index)
-    ptr = pdp10_global_exact16_add (ptr, expand_expr (index, NULL_RTX,
-                                                     Pmode, EXPAND_NORMAL));
+    {
+      rtx inc = expand_expr (index, NULL_RTX, Pmode, EXPAND_NORMAL);
+      ptr = width == 16 ? pdp10_global_exact16_add (ptr, inc)
+        : pdp10_global_exact32_add (ptr, inc);
+    }
   return ptr;
 }
 
@@ -17561,7 +17777,7 @@ pdp10_expand_ADDR_EXP (exp, type, target, ignore, mod)
 
   if (TARGET_EXTENDED && !ignore)
     {
-      rtx addr = pdp10_global_exact16_address (TREE_OPERAND (exp, 0),
+      rtx addr = pdp10_global_exact_address (TREE_OPERAND (exp, 0),
                                              modifier == EXPAND_INITIALIZER);
       if (addr) return addr;
     }
@@ -18258,6 +18474,22 @@ pdp10_emit_cmp_and_jump_insns (exp, x, y, comparison, size, mode, unsignedp,
     op0 = force_reg (mode, op0);
 #endif
 
+  if (TARGET_EXTENDED && !(target_flags & OPT_VOIDP)
+      && VOID_TYPE_P (TREE_TYPE (TREE_TYPE (TREE_OPERAND (exp, 0))))
+      && op0 != const0_rtx && op1 != const0_rtx)
+    {
+      op0 = pdp10_global_void_compare (op0);
+      op1 = pdp10_global_void_compare (op1);
+      if (comparison != EQ && comparison != NE)
+        {
+          op0 = pdp10_global_exact32_order (op0);
+          op1 = pdp10_global_exact32_order (op1);
+        }
+      emit_queue ();
+      emit_cmp_and_jump_insn_1 (op0, op1, mode, signed_condition (comparison),
+                                0, label);
+      return;
+    }
   emit_queue ();
   prepare_cmp_insn (&op0, &op1, &comparison, size, &mode, &unsignedp,
 		    ccp_jump);
@@ -18361,6 +18593,8 @@ pdp10_compare_and_jump (exp, op0, op1, code, unsignedp, mode, size,
   do_pending_stack_adjust ();
 
   if (GET_CODE (op0) == CONST_INT && GET_CODE (op1) == CONST_INT
+      && !(TARGET_EXTENDED && !(target_flags & OPT_VOIDP)
+           && VOID_TYPE_P (TREE_TYPE (TREE_TYPE (TREE_OPERAND (exp, 0)))))
       && !(TARGET_EXTENDED && code != EQ && code != NE
            && (pdp10_exact32_type_p (TREE_TYPE (TREE_TYPE (TREE_OPERAND (exp, 0))))
           || pdp10_bytesize (TREE_TYPE (TREE_TYPE (TREE_OPERAND (exp, 0)))) == 16))
