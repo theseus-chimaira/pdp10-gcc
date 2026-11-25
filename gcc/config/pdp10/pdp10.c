@@ -12924,6 +12924,12 @@ pdp10_global_exact_constant_add (encoded, n, width, symbolic)
       if (b < 0) { --a; b += 36; }
       t = b + 1;
     }
+  /* A tagged symbolic constant has only a signed 30-bit addend.
+     Check before masking: otherwise +2^29 becomes -2^29 and the
+     assembler emits a valid but incorrect relocation. A wider symbolic
+     RTL representation is required to express such an adjustment. */
+  if (symbolic && (a < -(1LL << 29) || a >= (1LL << 29)))
+    error ("global pointer relocation addend out of signed 30-bit range");
   return ((pdp10_word36) t << 30) | ((pdp10_word36) a & ADDRESS_MASK);
 }
 
