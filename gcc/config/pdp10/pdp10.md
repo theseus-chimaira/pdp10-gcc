@@ -3941,6 +3941,23 @@
   ""
   "andi %0,0777%; truncsiqi2")
 
+;; A normalized 71-bit pair has 35 payload bits in its low word.
+;; Reuse the multiply-low canonicalizer to recover logical bit 35.
+(define_expand "truncdisi2"
+  [(set (match_operand:SI 0 "register_operand" "")
+        (truncate:SI (match_operand:DI 1 "general_operand" "")))]
+  "TARGET_71BIT"
+  "{
+     rtx pair = force_reg (DImode, operands[1]);
+     rtx high = gen_rtx_SUBREG (SImode, pair, 0);
+     rtx low = gen_rtx_SUBREG (SImode, pair, UNITS_PER_WORD);
+     rtx result = gen_reg_rtx (SImode);
+     emit_move_insn (result, low);
+     emit_insn (gen_canonicalize_mulsi_low (result, high));
+     emit_move_insn (operands[0], result);
+     DONE;
+   }")
+
 (define_insn "truncsihi2"
   [(set (match_operand:HI 0 "register_operand" "=r")
 	(truncate:HI (match_operand:SI 1 "register_operand" "r")))]

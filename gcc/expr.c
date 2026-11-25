@@ -1084,6 +1084,20 @@ convert_move (to, from, unsignedp)
       return;
     }
 
+  /* A target-specific full-word truncation must precede the generic
+     lowpart shortcut for multi-word integers.  On the PDP-10 the
+     normalized 71-bit representation needs to reconstruct bit 35. */
+#ifdef HAVE_truncdisi2
+  if (from_mode == DImode && to_mode == SImode
+      && !TRULY_NOOP_TRUNCATION (GET_MODE_BITSIZE (to_mode),
+                                GET_MODE_BITSIZE (from_mode))
+      && HAVE_truncdisi2)
+    {
+      emit_unop_insn (CODE_FOR_truncdisi2, to, from, UNKNOWN);
+      return;
+    }
+#endif
+
   /* Truncating multi-word to a word or less.  */
   if (GET_MODE_BITSIZE (from_mode) > BITS_PER_WORD
       && GET_MODE_BITSIZE (to_mode) <= BITS_PER_WORD)
@@ -1520,7 +1534,9 @@ convert_modes (mode, oldmode, x, unsignedp)
 	  && (GET_CODE (x) == CONST_DOUBLE
 	      || (GET_MODE_SIZE (mode) <= GET_MODE_SIZE (oldmode)
 		  && ((GET_CODE (x) == MEM && ! MEM_VOLATILE_P (x)
-		       && direct_load[(int) mode])
+		       && direct_load[(int) mode]
+                       && TRULY_NOOP_TRUNCATION (GET_MODE_BITSIZE (mode),
+                                                 GET_MODE_BITSIZE (oldmode)))
 		      || (GET_CODE (x) == REG
 			  && TRULY_NOOP_TRUNCATION (GET_MODE_BITSIZE (mode),
 						    GET_MODE_BITSIZE (GET_MODE (x)))))))))

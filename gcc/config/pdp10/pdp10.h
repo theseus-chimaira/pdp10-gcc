@@ -2244,7 +2244,12 @@ pdp10_asm_output_opcode (FILE *stream, const char *ptr)
    "convert" an integer of INPREC bits to one of OUTPREC bits (where
    OUTPREC is smaller than INPREC) by merely operating on it as if it
    had only OUTPREC bits.  */
-#define TRULY_NOOP_TRUNCATION(OUTPREC, INPREC) 1
+/* The low word of a normalized 71-bit integer repeats the sign in
+   bit 35.  A full 36-bit truncation must recover that bit from the
+   high word; narrower low parts and raw 72-bit integers need no fix. */
+#define TRULY_NOOP_TRUNCATION(OUTPREC, INPREC) \
+  (!(TARGET_71BIT && (OUTPREC) == BITS_PER_WORD \
+     && (INPREC) == 2 * BITS_PER_WORD))
 
 /* A C expression describing the value returned by a comparison
    operator with an integral mode and stored by a store-flag
