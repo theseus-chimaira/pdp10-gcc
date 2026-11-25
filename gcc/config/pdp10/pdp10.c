@@ -190,6 +190,7 @@ static void	pdp10_split_integer_double PARAMS ((rtx x,
 					       unsigned HOST_WIDE_INT *word0p,
 					       unsigned HOST_WIDE_INT *word1p));
 static int	pdp10_const_byte_pointer_p PARAMS ((rtx x));
+static int pdp10_const_software_pointer_p PARAMS ((rtx x));
 static int	pdp10_extract_word36_constant PARAMS ((rtx x,
 					      pdp10_word36 *valuep));
 static rtx	pdp10_gen_word36_constant PARAMS ((pdp10_word36 value));
@@ -996,6 +997,14 @@ pdp10_data_padding (decl, x)
     return x;
 
   bytesize = pdp10_bytesize (TREE_TYPE (decl));
+  if (TARGET_EXTENDED && bytesize == 16)
+    {
+      tree type = TREE_TYPE (decl);
+      while (TREE_CODE (type) == ARRAY_TYPE)
+        type = TREE_TYPE (type);
+      if (INTEGRAL_TYPE_P (type) && TYPE_PRECISION (type) == 16)
+        return x;
+    }
   if (bytesize >= 32)
     return x;
 
@@ -2736,7 +2745,7 @@ pdp10_print_operand (stream, x, code)
         /* Software-tagged addresses must not be decoded as POINT or
            OWGBP.  Emit the tag independently of the signed ADDR30. */
         if (TARGET_EXTENDED && code != 'W'
-            && pdp10_const_logical_bit_pointer_p (x))
+            && pdp10_const_software_pointer_p (x))
           {
             rtx base;
             pdp10_word36 encoded;
@@ -3294,6 +3303,20 @@ pdp10_first_byte_word_address (x)
       || (offset >> 18) != 0331100)
     return NULL_RTX;
   return plus_constant (base, offset & 0777777);
+}
+
+/* Software tags are not valid hardware byte-pointer selectors. */
+static int
+pdp10_const_software_pointer_p (x)
+     rtx x;
+{
+  rtx base;
+  pdp10_word36 offset;
+  unsigned int tag;
+  if (!pdp10_decompose_symbolic_word36 (x, &base, &offset) || !base)
+    return 0;
+  tag = offset >> 30;
+  return (tag >= 1 && tag <= 044) || tag == 045 || tag == 054;
 }
 
 /* Return nonzero if X is the internal local S=1 byte-pointer form used
@@ -6672,7 +6695,7 @@ pdp10_gas_print_symbolic_global_word (x)
   /* A plain negative displacement is sign extended in the RTL. */
   if (selector == 077)
     selector = 0;
-  if (selector >= 1 && selector <= 044)
+  if ((selector >= 1 && selector <= 044) || selector == 045 || selector == 054)
     {
       fputs ("\t.long ", asm_out_file);
       pdp10_print_operand (asm_out_file, x, PRINT_OP_GIW);
@@ -8256,6 +8279,26 @@ pdp10_output_movhi (operands, sign_extend)
 
   if (GET_CODE (x) == MEM)
     address = XEXP (x, 0);
+
+  /* Exact16 scalar declarations occupy a right-justified word slot.
+     Their extended MEM address is an untagged word coordinate. */
+  if (TARGET_EXTENDED && address && pdp10_scalar_mem_p (x)
+      && pdp10_mem_integer_precision (x) == 16)
+    {
+      rtx reg = store ? operands[1] : operands[0];
+      output_bitfield_move (asm_out_file, NULL_RTX, store, 0,
+                            reg, x, 16, 20);
+      if (!store && sign_extend)
+        {
+          rtx ops[2];
+          ops[0] = reg;
+          ops[1] = GEN_INT (20);
+          output_asm_insn ("lsh %0,%1", ops);
+          ops[1] = GEN_INT (-20);
+          output_asm_insn ("ash %0,%1", ops);
+        }
+      return "";
+    }
 
   if (address)
     {
@@ -12918,6 +12961,94 @@ pdp10_global_exact32_add (op0, op1)
   return result;
 }
 
+/* Native exact16 arrays contain two 16-bit slots per word, with
+   tags 045 and 054. Packed pointers use the physical-position tags.
+   Split the signed count before multiplication to avoid overflow. */
+static rtx
+pdp10_global_exact16_add (op0, op1)
+     rtx op0, op1;
+{
+  rtx base, tag, addr, q, r, result, native, done, positive, normalized;
+  pdp10_word36 encoded;
+  if (GET_CODE (op1) == CONST_INT
+      && pdp10_decompose_symbolic_word36 (op0, &base, &encoded))
+    {
+      long long n = INTVAL (op1), a = encoded & ADDRESS_MASK;
+      long long t = encoded >> 30;
+      if (base && (a & (1LL << 29))) a -= 1LL << 30;
+      if (t == 045 || t == 054)
+        {
+          n += t == 054;
+          a += n / 2;
+          t = n % 2;
+          if (t < 0) { --a; t += 2; }
+          t = t ? 054 : 045;
+        }
+      else
+        {
+          long long b = t - 1 + 16 * (n % 9);
+          a += 4 * (n / 9) + b / 36;
+          b %= 36;
+          if (b < 0) { --a; b += 36; }
+          t = b + 1;
+        }
+      encoded = ((pdp10_word36) t << 30) | ((pdp10_word36) a & ADDRESS_MASK);
+      return base ? pdp10_plus_constant_word36 (base, encoded)
+        : pdp10_gen_word36_constant (encoded);
+    }
+  op0 = force_reg (Pmode, op0);
+  op1 = force_reg (Pmode, op1);
+  tag = gen_reg_rtx (Pmode); addr = gen_reg_rtx (Pmode);
+  r = gen_reg_rtx (Pmode); result = gen_reg_rtx (Pmode);
+  native = gen_label_rtx (); done = gen_label_rtx ();
+  positive = gen_label_rtx (); normalized = gen_label_rtx ();
+  emit_insn (gen_lshrsi3 (tag, op0, GEN_INT (30)));
+  emit_insn (gen_andsi3 (addr, op0, GEN_INT (ADDRESS_MASK)));
+  emit_cmp_and_jump_insn_1 (tag, GEN_INT (36), Pmode, GT, 0, native);
+  q = force_reg (Pmode, expand_divmod (0, TRUNC_DIV_EXPR, Pmode, op1,
+                                      GEN_INT (9), NULL_RTX, 0));
+  emit_insn (gen_ashlsi3_pointer (r, q, GEN_INT (3)));
+  emit_insn (gen_addsi3 (r, r, q));
+  emit_insn (gen_subsi3 (r, op1, r));
+  emit_insn (gen_ashlsi3_pointer (q, q, GEN_INT (2)));
+  emit_insn (gen_addsi3 (addr, addr, q));
+  emit_insn (gen_ashlsi3_pointer (r, r, GEN_INT (4)));
+  emit_insn (gen_addsi3 (tag, tag, r));
+  emit_insn (gen_addsi3 (tag, tag, GEN_INT (-1)));
+  q = force_reg (Pmode, expand_divmod (0, TRUNC_DIV_EXPR, Pmode, tag,
+                                      GEN_INT (36), NULL_RTX, 0));
+  emit_insn (gen_addsi3 (addr, addr, q));
+  r = force_reg (Pmode, expand_divmod (1, TRUNC_MOD_EXPR, Pmode, tag,
+                                      GEN_INT (36), NULL_RTX, 0));
+  emit_move_insn (tag, r);
+  emit_cmp_and_jump_insn_1 (tag, const0_rtx, Pmode, GE, 0, positive);
+  emit_insn (gen_addsi3 (tag, tag, GEN_INT (36)));
+  emit_insn (gen_addsi3 (addr, addr, GEN_INT (-1)));
+  emit_label (positive);
+  emit_insn (gen_addsi3 (tag, tag, const1_rtx));
+  emit_jump_insn (gen_jump (normalized)); emit_barrier ();
+  emit_label (native);
+  /* Slot parity and floor division by two, including negative moves. */
+  emit_move_insn (r, op1);
+  {
+    rtx first = gen_label_rtx ();
+    emit_cmp_and_jump_insn_1 (tag, GEN_INT (054), Pmode, NE, 0, first);
+    emit_insn (gen_addsi3 (r, r, const1_rtx));
+    emit_label (first);
+  }
+  emit_insn (gen_ashrsi3_pointer (q, r, const1_rtx));
+  emit_insn (gen_addsi3 (addr, addr, q));
+  emit_insn (gen_andsi3 (r, r, const1_rtx));
+  emit_move_insn (tag, GEN_INT (045));
+  emit_cmp_and_jump_insn_1 (r, const0_rtx, Pmode, EQ, 0, normalized);
+  emit_move_insn (tag, GEN_INT (054));
+  emit_label (normalized);
+  emit_insn (gen_ashlsi3 (tag, tag, GEN_INT (30)));
+  emit_insn (gen_iorsi3 (result, tag, addr));
+  emit_label (done);
+  return result;
+}
+
 /* Adjust by an explicit count of source-language elements.  Do not infer
    storage-unit scaling from the numeric value or shape of that count. */
 rtx
@@ -12933,6 +13064,8 @@ pdp10_expand_addbp_elements (type, target, op0, op1)
 
   if (TARGET_EXTENDED && exact32)
     return pdp10_global_exact32_add (op0, op1);
+  if (TARGET_EXTENDED && byte_size == 16)
+    return pdp10_global_exact16_add (op0, op1);
 
   /* ushort16 pointers are self-describing at the KCC/GCC ABI boundary:
      native objects use S=16, while non-byte-aligned packed arrays decay to
@@ -13349,7 +13482,46 @@ expand_subtract_pointers (mode, target, op0, type0, op1, type1)
          physical bits, then convert to the two C units per element
          expected by the front end's exact division.  Both operands
          designate the same array for defined C pointer subtraction. */
-      if (TARGET_EXTENDED && exact32)
+      if (TARGET_EXTENDED && pdp10_bytesize (type) == 16)
+        {
+          rtx a = gen_reg_rtx (Pmode), b = gen_reg_rtx (Pmode);
+          rtx t = gen_reg_rtx (Pmode), u = gen_reg_rtx (Pmode);
+          rtx d = gen_reg_rtx (Pmode), scaled = gen_reg_rtx (Pmode);
+          rtx native = gen_label_rtx (), done = gen_label_rtx ();
+          op0 = force_reg (Pmode, op0); op1 = force_reg (Pmode, op1);
+          emit_insn (gen_andsi3 (a, op0, GEN_INT (ADDRESS_MASK)));
+          emit_insn (gen_andsi3 (b, op1, GEN_INT (ADDRESS_MASK)));
+          emit_insn (gen_subsi3 (d, a, b));
+          emit_insn (gen_lshrsi3 (t, op0, GEN_INT (30)));
+          emit_insn (gen_lshrsi3 (u, op1, GEN_INT (30)));
+          emit_cmp_and_jump_insn_1 (t, GEN_INT (36), Pmode, GT, 0, native);
+          emit_insn (gen_subsi3 (t, t, u));
+          emit_insn (gen_ashrsi3_pointer (t, t, GEN_INT (2)));
+          emit_insn (gen_ashlsi3_pointer (scaled, d, GEN_INT (3)));
+          emit_insn (gen_addsi3 (scaled, scaled, d));
+          emit_insn (gen_addsi3 (scaled, scaled, t));
+          emit_insn (gen_ashrsi3_pointer (target, scaled, const1_rtx));
+          emit_jump_insn (gen_jump (done)); emit_barrier ();
+          emit_label (native);
+          emit_insn (gen_subsi3 (t, t, u));
+          /* The two native tags differ by seven; its sign gives the
+             slot difference, without requiring a division. */
+          emit_move_insn (u, const0_rtx);
+          {
+            rtx nonneg = gen_label_rtx (), adjusted = gen_label_rtx ();
+            emit_cmp_and_jump_insn_1 (t, const0_rtx, Pmode, GE, 0, nonneg);
+            emit_move_insn (u, GEN_INT (-2));
+            emit_jump_insn (gen_jump (adjusted)); emit_barrier ();
+            emit_label (nonneg);
+            emit_cmp_and_jump_insn_1 (t, const0_rtx, Pmode, EQ, 0, adjusted);
+            emit_move_insn (u, GEN_INT (2));
+            emit_label (adjusted);
+          }
+          emit_insn (gen_ashlsi3_pointer (scaled, d, GEN_INT (2)));
+          emit_insn (gen_addsi3 (target, scaled, u));
+          emit_label (done);
+        }
+      else if (TARGET_EXTENDED && exact32)
         {
           rtx a = gen_reg_rtx (Pmode), b = gen_reg_rtx (Pmode);
           rtx t = gen_reg_rtx (Pmode), u = gen_reg_rtx (Pmode);
@@ -15570,6 +15742,12 @@ pdp10_initializer_byte_pointer (exp)
   if (TREE_CODE (exp) != ADDR_EXPR)
     return NULL_RTX;
   object = TREE_OPERAND (exp, 0);
+  if (TARGET_EXTENDED && POINTER_TYPE_P (ptr_type)
+      && pdp10_bytesize (TREE_TYPE (ptr_type)) == 16)
+    {
+      rtx addr = pdp10_global_exact16_address (object, 1);
+      if (addr) return addr;
+    }
   if (TREE_CODE (object) != ARRAY_REF
       && TREE_CODE (object) != COMPONENT_REF)
     return NULL_RTX;
@@ -17279,6 +17457,91 @@ pdp10_global_native_ref_address (object)
   return ptr;
 }
 
+/* Build a software exact16 pointer from a declared storage coordinate.
+   Native arrays are two-per-word; packed members are continuous bits.
+   A standalone scalar is right justified at physical bit 20. */
+rtx
+pdp10_global_exact16_address (object, initializer)
+     tree object;
+     int initializer;
+{
+  tree t = object, type = TREE_TYPE (object), index = NULL_TREE;
+  HOST_WIDE_INT pos = 0;
+  int packed = 0, array = 0, tag;
+  rtx addr, base, mem, ptr;
+  pdp10_word36 encoded;
+  if (!TARGET_EXTENDED) return NULL_RTX;
+  while (TREE_CODE (type) == ARRAY_TYPE) type = TREE_TYPE (type);
+  if (!INTEGRAL_TYPE_P (type) || TYPE_PRECISION (type) != 16)
+    return NULL_RTX;
+  while (TREE_CODE (t) == ARRAY_REF || TREE_CODE (t) == COMPONENT_REF)
+    {
+      tree parent = TREE_OPERAND (t, 0);
+      if (TREE_CODE (t) == COMPONENT_REF)
+        {
+          tree f = TREE_OPERAND (t, 1);
+          if (!TYPE_PACKED (TREE_TYPE (parent)) || DECL_BIT_FIELD (f))
+            return NULL_RTX;
+          packed = 1;
+          pos += int_bit_position (f);
+        }
+      else
+        {
+          tree idx = TREE_OPERAND (t, 1);
+          if (TREE_CODE (TREE_TYPE (t)) == ARRAY_TYPE
+              || TREE_CODE (TREE_TYPE (t)) == RECORD_TYPE)
+            return NULL_RTX;
+          array = 1;
+          if (host_integerp (idx, 0)) pos += 16 * tree_low_cst (idx, 0);
+          else
+            {
+              if (index || initializer) return NULL_RTX;
+              index = idx;
+            }
+        }
+      t = parent;
+    }
+  if (TREE_CODE (t) == INDIRECT_REF)
+    {
+      if (initializer || !packed || pdp10_bytesize (TREE_TYPE (t)) != 36)
+        return NULL_RTX;
+      addr = force_reg (Pmode, expand_expr (TREE_OPERAND (t, 0), NULL_RTX,
+                                           Pmode, EXPAND_NORMAL));
+    }
+  else
+    {
+      if (TREE_CODE (t) != VAR_DECL && TREE_CODE (t) != PARM_DECL)
+        return NULL_RTX;
+      mem = expand_expr (t, NULL_RTX, VOIDmode, EXPAND_CONST_ADDRESS);
+      if (GET_CODE (mem) != MEM) return NULL_RTX;
+      addr = XEXP (mem, 0);
+      if (TREE_CODE (TREE_TYPE (t)) == ARRAY_TYPE) array = 1;
+    }
+  if (packed)
+    { tag = pos % 36 + 1; pos /= 36; }
+  else if (array)
+    { tag = (pos / 16) % 2 ? 054 : 045; pos /= 32; }
+  else
+    { tag = 025; pos = 0; }
+  if (pdp10_decompose_symbolic_word36 (addr, &base, &encoded) && base)
+    ptr = pdp10_plus_constant_word36 (base,
+             ((pdp10_word36) tag << 30) | ((encoded + pos) & ADDRESS_MASK));
+  else
+    {
+      if (initializer) return NULL_RTX;
+      ptr = gen_reg_rtx (Pmode);
+      if (TREE_CODE (t) == INDIRECT_REF)
+        emit_insn (gen_addsi3 (ptr, addr, GEN_INT (pos)));
+      else
+        emit_insn (gen_MOVEI (ptr, plus_constant (addr, pos)));
+      emit_TLO (ptr, ptr, tag << 12);
+    }
+  if (index)
+    ptr = pdp10_global_exact16_add (ptr, expand_expr (index, NULL_RTX,
+                                                     Pmode, EXPAND_NORMAL));
+  return ptr;
+}
+
 /* Expand the tree ADDR_EXP tree expression in EXP into RTL instructions.
    Store the result in TARGET if convenient, and return the result.  */
 rtx
@@ -17295,6 +17558,13 @@ pdp10_expand_ADDR_EXP (exp, type, target, ignore, mod)
   /* If nonzero, TEMP will be set to the address of something that might
      be a MEM corresponding to a stack slot.  */
   temp = 0;
+
+  if (TARGET_EXTENDED && !ignore)
+    {
+      rtx addr = pdp10_global_exact16_address (TREE_OPERAND (exp, 0),
+                                             modifier == EXPAND_INITIALIZER);
+      if (addr) return addr;
+    }
 
   if (TARGET_EXTENDED && !ignore && modifier != EXPAND_INITIALIZER)
     {
@@ -17993,7 +18263,8 @@ pdp10_emit_cmp_and_jump_insns (exp, x, y, comparison, size, mode, unsignedp,
 		    ccp_jump);
 
   if (TARGET_EXTENDED
-      && pdp10_exact32_type_p (TREE_TYPE (TREE_TYPE (TREE_OPERAND (exp, 0))))
+      && (pdp10_exact32_type_p (TREE_TYPE (TREE_TYPE (TREE_OPERAND (exp, 0))))
+          || pdp10_bytesize (TREE_TYPE (TREE_TYPE (TREE_OPERAND (exp, 0)))) == 16)
       && comparison != EQ && comparison != NE)
     {
       rtx a = pdp10_global_exact32_order (op0);
@@ -18091,7 +18362,8 @@ pdp10_compare_and_jump (exp, op0, op1, code, unsignedp, mode, size,
 
   if (GET_CODE (op0) == CONST_INT && GET_CODE (op1) == CONST_INT
       && !(TARGET_EXTENDED && code != EQ && code != NE
-           && pdp10_exact32_type_p (TREE_TYPE (TREE_TYPE (TREE_OPERAND (exp, 0)))))
+           && (pdp10_exact32_type_p (TREE_TYPE (TREE_TYPE (TREE_OPERAND (exp, 0))))
+          || pdp10_bytesize (TREE_TYPE (TREE_TYPE (TREE_OPERAND (exp, 0)))) == 16))
       && (tem = simplify_relational_operation (code, mode, op0, op1)) != 0)
     {
       if (tem == const_true_rtx)

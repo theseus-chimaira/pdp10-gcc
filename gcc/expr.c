@@ -4450,6 +4450,39 @@ pdp10_indirect_packed_scalar (root, dynamic, pos, width, unsignedp, value)
   return pdp10_physical_scalar (mem, bit, width, unsignedp, value);
 }
 
+/* Typed extended exact16 access. Decode native slot tags before
+   addressing memory. Packed positions can cross a word boundary. */
+static rtx
+pdp10_global_exact16_access (exp, ptr, value)
+     tree exp;
+     rtx ptr, value;
+{
+  rtx tag = gen_reg_rtx (Pmode), addr = gen_reg_rtx (Pmode);
+  rtx bit = gen_reg_rtx (SImode), mem;
+  rtx packed = gen_label_rtx (), ready = gen_label_rtx ();
+  if (!ptr)
+    ptr = expand_expr (TREE_OPERAND (exp, 0), NULL_RTX,
+                       Pmode, EXPAND_NORMAL);
+  ptr = force_reg (Pmode, ptr);
+  emit_insn (gen_lshrsi3 (tag, ptr, GEN_INT (30)));
+  emit_insn (gen_andsi3 (addr, ptr, GEN_INT (07777777777UL)));
+  emit_cmp_and_jump_insns (tag, GEN_INT (36), LE, NULL_RTX,
+                           SImode, 0, packed);
+  emit_move_insn (bit, const0_rtx);
+  emit_cmp_and_jump_insns (tag, GEN_INT (054), NE, NULL_RTX,
+                           SImode, 0, ready);
+  emit_move_insn (bit, GEN_INT (16));
+  emit_jump_insn (gen_jump (ready)); emit_barrier ();
+  emit_label (packed);
+  emit_insn (gen_addsi3 (bit, tag, GEN_INT (-1)));
+  emit_label (ready);
+  mem = gen_rtx_MEM (SImode, memory_address (SImode, addr));
+  MEM_VOLATILE_P (mem) = TREE_THIS_VOLATILE (exp);
+  set_mem_align (mem, BITS_PER_WORD);
+  return pdp10_physical_scalar (mem, bit, 16,
+                                TREE_UNSIGNED (TREE_TYPE (exp)), value);
+}
+
 /* Exact32 pointers can denote native right-justified word slots or
    S=1 logical packed bit positions.  Lower the typed dereference while
    the source type is still available; ordinary SImode MEMs must never
@@ -4599,6 +4632,28 @@ expand_assignment (to, from, want_value, suggest_reg)
     }
 
 #if REAL_BITS_PER_UNIT == 36
+  if (TARGET_EXTENDED && INTEGRAL_TYPE_P (TREE_TYPE (to))
+      && TYPE_PRECISION (TREE_TYPE (to)) == 16
+      && (TREE_CODE (to) == INDIRECT_REF || TREE_CODE (to) == ARRAY_REF
+          || TREE_CODE (to) == COMPONENT_REF))
+    {
+      rtx ptr = TREE_CODE (to) == INDIRECT_REF ? NULL_RTX
+        : pdp10_global_exact16_address (to, 0);
+      if (ptr || TREE_CODE (to) == INDIRECT_REF)
+        {
+          rtx v = expand_expr (from, NULL_RTX, SImode, EXPAND_NORMAL);
+          rtx narrowed = gen_reg_rtx (SImode);
+          v = force_reg (SImode, convert_modes (SImode,
+                  TYPE_MODE (TREE_TYPE (from)), v, TREE_UNSIGNED (TREE_TYPE (from))));
+          if (TREE_UNSIGNED (TREE_TYPE (to)))
+            emit_insn (gen_zero_extendsi (narrowed, v, GEN_INT (20)));
+          else
+            emit_insn (gen_sign_extendsi (narrowed, v, GEN_INT (20)));
+          pdp10_global_exact16_access (to, ptr, narrowed);
+          return want_value ? convert_modes (TYPE_MODE (TREE_TYPE (to)),
+                     SImode, narrowed, TREE_UNSIGNED (TREE_TYPE (to))) : NULL_RTX;
+        }
+    }
   if (TARGET_EXTENDED && (TREE_CODE (to) == ARRAY_REF
                           || TREE_CODE (to) == COMPONENT_REF))
     {
@@ -8638,6 +8693,12 @@ expand_expr (exp, target, tmode, modifier)
 					 TREE_INT_CST_LOW (index)), mode);
 
 #if REAL_BITS_PER_UNIT == 36
+        if (TARGET_EXTENDED && INTEGRAL_TYPE_P (type)
+            && TYPE_PRECISION (type) == 16
+            && (modifier == EXPAND_NORMAL || modifier == EXPAND_SUM))
+          return convert_modes (mode, SImode,
+                     pdp10_global_exact16_access (exp, NULL_RTX, NULL_RTX),
+                     TREE_UNSIGNED (type));
         if (pdp10_exact32_type_p (type)
             && (modifier == EXPAND_NORMAL || modifier == EXPAND_SUM))
           return pdp10_exact32_access (exp, NULL_RTX);
@@ -8661,6 +8722,16 @@ expand_expr (exp, target, tmode, modifier)
       if (TREE_CODE (TREE_TYPE (TREE_OPERAND (exp, 0))) != ARRAY_TYPE)
 	abort ();
 #if REAL_BITS_PER_UNIT == 36
+      if (TARGET_EXTENDED && code == ARRAY_REF
+          && INTEGRAL_TYPE_P (type) && TYPE_PRECISION (type) == 16
+          && (modifier == EXPAND_NORMAL || modifier == EXPAND_SUM))
+        {
+          rtx ptr = pdp10_global_exact16_address (exp, 0);
+          if (ptr)
+            return convert_modes (mode, SImode,
+                       pdp10_global_exact16_access (exp, ptr, NULL_RTX),
+                       TREE_UNSIGNED (type));
+        }
       if (TARGET_EXTENDED && modifier != EXPAND_CONST_ADDRESS
           && modifier != EXPAND_INITIALIZER)
         {
@@ -8850,6 +8921,16 @@ expand_expr (exp, target, tmode, modifier)
     case BIT_FIELD_REF:
     case ARRAY_RANGE_REF:
 #if REAL_BITS_PER_UNIT == 36
+      if (TARGET_EXTENDED && code == COMPONENT_REF
+          && INTEGRAL_TYPE_P (type) && TYPE_PRECISION (type) == 16
+          && (modifier == EXPAND_NORMAL || modifier == EXPAND_SUM))
+        {
+          rtx ptr = pdp10_global_exact16_address (exp, 0);
+          if (ptr)
+            return convert_modes (mode, SImode,
+                       pdp10_global_exact16_access (exp, ptr, NULL_RTX),
+                       TREE_UNSIGNED (type));
+        }
       if (TARGET_EXTENDED && code == COMPONENT_REF
           && modifier != EXPAND_CONST_ADDRESS && modifier != EXPAND_INITIALIZER)
         {
@@ -10182,6 +10263,9 @@ expand_expr (exp, target, tmode, modifier)
       /* The native exact32 ABI uses word offsets, but a packed
          constant has a logical S=1 bit stride.  EXPAND_INITIALIZER
          must fold that stride without emitting instructions. */
+      if (TARGET_EXTENDED && POINTER_TYPE_P (type)
+          && pdp10_bytesize (TREE_TYPE (type)) == 16)
+        return pdp10_expand_addbp3 (TREE_TYPE (type), NULL_RTX, op0, op1);
       if (POINTER_TYPE_P (type) && pdp10_exact32_type_p (TREE_TYPE (type))
           && (pdp10_const_logical_bit_pointer_p (op0)
               || (!CONSTANT_P (op0) && modifier != EXPAND_INITIALIZER)))
@@ -10300,6 +10384,10 @@ expand_expr (exp, target, tmode, modifier)
 		 initializers, advance in byte units with the same target ADJBP
 		 simplifier used for constant pointer additions.  This path
 		 must not allocate registers or emit instructions.  */
+              if (TARGET_EXTENDED && POINTER_TYPE_P (type)
+                  && pdp10_bytesize (TREE_TYPE (type)) == 16)
+                return pdp10_expand_addbp3 (TREE_TYPE (type), NULL_RTX,
+                                           op0, GEN_INT (-INTVAL (op1)));
 	      if (POINTER_TYPE_P (type)
 		  && pdp10_bytesize (TREE_TYPE (type)) < BITS_PER_WORD)
 		{
@@ -11761,7 +11849,9 @@ expand_increment (exp, post, ignore)
      evaluated more than once below.  */
   if (!post
       || (TREE_CODE (incremented) == INDIRECT_REF
-          && pdp10_exact32_type_p (TREE_TYPE (incremented)))
+          && (pdp10_exact32_type_p (TREE_TYPE (incremented))
+              || (TARGET_EXTENDED && INTEGRAL_TYPE_P (TREE_TYPE (incremented))
+                  && TYPE_PRECISION (TREE_TYPE (incremented)) == 16)))
       || TREE_CODE (incremented) == BIT_FIELD_REF
       || (TREE_CODE (incremented) == COMPONENT_REF
 	  && (TREE_CODE (TREE_OPERAND (incremented, 0)) != INDIRECT_REF
@@ -13271,7 +13361,9 @@ do_store_flag (exp, target, mode, only_cheap)
 
 #ifdef __PDP10_H__
   if (TARGET_EXTENDED && POINTER_TYPE_P (type)
-      && pdp10_exact32_type_p (TREE_TYPE (type)) && code != EQ && code != NE)
+      && (pdp10_exact32_type_p (TREE_TYPE (type))
+          || pdp10_bytesize (TREE_TYPE (type)) == 16)
+      && code != EQ && code != NE)
     {
       op0 = pdp10_global_exact32_order (op0);
       op1 = pdp10_global_exact32_order (op1);

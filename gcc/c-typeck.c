@@ -2710,10 +2710,27 @@ pointer_diff (op0, op1)
   else
     lit1 = integer_zero_node;
 
-  if (operand_equal_p (con0, con1, 0))
+  /* The exact16 C-unit offsets can themselves have pointer type.
+     Keep typed dynamic subtraction intact instead of interpreting
+     those integer offsets as encoded software pointers. Constant
+     same-base offsets are still eligible for initializer folding. */
+  if (operand_equal_p (con0, con1, 0)
+#ifdef __PDP10_H__
+      && (!(TARGET_EXTENDED && pdp10_bytesize (target_type) == 16)
+          || (TREE_CODE (lit0) == INTEGER_CST
+              && TREE_CODE (lit1) == INTEGER_CST))
+#endif
+      )
     {
       op0 = lit0;
       op1 = lit1;
+#ifdef __PDP10_H__
+      if (TARGET_EXTENDED && pdp10_bytesize (target_type) == 16)
+        {
+          op0 = convert (restype, op0);
+          op1 = convert (restype, op1);
+        }
+#endif
     }
 
 #ifdef __PDP10_H__

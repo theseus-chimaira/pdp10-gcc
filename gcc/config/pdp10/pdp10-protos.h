@@ -216,6 +216,7 @@ extern rtx pdp10_expand_pointer_diff PARAMS ((tree, rtx));
 extern int pdp10_const_logical_bit_pointer_p PARAMS ((rtx));
 extern int pdp10_exact32_type_p PARAMS ((tree));
 extern rtx pdp10_global_exact32_order PARAMS ((rtx));
+extern rtx pdp10_global_exact16_address PARAMS ((tree, int));
 extern int pdp10_continuous_record_p PARAMS ((tree));
 extern rtx	pdp10_expand_addbp3 PARAMS ((tree type, rtx target, rtx op0,
 					     rtx op1));
