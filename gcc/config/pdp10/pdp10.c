@@ -12952,6 +12952,30 @@ pdp10_global_native_slot (width, tag)
   return slot >= 0 && slot < 36 / width ? slot : -1;
 }
 
+/* Advance a canonical native pointer without narrowing its element count.
+   Symbolic offsets must remain in the signed 30-bit RTL addend range. */
+static int
+pdp10_global_native_constant_add (w, n, width, symbolic, result)
+     pdp10_word36 w;
+     long long n;
+     int width, symbolic;
+     pdp10_word36 *result;
+{
+  int slot = pdp10_global_native_slot (width, w >> 30);
+  int slots = 36 / width;
+  long long a = w & ADDRESS_MASK, r;
+  if (slot < 0) return 0;
+  if (symbolic && (a & (1LL << 29))) a -= 1LL << 30;
+  n += slot;
+  a += n / slots;
+  r = n % slots;
+  if (r < 0) { --a; r += slots; }
+  if (symbolic && (a < -(1LL << 29) || a >= (1LL << 29))) return 0;
+  *result = ((pdp10_word36) (ps_base_for_bytesize (width) + r) << 30)
+    | ((pdp10_word36) a & ADDRESS_MASK);
+  return 1;
+}
+
 static int
 pdp10_global_scalar_width_p (width)
      int width;
@@ -12983,19 +13007,8 @@ pdp10_fold_global_scalar_add (pointer, count, subtract)
   w = pdp10_tree_word36 (pointer);
   if (width == 16 || width == 32)
     w = pdp10_global_exact_constant_add (w, n, width, 0);
-  else
-    {
-      int slot = pdp10_global_native_slot (width, w >> 30);
-      int slots = 36 / width;
-      long long a, r;
-      if (slot < 0) return NULL_TREE;
-      n += slot;
-      a = (long long) (w & ADDRESS_MASK) + n / slots;
-      r = n % slots;
-      if (r < 0) { --a; r += slots; }
-      w = ((pdp10_word36) (ps_base_for_bytesize (width) + r) << 30)
-        | ((pdp10_word36) a & ADDRESS_MASK);
-    }
+  else if (!pdp10_global_native_constant_add (w, n, width, 0, &w))
+    return NULL_TREE;
 #if HOST_BITS_PER_WIDE_INT >= 36
   result = build_int_2 ((HOST_WIDE_INT) w, 0);
 #else
@@ -18284,12 +18297,12 @@ pdp10_simplify_unspec (x, insn)
 	      break;
 	    adj = pdp10_find_last_value (adj, &i);
 	  }
-	if (adj == NULL_RTX || GET_CODE (adj) != CONST_INT)
+	if (adj == NULL_RTX || (GET_CODE (adj) != CONST_INT
+                               && !(TARGET_EXTENDED && GET_CODE (adj) == CONST_DOUBLE)))
 	  break;
 
-	adjust = INTVAL (adj);
-	if (adjust == 0)
-	  return pointer;
+        if (GET_CODE (adj) == CONST_INT && INTVAL (adj) == 0)
+          return pointer;
 
 	/* If the pointer to be adjusted is a register, find the last
 	   value that register was set to.  */
@@ -18310,6 +18323,23 @@ pdp10_simplify_unspec (x, insn)
 	      || base == NULL_RTX)
 	    break;
 
+          if (TARGET_EXTENDED)
+            {
+              pdp10_word36 count, adjusted;
+              long long n;
+              int width, tag = word36_offset >> 30;
+              if (!pdp10_extract_word36_constant (adj, &count)) break;
+              n = (long long) count;
+              if (count & ((pdp10_word36) 1 << 35)) n -= 1LL << 36;
+              for (width = 6; width <= 18; ++width)
+                if (VALID_OWGBP_SELECTOR_BYTE_SIZE_P (width)
+                    && pdp10_global_native_slot (width, tag) >= 0)
+                  break;
+              if (width > 18 || !pdp10_global_native_constant_add
+                    (word36_offset, n, width, 1, &adjusted)) break;
+              return pdp10_plus_constant_word36 (base, adjusted);
+            }
+          adjust = INTVAL (adj);
 	  ps = (word36_offset >> 24) & (TARGET_EXTENDED ? 07700 : 07777);
 	  offset = word36_offset & ADDRESS_MASK;
 	  pointer = base;
