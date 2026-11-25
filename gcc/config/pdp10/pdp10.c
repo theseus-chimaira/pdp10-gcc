@@ -17361,6 +17361,13 @@ pdp10_global_pointer_cast (op, to, initializer, not_null)
   pdp10_word36 encoded;
   char label[32];
   if (to == 0) return op;
+  {
+    int tag;
+    long long addend;
+    if (pdp10_wide_global_reloc (op, &base, &tag, &addend))
+      return pdp10_make_global_reloc
+        (base, pdp10_global_cast_tag (tag, to), addend);
+  }
   if (pdp10_decompose_symbolic_word36 (op, &base, &encoded))
     {
       int tag = encoded >> 30;
@@ -17417,6 +17424,15 @@ pdp10_global_to_void (op, source, initializer, not_null)
   pdp10_word36 encoded;
   int tag;
   if (source != 18 && source != 36 && source != 32) return op;
+  {
+    long long addend;
+    if (pdp10_wide_global_reloc (op, &base, &tag, &addend))
+      {
+        if (source == 32 && tag != 0) return op;
+        return pdp10_make_global_reloc
+          (base, pdp10_global_cast_tag (tag, 9), addend);
+      }
+  }
   if (pdp10_decompose_symbolic_word36 (op, &base, &encoded))
     {
       tag = encoded >> 30;
@@ -17723,6 +17739,20 @@ pdp10_convert_pointer (exp, op0, target, mod, stack, not_null)
   if (from == to)
     return op0;
 
+  if (TARGET_EXTENDED)
+    {
+      rtx base;
+      int tag;
+      long long addend;
+      if (pdp10_wide_global_reloc (op0, &base, &tag, &addend)
+          && (from == 36 || VALID_OWGBP_SELECTOR_BYTE_SIZE_P (from))
+          && (to == 36 || VALID_OWGBP_SELECTOR_BYTE_SIZE_P (to)))
+        {
+          tag = pdp10_global_ps_for_conversion (tag, to, byte, &from);
+          return pdp10_make_global_reloc (base, tag, addend);
+        }
+    }
+
   if (CONSTANT_ADDRESS_P (op0))
     {
       pdp10_word36 offset = 0;
@@ -17877,6 +17907,20 @@ pdp10_convert_ptr (exp, op0, target, from, to, not_null)
 
   if (to == 32)
     to = 36;
+
+  if (TARGET_EXTENDED)
+    {
+      rtx base;
+      int tag;
+      long long addend;
+      if (pdp10_wide_global_reloc (op0, &base, &tag, &addend)
+          && (from == 36 || VALID_OWGBP_SELECTOR_BYTE_SIZE_P (from))
+          && (to == 36 || VALID_OWGBP_SELECTOR_BYTE_SIZE_P (to)))
+        {
+          tag = pdp10_global_ps_for_conversion (tag, to, byte, &from);
+          return pdp10_make_global_reloc (base, tag, addend);
+        }
+    }
 
   if (CONSTANT_ADDRESS_P (op0))
     {
