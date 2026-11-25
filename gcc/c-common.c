@@ -2142,8 +2142,8 @@ pointer_int_sum (resultcode, ptrop, intop)
 
 #ifdef __PDP10_H__
   /* Encoded pointer words are not linear C-unit coordinates. Fold
-     absolute exact-width constants before generic scaling and folding. */
-  folded = pdp10_fold_global_exact_add (ptrop, intop, resultcode == MINUS_EXPR);
+     absolute scalar pointer constants before generic scaling and folding. */
+  folded = pdp10_fold_global_scalar_add (ptrop, intop, resultcode == MINUS_EXPR);
   if (folded) return folded;
 #endif
 

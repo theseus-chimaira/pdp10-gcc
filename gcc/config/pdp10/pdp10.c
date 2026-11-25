@@ -12939,10 +12939,31 @@ pdp10_tree_word36 (value)
   return w & PDP10_WORD36_MASK;
 }
 
+/* Recognize only canonical native pointer tags. Before-first selectors
+   are instruction operands, not canonical C object addresses. */
+static int
+pdp10_global_native_slot (width, tag)
+     int width, tag;
+{
+  int slot;
+  if (width == 36) return tag == 0 ? 0 : -1;
+  if (!VALID_OWGBP_SELECTOR_BYTE_SIZE_P (width)) return -1;
+  slot = tag - ps_base_for_bytesize (width);
+  return slot >= 0 && slot < 36 / width ? slot : -1;
+}
+
+static int
+pdp10_global_scalar_width_p (width)
+     int width;
+{
+  return width == 16 || width == 32 || width == 36
+    || VALID_OWGBP_SELECTOR_BYTE_SIZE_P (width);
+}
+
 /* Called before pointer_int_sum scales the element count into C units.
    Raw integer-cast pointer constants are a target ABI extension. */
 tree
-pdp10_fold_global_exact_add (pointer, count, subtract)
+pdp10_fold_global_scalar_add (pointer, count, subtract)
      tree pointer, count;
      int subtract;
 {
@@ -12954,12 +12975,27 @@ pdp10_fold_global_exact_add (pointer, count, subtract)
       || TREE_CODE (pointer) != INTEGER_CST || TREE_CODE (count) != INTEGER_CST)
     return NULL_TREE;
   width = TYPE_PRECISION (type);
-  if (width != 16 && width != 32) return NULL_TREE;
+  if (!pdp10_global_scalar_width_p (width)) return NULL_TREE;
   w = pdp10_tree_word36 (count);
   n = (long long) w;
   if (w & ((pdp10_word36) 1 << 35)) n -= 1LL << 36;
   if (subtract) n = -n;
-  w = pdp10_global_exact_constant_add (pdp10_tree_word36 (pointer), n, width, 0);
+  w = pdp10_tree_word36 (pointer);
+  if (width == 16 || width == 32)
+    w = pdp10_global_exact_constant_add (w, n, width, 0);
+  else
+    {
+      int slot = pdp10_global_native_slot (width, w >> 30);
+      int slots = 36 / width;
+      long long a, r;
+      if (slot < 0) return NULL_TREE;
+      n += slot;
+      a = (long long) (w & ADDRESS_MASK) + n / slots;
+      r = n % slots;
+      if (r < 0) { --a; r += slots; }
+      w = ((pdp10_word36) (ps_base_for_bytesize (width) + r) << 30)
+        | ((pdp10_word36) a & ADDRESS_MASK);
+    }
 #if HOST_BITS_PER_WIDE_INT >= 36
   result = build_int_2 ((HOST_WIDE_INT) w, 0);
 #else
@@ -12973,7 +13009,7 @@ pdp10_fold_global_exact_add (pointer, count, subtract)
 /* Fold absolute same-array pointer differences in element units.
    Distinct storage forms are not interchangeable array coordinates. */
 tree
-pdp10_fold_global_exact_diff (left, right, type)
+pdp10_fold_global_scalar_diff (left, right, type)
      tree left, right, type;
 {
   tree target, result;
@@ -12990,11 +13026,18 @@ pdp10_fold_global_exact_diff (left, right, type)
   width = TYPE_PRECISION (target);
   target = TREE_TYPE (TREE_TYPE (right));
   if (!INTEGRAL_TYPE_P (target) || TYPE_PRECISION (target) != width
-      || (width != 16 && width != 32)) return NULL_TREE;
+      || !pdp10_global_scalar_width_p (width)) return NULL_TREE;
   a = pdp10_tree_word36 (left); b = pdp10_tree_word36 (right);
   ta = a >> 30; tb = b >> 30;
   d = (long long) (a & ADDRESS_MASK) - (long long) (b & ADDRESS_MASK);
-  if (width == 32 && ta == 0 && tb == 0)
+  if (width != 16 && width != 32)
+    {
+      int sa = pdp10_global_native_slot (width, ta);
+      int sb = pdp10_global_native_slot (width, tb);
+      if (sa < 0 || sb < 0) return NULL_TREE;
+      d = (36 / width) * d + sa - sb;
+    }
+  else if (width == 32 && ta == 0 && tb == 0)
     ;
   else if (width == 16 && (ta == 045 || ta == 054)
            && (tb == 045 || tb == 054))
@@ -13016,11 +13059,11 @@ pdp10_fold_global_exact_diff (left, right, type)
   return result;
 }
 
-/* Compare constant exact-width pointers in the same address-first
+/* Compare constant scalar pointers in the same address-first
    order used by the runtime rotate-and-bias lowering. Equality still
    compares the encoded words. Do not change generic integer folding. */
 tree
-pdp10_fold_global_exact_compare (exp)
+pdp10_fold_global_scalar_compare (exp)
      tree exp;
 {
   tree left, right, target, result;
@@ -13037,8 +13080,12 @@ pdp10_fold_global_exact_compare (exp)
   width = TYPE_PRECISION (target);
   target = TREE_TYPE (TREE_TYPE (right));
   if (!INTEGRAL_TYPE_P (target) || TYPE_PRECISION (target) != width
-      || (width != 16 && width != 32)) return NULL_TREE;
+      || !pdp10_global_scalar_width_p (width)) return NULL_TREE;
   a = pdp10_tree_word36 (left); b = pdp10_tree_word36 (right);
+  if (width != 16 && width != 32
+      && ((a && pdp10_global_native_slot (width, a >> 30) < 0)
+          || (b && pdp10_global_native_slot (width, b >> 30) < 0)))
+    return NULL_TREE;
   a = ((a & ADDRESS_MASK) << 6) | (a >> 30);
   b = ((b & ADDRESS_MASK) << 6) | (b >> 30);
   switch (code)

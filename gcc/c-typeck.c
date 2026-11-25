@@ -2684,7 +2684,7 @@ pointer_diff (op0, op1)
     }
 
 #ifdef __PDP10_H__
-  folded = pdp10_fold_global_exact_diff (op0, op1, restype);
+  folded = pdp10_fold_global_scalar_diff (op0, op1, restype);
   if (folded) return folded;
 #endif
 

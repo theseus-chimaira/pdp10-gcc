@@ -4392,7 +4392,7 @@ fold (expr)
 
 #ifdef __PDP10_H__
   /* Preserve the target pointer type before stripping no-op casts. */
-  tem = pdp10_fold_global_exact_compare (t);
+  tem = pdp10_fold_global_scalar_compare (t);
   if (tem) return tem;
 #endif
 
