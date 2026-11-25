@@ -10182,7 +10182,14 @@ expand_expr (exp, target, tmode, modifier)
                 op1 = pdp10_expand_addbp_elements (TREE_TYPE (type),
                          NULL_RTX, op1, constant_part);
               else
-                op1 = plus_constant (op1, INTVAL (constant_part));
+                {
+                  rtx folded = NULL_RTX;
+                  if (TARGET_EXTENDED && POINTER_TYPE_P (type)
+                      && pdp10_bytesize (TREE_TYPE (type)) >= BITS_PER_WORD)
+                    folded = pdp10_global_word_symbolic_add
+                      (op1, INTVAL (constant_part));
+                  op1 = folded ? folded : plus_constant (op1, INTVAL (constant_part));
+                }
 	      if (modifier != EXPAND_SUM && modifier != EXPAND_INITIALIZER)
 		op1 = force_operand (op1, target);
 	      return op1;
@@ -10221,7 +10228,14 @@ expand_expr (exp, target, tmode, modifier)
                 op0 = pdp10_expand_addbp_elements (TREE_TYPE (type),
                          NULL_RTX, op0, constant_part);
               else
-                op0 = plus_constant (op0, INTVAL (constant_part));
+                {
+                  rtx folded = NULL_RTX;
+                  if (TARGET_EXTENDED && POINTER_TYPE_P (type)
+                      && pdp10_bytesize (TREE_TYPE (type)) >= BITS_PER_WORD)
+                    folded = pdp10_global_word_symbolic_add
+                      (op0, INTVAL (constant_part));
+                  op0 = folded ? folded : plus_constant (op0, INTVAL (constant_part));
+                }
 	      if (modifier != EXPAND_SUM && modifier != EXPAND_INITIALIZER)
 		op0 = force_operand (op0, target);
 	      return op0;
@@ -10282,6 +10296,14 @@ expand_expr (exp, target, tmode, modifier)
 	    op1 = gen_rtx_PLUS (mode, constant_term, XEXP (op1, 1));
 	}
 
+      if (TARGET_EXTENDED && POINTER_TYPE_P (type)
+          && pdp10_bytesize (TREE_TYPE (type)) >= BITS_PER_WORD
+          && GET_CODE (op1) == CONST_INT)
+        {
+          rtx folded = pdp10_global_word_symbolic_add (op0, INTVAL (op1));
+          if (folded) return folded;
+        }
+
       /* The native exact32 ABI uses word offsets, but a packed
          constant has a logical S=1 bit stride.  EXPAND_INITIALIZER
          must fold that stride without emitting instructions. */
@@ -10335,7 +10357,8 @@ expand_expr (exp, target, tmode, modifier)
 	    tmp = XEXP (tmp, 0);
 	  if (GET_CODE (tmp) != PLUS
 	      && GET_CODE (tmp) != REG
-	      && GET_CODE (tmp) != MEM)
+	      && GET_CODE (tmp) != MEM
+              && !(TARGET_EXTENDED && pdp10_const_word36_byte_pointer_p (old)))
 	    {
 	      HOST_WIDE_INT ps;
 	      int bytesize = pdp10_bytesize (TREE_TYPE (type));
@@ -10424,6 +10447,12 @@ expand_expr (exp, target, tmode, modifier)
           && pdp10_const_logical_bit_pointer_p (op0))
         return pdp10_expand_addbp_elements (TREE_TYPE (type), NULL_RTX,
                                            op0, GEN_INT (-INTVAL (op1)));
+      if (TARGET_EXTENDED && POINTER_TYPE_P (type)
+          && pdp10_bytesize (TREE_TYPE (type)) >= BITS_PER_WORD)
+        {
+          rtx folded = pdp10_global_word_symbolic_add (op0, -INTVAL (op1));
+          if (folded) return folded;
+        }
       return plus_constant (op0, - INTVAL (op1));
 	    }
 	  else

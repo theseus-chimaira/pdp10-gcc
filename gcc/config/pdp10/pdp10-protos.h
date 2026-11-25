@@ -215,6 +215,7 @@ extern int	pdp10_bytesize PARAMS ((tree type));
 extern rtx pdp10_expand_pointer_diff PARAMS ((tree, rtx));
 extern int pdp10_const_logical_bit_pointer_p PARAMS ((rtx));
 extern int pdp10_exact32_type_p PARAMS ((tree));
+extern rtx pdp10_global_word_symbolic_add PARAMS ((rtx, HOST_WIDE_INT));
 extern tree pdp10_fold_global_scalar_add PARAMS ((tree, tree, int));
 extern tree pdp10_fold_global_scalar_diff PARAMS ((tree, tree, tree));
 extern tree pdp10_fold_global_scalar_compare PARAMS ((tree));

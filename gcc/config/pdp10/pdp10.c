@@ -2757,6 +2757,22 @@ pdp10_print_operand (stream, x, code)
 	HOST_WIDE_INT offset = 0;
 	int ps, bytesize, position;
 
+        /* Negative native symbolic literals must keep the selector
+           independent of the signed relocation, just like software tags.
+           The legacy P/S decoder cannot represent a signed OWGBP carry. */
+        if (TARGET_EXTENDED && code != 'W')
+          {
+            rtx base;
+            int tag;
+            long long addend;
+            if (pdp10_global_reloc_parts (x, &base, &tag, &addend)
+                && tag >= 046 && tag <= 076 && addend < 0)
+              {
+                pdp10_print_wide_global_reloc (stream, base, tag, addend);
+                return;
+              }
+          }
+
         /* Software-tagged addresses must not be decoded as POINT or
            OWGBP.  Emit the tag independently of the signed ADDR30. */
         if (TARGET_EXTENDED && code != 'W'
@@ -13087,28 +13103,64 @@ pdp10_global_native_slot (width, tag)
   return slot >= 0 && slot < 36 / width ? slot : -1;
 }
 
-/* Advance a canonical native pointer without narrowing its element count.
-   Symbolic offsets must remain in the signed 30-bit RTL addend range. */
+/* Advance native coordinates independently of their representation. */
 static int
-pdp10_global_native_constant_add (w, n, width, symbolic, result)
+pdp10_global_native_coordinates (address, tag, n, width)
+     long long *address, n;
+     int *tag, width;
+{
+  int slot = pdp10_global_native_slot (width, *tag);
+  int slots = 36 / width;
+  long long r;
+  if (slot < 0) return 0;
+  n += slot;
+  *address += n / slots;
+  r = n % slots;
+  if (r < 0) { --*address; r += slots; }
+  *tag = ps_base_for_bytesize (width) + r;
+  return 1;
+}
+
+static int
+pdp10_global_native_constant_add (w, n, width, result)
      pdp10_word36 w;
      long long n;
-     int width, symbolic;
+     int width;
      pdp10_word36 *result;
 {
-  int slot = pdp10_global_native_slot (width, w >> 30);
-  int slots = 36 / width;
-  long long a = w & ADDRESS_MASK, r;
-  if (slot < 0) return 0;
-  if (symbolic && (a & (1LL << 29))) a -= 1LL << 30;
-  n += slot;
-  a += n / slots;
-  r = n % slots;
-  if (r < 0) { --a; r += slots; }
-  if (symbolic && (a < -(1LL << 29) || a >= (1LL << 29))) return 0;
-  *result = ((pdp10_word36) (ps_base_for_bytesize (width) + r) << 30)
+  int tag = w >> 30;
+  long long a = w & ADDRESS_MASK;
+  if (!pdp10_global_native_coordinates (&a, &tag, n, width))
+    return 0;
+  *result = ((pdp10_word36) tag << 30)
     | ((pdp10_word36) a & ADDRESS_MASK);
   return 1;
+}
+
+static rtx
+pdp10_global_native_symbolic_add (pointer, n, width)
+     rtx pointer;
+     long long n;
+     int width;
+{
+  rtx base;
+  int tag;
+  long long a;
+  if (!pdp10_global_reloc_parts (pointer, &base, &tag, &a)
+      || !pdp10_global_native_coordinates (&a, &tag, n, width))
+    return NULL_RTX;
+  return pdp10_make_global_reloc (base, tag, a);
+}
+
+/* Constant word-pointer adjustments from EXPAND_SUM/INITIALIZER.
+   These counts have already been normalized to word units. */
+rtx
+pdp10_global_word_symbolic_add (pointer, count)
+     rtx pointer;
+     HOST_WIDE_INT count;
+{
+  if (!TARGET_EXTENDED) return NULL_RTX;
+  return pdp10_global_native_symbolic_add (pointer, count, 36);
 }
 
 static int
@@ -13142,7 +13194,7 @@ pdp10_fold_global_scalar_add (pointer, count, subtract)
   w = pdp10_tree_word36 (pointer);
   if (width == 16 || width == 32)
     w = pdp10_global_exact_constant_add (w, n, width);
-  else if (!pdp10_global_native_constant_add (w, n, width, 0, &w))
+  else if (!pdp10_global_native_constant_add (w, n, width, &w))
     return NULL_TREE;
 #if HOST_BITS_PER_WIDE_INT >= 36
   result = build_int_2 ((HOST_WIDE_INT) w, 0);
@@ -13541,6 +13593,22 @@ pdp10_expand_addbp_units (byte_size, target, op0, op1)
     {
       increment = INTVAL (op1);
 
+      if (TARGET_EXTENDED && VALID_OWGBP_SELECTOR_BYTE_SIZE_P (byte_size)
+          && CONSTANT_P (op0))
+        {
+          rtx base;
+          int tag;
+          long long address;
+          if (pdp10_global_reloc_parts (op0, &base, &tag, &address)
+              && (increment <= -01000000 || increment >= 01000000
+                  || address <= -01000000 || address >= 01000000))
+            {
+              rtx folded = pdp10_global_native_symbolic_add
+                (op0, increment, byte_size);
+              if (folded) return folded;
+            }
+        }
+
       if (!(TARGET_KL10up && increment != 0 && increment != 1)
 	  && increment % bytes_per_word == 0)
 	{
@@ -13647,6 +13715,14 @@ expand_add_or_sub_pointer (target, op0, type0, op1, type1, add)
             op1 = expand_simple_unop (Pmode, NEG, op1, NULL_RTX, 0);
         }
       return pdp10_expand_addbp_elements (type, target, op0, op1);
+    }
+
+  if (TARGET_EXTENDED && !neg && WORD_TYPE_P (type)
+      && GET_CODE (op1) == CONST_INT && CONSTANT_ADDRESS_P (op0))
+    {
+      rtx folded = pdp10_global_native_symbolic_add
+        (op0, add ? INTVAL (op1) : -INTVAL (op1), 36);
+      if (folded) return folded;
     }
 
   /* A static pointer initializer has no active function in which to
@@ -18450,6 +18526,25 @@ pdp10_simplify_unspec (x, insn)
 	      break;
 	  }
 
+        if (TARGET_EXTENDED)
+          {
+            rtx base;
+            pdp10_word36 count;
+            long long n, address;
+            int width, tag;
+            if (!pdp10_global_reloc_parts (pointer, &base, &tag, &address)
+                || !pdp10_extract_word36_constant (adj, &count))
+              break;
+            n = (long long) count;
+            if (count & ((pdp10_word36) 1 << 35)) n -= 1LL << 36;
+            for (width = 6; width <= 18; ++width)
+              if (VALID_OWGBP_SELECTOR_BYTE_SIZE_P (width)
+                  && pdp10_global_native_slot (width, tag) >= 0)
+                break;
+            if (width > 18) break;
+            return pdp10_global_native_symbolic_add (pointer, n, width);
+          }
+
 	{
 	  rtx base;
 	  pdp10_word36 word36_offset;
@@ -18458,22 +18553,6 @@ pdp10_simplify_unspec (x, insn)
 	      || base == NULL_RTX)
 	    break;
 
-          if (TARGET_EXTENDED)
-            {
-              pdp10_word36 count, adjusted;
-              long long n;
-              int width, tag = word36_offset >> 30;
-              if (!pdp10_extract_word36_constant (adj, &count)) break;
-              n = (long long) count;
-              if (count & ((pdp10_word36) 1 << 35)) n -= 1LL << 36;
-              for (width = 6; width <= 18; ++width)
-                if (VALID_OWGBP_SELECTOR_BYTE_SIZE_P (width)
-                    && pdp10_global_native_slot (width, tag) >= 0)
-                  break;
-              if (width > 18 || !pdp10_global_native_constant_add
-                    (word36_offset, n, width, 1, &adjusted)) break;
-              return pdp10_plus_constant_word36 (base, adjusted);
-            }
           adjust = INTVAL (adj);
 	  ps = (word36_offset >> 24) & (TARGET_EXTENDED ? 07700 : 07777);
 	  offset = word36_offset & ADDRESS_MASK;
