@@ -18635,7 +18635,7 @@ pdp10_emit_cmp_and_jump_insns (exp, x, y, comparison, size, mode, unsignedp,
 
   if (TARGET_EXTENDED
       && (pdp10_exact32_type_p (TREE_TYPE (TREE_TYPE (TREE_OPERAND (exp, 0))))
-          || pdp10_bytesize (TREE_TYPE (TREE_TYPE (TREE_OPERAND (exp, 0)))) == 16)
+          || !WORD_TYPE_P (TREE_TYPE (TREE_TYPE (TREE_OPERAND (exp, 0)))))
       && comparison != EQ && comparison != NE)
     {
       rtx a = pdp10_global_exact32_order (op0);

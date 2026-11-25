@@ -6329,9 +6329,8 @@
 ;; form matched by *casesi_tablejump below.  PDP-6/KA10 casesi is
 ;; intentionally an absolute local ADDR_VEC dispatch, not a generic
 ;; memory operand and not a PC-relative/difference table.  The target
-;; remains unextended-addressing here: table labels and entries must be
-;; ordinary 18-bit code addresses, with any larger target-model policy
-;; deferred to an extended-addressing machine variant.
+;; is local to the current code section. Extended table entries use
+;; full global indirect words; the indexed dispatch itself is local.
    (parallel [(set (pc)
 		   (if_then_else
 		    (const_int 1)

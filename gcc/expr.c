@@ -13398,7 +13398,7 @@ do_store_flag (exp, target, mode, only_cheap)
     }
   else if (TARGET_EXTENDED && POINTER_TYPE_P (type)
       && (pdp10_exact32_type_p (TREE_TYPE (type))
-          || pdp10_bytesize (TREE_TYPE (type)) == 16)
+          || pdp10_bytesize (TREE_TYPE (type)) < BITS_PER_WORD)
       && code != EQ && code != NE)
     {
       op0 = pdp10_global_exact32_order (op0);

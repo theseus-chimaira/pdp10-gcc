@@ -2110,7 +2110,8 @@ pdp10_asm_output_opcode (FILE *stream, const char *ptr)
 
 #ifndef ASM_OUTPUT_ADDR_VEC_ELT
 #define ASM_OUTPUT_ADDR_VEC_ELT(STREAM, VALUE) \
- fprintf ((STREAM), "\t.word\t%s%d\n", LOCAL_LABEL_PREFIX, (VALUE))
+ fprintf ((STREAM), TARGET_EXTENDED ? "\tGIW %s%d\n" : "\t.word\t%s%d\n", \
+          LOCAL_LABEL_PREFIX, (VALUE))
 #endif
 
 /*
