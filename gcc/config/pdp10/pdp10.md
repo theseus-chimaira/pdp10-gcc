@@ -2987,18 +2987,21 @@
 
      emit_move_insn (temp0, operands[1]);
      emit_insn (gen_MUL (temp, temp0, operands[2]));
-     emit_insn (gen_canonicalize_mulsi_low (temp1, temp0));
+     emit_insn (gen_canonicalize_mulsi_low (temp1, temp1, temp0));
      emit_move_insn (operands[0], temp1);
      DONE;
    }")
 
+;; CSE and copy propagation may substitute a different low-word input.
+;; Describe that value explicitly in RTL and tie it to the destination
+;; only when allocating hard registers, rather than requiring identical RTL.
 (define_insn "canonicalize_mulsi_low"
-  [(set (match_operand:SI 0 "register_operand" "+r")
-	(unspec:SI [(match_dup 0)
-		    (match_operand:SI 1 "register_operand" "r")]
+  [(set (match_operand:SI 0 "register_operand" "=r")
+	(unspec:SI [(match_operand:SI 1 "register_operand" "0")
+		    (match_operand:SI 2 "register_operand" "r")]
 		   UNSPEC_MULSI_LOW))]
   ""
-  "trne %1,1\;%_tloa %0,0400000\;%_%_tlz %0,0400000"
+  "trne %2,1\;%_tloa %0,0400000\;%_%_tlz %0,0400000"
   [(set_attr "length" "3")])
 
 (define_insn "*imulsi3_fast_signed_low"
@@ -3954,7 +3957,7 @@
      rtx low = gen_rtx_SUBREG (SImode, pair, UNITS_PER_WORD);
      rtx result = gen_reg_rtx (SImode);
      emit_move_insn (result, low);
-     emit_insn (gen_canonicalize_mulsi_low (result, high));
+     emit_insn (gen_canonicalize_mulsi_low (result, result, high));
      emit_move_insn (operands[0], result);
      DONE;
    }")
