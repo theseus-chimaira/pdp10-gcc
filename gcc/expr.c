@@ -3875,14 +3875,21 @@ emit_push_insn (x, mode, type, size, align, partial, reg, extra,
   if (partial > 0 && reg != 0)
     {
 #ifndef STACK_GROWS_DOWNWARD
-      /* It the stack grows downward, copy the from the end.  */
+      /* With the upward-growing PDP-10 stack, the register portion
+         contains the trailing words of a split scalar.  */
       if (size == NULL_RTX || GET_CODE (size) == CONST_INT)
 	{
 	  if (GET_CODE (x) == MEM)
-	    x = adjust_address (x, GET_MODE (x),
-				size
-				? INTVAL (size) / UNITS_PER_WORD
-				: GET_MODE_SIZE (mode));
+	    {
+	      /* SIZE, when supplied, has already had the register portion
+	         deducted.  Otherwise derive the stack portion from MODE.
+	         MEM addresses here are in native words, not C bytes.  */
+	      HOST_WIDE_INT words = size
+		? INTVAL (size) / UNITS_PER_WORD
+		: GET_MODE_SIZE (mode) / UNITS_PER_WORD - partial;
+	      x = adjust_address (x, GET_MODE (x),
+				  words * REAL_UNITS_PER_WORD);
+	    }
 	  else
 	    {
 	      if (GET_MODE_SIZE (mode) == 8)
