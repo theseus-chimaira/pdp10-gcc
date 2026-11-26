@@ -2819,15 +2819,18 @@
 ;; temporaries and comparing them.  Use PDP-10 arithmetic flags directly
 ;; instead, keeping the flag-setting ADD and JCRY0 in one insn so the
 ;; intermediate carry flag does not have to be represented in RTL.
+;; Tie the in-place alternatives to operand 1; separate destinations
+;; must not overlap either input. Even in-place arithmetic modifies
+;; the low limb before the high input and its address have been read.
 (define_insn "adddi3_71_no_dadd"
-  [(set (match_operand:DI 0 "register_operand" "=r,r,r,r")
-	(plus:DI (match_operand:DI 1 "register_operand" "r,r,r,r")
-		 (match_operand:DI 2 "general_operand" "ro,I,J,i")))]
+  [(set (match_operand:DI 0 "register_operand" "=&r,&r,r,&r,r,&r,r,&r")
+	(plus:DI (match_operand:DI 1 "register_operand" "%0,r,0,r,0,r,0,r")
+		 (match_operand:DI 2 "general_operand" "ro,ro,I,I,J,J,i,i")))]
   "TARGET_71BIT && !TARGET_KL10up"
   {
     int same = rtx_equal_p (operands[0], operands[1]);
 
-    switch (which_alternative)
+    switch (which_alternative / 2)
       {
       case 0:
 	return same
@@ -2849,7 +2852,7 @@
 	abort ();
       }
   }
-  [(set_attr "length" "8,7,6,8")])
+  [(set_attr "length" "6,8,5,7,4,6,6,8")])
 
 (define_insn "*adddi3"
   [(set (match_operand:DI 0 "nonimmediate_operand" "=r,r,r,r,o,o,o")
@@ -2933,7 +2936,9 @@
   "{
      if (TARGET_71BIT && !TARGET_KL10up)
        {
-	 if (!reg_or_mem_operand (operands[2], DImode))
+	 if (!reg_or_mem_operand (operands[2], DImode)
+	     || (GET_CODE (operands[2]) == MEM
+	         && !offsettable_memref_p (operands[2])))
 	   operands[2] = force_reg (DImode, operands[2]);
 	 emit_insn (gen_subdi3_71_no_dadd (operands[0], operands[1],
 					    operands[2]));
@@ -2947,7 +2952,7 @@
 ;; after SUB of the low word, JCRY0 means no borrow, so only the fallthrough
 ;; path decrements the high word.
 (define_insn "subdi3_71_no_dadd"
-  [(set (match_operand:DI 0 "register_operand" "=r,&r")
+  [(set (match_operand:DI 0 "register_operand" "=&r,&r")
 	(minus:DI (match_operand:DI 1 "register_operand" "0,r")
 		  (match_operand:DI 2 "reg_or_mem_operand" "ro,ro")))]
   "TARGET_71BIT && !TARGET_KL10up"
