@@ -3167,7 +3167,7 @@
 	   }
        }
 
-     if (TARGET_71BIT && !TARGET_KI10up)
+     if (TARGET_71BIT)
        {
 	 if (!register_operand (operands[1], DImode))
 	   operands[1] = force_reg (DImode, operands[1]);
@@ -3194,26 +3194,21 @@
      FAIL;
    }")
 
-;; KA10/PDP-6-class 71-bit DImode multiply.  The hardware MUL result
-;; is not already in the backend's normalized 71-bit DImode storage shape:
-;; for example, low-limb 2^34 * 2 comes back from MUL as 1,,0 while
-;; adddi3's canonical value for 2^35 is 0,,0400000000000.  Normalize the
-;; low-limb MUL result before adding the cross terms.  This mirrors the
-;; existing raw72 MUL canonicalization step, but keeps the default 71-bit
-;; arithmetic path away from the raw 72-bit multiply pattern.
+;; Native 71-bit multiply, radix 2^35. The low word's sign copy
+;; is not a value bit. MUL on the two nonnegative low limbs yields
+;; the native product pair directly. Each cross product contributes
+;; its low 36 bits to the high limb. Use full MUL, not overflowing
+;; IMUL, to retain bit 35 of those modular products.  The high-high
+;; term at bit 70 survives: toggle the high sign bit iff both
+;; high words are odd.
 (define_insn "muldi3_71_no_dmul"
   [(set (match_operand:DI 0 "register_operand" "=&r")
 	(mult:DI (match_operand:DI 1 "register_operand" "r")
 		 (match_operand:DI 2 "register_operand" "r")))
    (clobber (match_scratch:DI 3 "=&r"))]
-  "TARGET_71BIT && !TARGET_KI10up"
-  {
-    if (TARGET_166)
-      return "move %0,%Z1\;mul %0,%Z2\;trne %0,1\;tloa %Z0,0400000\;tlz %Z0,0400000\;ash %0,-1\;tlnn %Z1,0400000\;jrst .+3\;jumpl %1,.+2\;add %0,%Z2\;tlnn %Z2,0400000\;jrst .+3\;jumpl %2,.+2\;add %0,%Z1\;jumpge %1,.+2\;add %0,%Z2\;jumpge %2,.+2\;add %0,%Z1\;move %3,%1\;move %Z3,%2\;imul %Z3,%Z1\;add %0,%Z3\;imul %3,%Z2\;add %0,%3";
-
-    return "move %0,%Z1\;mul %0,%Z2\;trne %0,1\;tloa %Z0,0400000\;tlz %Z0,0400000\;ash %0,-1\;jumpge %1,.+2\;add %0,%Z2\;jumpge %2,.+2\;add %0,%Z1\;move %3,%1\;move %Z3,%2\;imul %Z3,%Z1\;add %0,%Z3\;imul %3,%Z2\;add %0,%3";
-  }
-  [(set_attr "length" "16")])
+  "TARGET_71BIT"
+  "move %0,%Z1\;tlz %0,0400000\;move %3,%Z2\;tlz %3,0400000\;mul %0,%3\;mul %3,%1\;trne %3,1\;tloa %Z3,0400000\;tlz %Z3,0400000\;add %0,%Z3\;move %3,%Z1\;tlz %3,0400000\;mul %3,%2\;trne %3,1\;tloa %Z3,0400000\;tlz %Z3,0400000\;add %0,%Z3\;move %3,%1\;and %3,%2\;trne %3,1\;tlc %0,0400000\;tlz %Z0,0400000\;tlne %0,0400000\;tlo %Z0,0400000"
+  [(set_attr "length" "24")])
 
 ;; Raw 72-bit DImode multiply.  Treat the two DImode words as base-2^36
 ;; limbs and compute the low 72 bits of the product:
