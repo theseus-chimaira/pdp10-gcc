@@ -4222,6 +4222,11 @@ pdp10_native_record_decl_ref (exp, pos, width, words)
       || TREE_CODE (t) != VAR_DECL || TREE_THIS_VOLATILE (t)
       || TREE_CODE (TREE_TYPE (t)) != ARRAY_TYPE)
     return NULL_TREE;
+  /* Small automatic aggregates can live in registers.  The physical
+     word-address path requires memory; leave register field extraction
+     and insertion to the generic aggregate expander.  */
+  if (DECL_RTL_SET_P (t) && GET_CODE (DECL_RTL (t)) != MEM)
+    return NULL_TREE;
   type = TREE_TYPE (t);
   while (TREE_CODE (type) == ARRAY_TYPE)
     type = TREE_TYPE (type);
