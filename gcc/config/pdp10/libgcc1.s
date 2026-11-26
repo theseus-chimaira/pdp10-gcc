@@ -1057,27 +1057,11 @@ FUNC(main):
 ;   input denominator: AC3 = high word, AC4 = low word
 ;   output value:      AC1 = high word, AC2 = low word
 ;
-; PDP-10 AC numbers in this assembly are octal.  The unsigned core uses:
-;   1:2   shifting numerator
-;   3:4   denominator
-;   5:6   quotient
-;   7:10  remainder
-;   11    loop counter
-;   12    scratch
-;   13    boolean flag
-;   14    borrow flag
-;
-; The core is a correctness-first unsigned 71-bit binary long divider.
-; Signed wrappers convert operands to absolute values, call the unsigned core,
-; and re-apply C signs to quotient/remainder.  It uses only PDP-6/KA10 base
-; instructions and no extended addressing.
-;
-; Register preservation review for the semantic harness:
-;   - AC1:AC2 are the defined return pair and are not preserved.
-;   - AC3:AC4 are argument/result scratch internally and are not preserved.
-;   - AC5..AC14 are saved by each public helper because GCC can keep
-;     values live across libcalls in these registers in the bare tests.
-;   - AC17 is the stack pointer.  AC0, AC15, and AC16 are not used here.
+; PDP-10 AC numbers in this assembly are octal. The unsigned core
+; reuses the shifting numerator pair for the quotient, 5:6 for the
+; remainder or hardware DIV pair, 7 for the count, and 10 for scratch.
+; AC5..AC10 (octal) are saved; signed wrappers also save AC13 for sign.
+; All paths use PDP-6/KA10 base instructions and no extended addressing.
 ;
 ; Division by zero is undefined by C.  The harness deliberately implements
 ; deterministic benign behavior for direct helper calls: quotient and
@@ -1093,15 +1077,7 @@ __udivdi3:
 	push 017,6
 	push 017,7
 	push 017,010
-	push 017,011
-	push 017,012
-	push 017,013
-	push 017,014
 	pushj 017,__p010_udivmoddi4
-	pop 017,014
-	pop 017,013
-	pop 017,012
-	pop 017,011
 	pop 017,010
 	pop 017,7
 	pop 017,6
@@ -1113,17 +1089,9 @@ __umoddi3:
 	push 017,6
 	push 017,7
 	push 017,010
-	push 017,011
-	push 017,012
-	push 017,013
-	push 017,014
 	pushj 017,__p010_udivmoddi4
 	move 1,3
 	move 2,4
-	pop 017,014
-	pop 017,013
-	pop 017,012
-	pop 017,011
 	pop 017,010
 	pop 017,7
 	pop 017,6
@@ -1135,10 +1103,7 @@ __divdi3:
 	push 017,6
 	push 017,7
 	push 017,010
-	push 017,011
-	push 017,012
 	push 017,013
-	push 017,014
 	setz 013,
 	and 2,[0377777777777]
 	and 4,[0377777777777]
@@ -1146,17 +1111,12 @@ __divdi3:
 	 pushj 017,__p010_abs_num_q
 	tlne 3,0400000
 	 pushj 017,__p010_abs_den_q
-	push 017,013
 	pushj 017,__p010_udivmoddi4
-	pop 017,013
 	jumpe 013,__p010_div_signcopy
 	pushj 017,__p010_neg_012
 __p010_div_signcopy:
 	pushj 017,__p010_signcopy_012
-	pop 017,014
 	pop 017,013
-	pop 017,012
-	pop 017,011
 	pop 017,010
 	pop 017,7
 	pop 017,6
@@ -1168,10 +1128,7 @@ __moddi3:
 	push 017,6
 	push 017,7
 	push 017,010
-	push 017,011
-	push 017,012
 	push 017,013
-	push 017,014
 	setz 013,
 	and 2,[0377777777777]
 	and 4,[0377777777777]
@@ -1179,19 +1136,14 @@ __moddi3:
 	 pushj 017,__p010_abs_num_r
 	tlne 3,0400000
 	 pushj 017,__p010_abs_den_r
-	push 017,013
 	pushj 017,__p010_udivmoddi4
-	pop 017,013
 	move 1,3
 	move 2,4
 	jumpe 013,__p010_mod_signcopy
 	pushj 017,__p010_neg_012
 __p010_mod_signcopy:
 	pushj 017,__p010_signcopy_012
-	pop 017,014
 	pop 017,013
-	pop 017,012
-	pop 017,011
 	pop 017,010
 	pop 017,7
 	pop 017,6
@@ -1247,107 +1199,93 @@ __p010_abs_den_r:
 ; Each pair is 36 high bits + 35 low bits.  Returns quotient in AC1:AC2
 ; and remainder in AC3:AC4, both with low bit 35 clear.
 __p010_udivmoddi4:
-	and 2,[0377777777777]
-	and 4,[0377777777777]
-	move 012,3
-	ior 012,4
-	jumpn 012,__p010_udivmod_nonzero
+	tlz 2,0400000
+	tlz 4,0400000
+	jumpn 3,__p010_udivmod_wide
+	jumpn 4,__p010_udivmod_narrow
 	setz 1,
 	setz 2,
-	setz 3,
+	popj 017,
+
+; A low35 divisor is positive. For high36 = 0, IDIV handles
+; the entire numerator. For divisor 1, return the original pair.
+; Otherwise divide the unsigned high word (split into a positive
+; 70-bit pair), then divide remainder:low35. Both quotients fit
+; in a positive signed word; the latter is strictly below 2^35.
+__p010_udivmod_narrow:
+	caie 4,1
+	 jrst __p010_udivmod_narrow_gt1
 	setz 4,
 	popj 017,
-
-__p010_udivmod_nonzero:
-	setz 5,             ; quotient high
-	setz 6,             ; quotient low35
-	setz 7,             ; remainder high
-	setz 010,            ; remainder low35
-	movei 011,0107       ; 71 bits, octal 107
-
-__p010_udivmod_loop:
-	; quotient <<= 1 across a 36+35-bit pair
-	move 012,6
-	lsh 012,-042
-	andi 012,1
-	lsh 6,1
-	and 6,[0377777777777]
-	lsh 5,1
-	ior 5,012
-	and 5,[0777777777777]
-
-	; Capture numerator MSB, then numerator <<= 1 across 36+35 bits.
-	move 013,1
-	lsh 013,-043
-	andi 013,1
-	move 012,2
-	lsh 012,-042
-	andi 012,1
-	lsh 2,1
-	and 2,[0377777777777]
-	lsh 1,1
-	ior 1,012
-	and 1,[0777777777777]
-
-	; remainder = (remainder << 1) | numerator_msb
-	move 012,010
-	lsh 012,-042
-	andi 012,1
-	lsh 010,1
-	and 010,[0377777777777]
-	ior 010,013
-	lsh 7,1
-	ior 7,012
-	and 7,[0777777777777]
-
-	; if remainder >= denominator, subtract and set quotient bit.
-	pushj 017,__p010_cmp_7_010_ge_3_4
-	jumpe 013,__p010_udivmod_no_sub
-	pushj 017,__p010_sub_7_010_3_4
-	iori 6,1
-__p010_udivmod_no_sub:
-	sojg 011,__p010_udivmod_loop
-
+__p010_udivmod_narrow_gt1:
+	jumpn 1,__p010_udivmod_two_div
+	idiv 2,4
+	move 4,3
+	setz 3,
+	popj 017,
+__p010_udivmod_two_div:
+	move 5,1
+	lsh 5,-043
+	move 6,1
+	tlz 6,0400000
+	div 5,4
 	move 1,5
-	move 2,6
-	move 3,7
-	move 4,010
+	move 5,6
+	move 6,2
+	div 5,4
+	move 2,5
+	move 4,6
 	popj 017,
 
-; Set AC013 = 1 iff unsigned 71-bit AC7:AC010 >= AC3:AC4.
-__p010_cmp_7_010_ge_3_4:
-	; Compare high words unsigned by biasing their sign bits.
-	move 012,7
-	tlc 012,0400000
-	move 013,3
-	tlc 013,0400000
-	caml 012,013
-	 jrst __p010_cmp_hi_ge
-	setz 013,
-	popj 017,
-__p010_cmp_hi_ge:
-	came 012,013
-	 jrst __p010_cmp_true
-	; Low words are 35-bit nonnegative quantities.
-	caml 010,4
-	 jrst __p010_cmp_true
-	setz 013,
-	popj 017,
-__p010_cmp_true:
-	movei 013,1
+; General restoring divider: numerator bits shift out at the top,
+; quotient bits enter at the bottom. Bias the dying divisor high
+; word once for unsigned comparisons; subtracting it and toggling
+; the high sign bit is subtraction modulo 2^36.
+__p010_udivmod_wide:
+	tlc 3,0400000
+	setz 5,
+	setz 6,
+	movei 7,0107
+__p010_udivmod_loop:
+	move 010,1
+	lsh 010,-043
+	lsh 1,1
+	lsh 2,1
+	skipge 2
+	 iori 1,1
+	tlz 2,0400000
+	lsh 5,1
+	lsh 6,1
+	skipge 6
+	 iori 5,1
+	tlz 6,0400000
+	ior 6,010
+	move 010,5
+	tlc 010,0400000
+	caml 010,3
+	 jrst __p010_udivmod_hi_ge
+	jrst __p010_udivmod_no_sub
+__p010_udivmod_hi_ge:
+	came 010,3
+	 jrst __p010_udivmod_sub
+	caml 6,4
+	 jrst __p010_udivmod_sub
+	jrst __p010_udivmod_no_sub
+__p010_udivmod_sub:
+	sub 6,4
+	jumpge 6,__p010_udivmod_no_borrow
+	tlc 6,0400000
+	subi 5,1
+__p010_udivmod_no_borrow:
+	sub 5,3
+	tlc 5,0400000
+	iori 2,1
+__p010_udivmod_no_sub:
+	sojg 7,__p010_udivmod_loop
+	move 3,5
+	move 4,6
 	popj 017,
 
-; AC7:AC010 -= AC3:AC4 as unsigned 71-bit pairs.
-__p010_sub_7_010_3_4:
-	sub 010,4
-	jumpge 010,__p010_sub_no_borrow
-	add 010,[0400000000000]
-	subi 7,1
-__p010_sub_no_borrow:
-	sub 7,3
-	and 010,[0377777777777]
-	and 7,[0777777777777]
-	popj 017,
 #endif
 
 
