@@ -865,23 +865,30 @@ FUNC(floatunsidf):
 ; bits and can introduce double rounding; never use it here.
 ;
 ; Return canonical SF in AC1.  This is PDP-6/KA10 base ISA code, with
-; no heap, permanent table, or OS call.  Preserve AC3..AC6 and AC10.
+; no heap, permanent table, or OS call.  Preserve AC3..AC6; AC7 is volatile.
+; Unsigned entry shares the magnitude conversion, not the signed
+; interpretation of the high limb. AC7 carries the signed-mode flag
+; until magnitude normalization, and then the negative-result flag.
+	GLOBAL(FUNC(floatundisf))
+FUNC(floatundisf):
+	SETZ 7,
+	JRST %Lfdsf_entry
 	GLOBAL(FUNC(floatdisf))
 FUNC(floatdisf):
+	MOVEI 7,1
+%Lfdsf_entry:
 	PUSH 17,3
 	PUSH 17,4
 	PUSH 17,5
 	PUSH 17,6
-	PUSH 17,010
 	MOVE 3,1
 	IOR 3,2
 	JUMPE 3,%Lfdsf_zero
-	SETZ 010,
-	TLNE 1,0400000
-	 JRST %Lfdsf_abs
+	JUMPE 7,%Lfdsf_unsigned
+	JUMPL 1,%Lfdsf_abs
+	SETZ 7,
 	JRST %Lfdsf_unsigned
 %Lfdsf_abs:
-	MOVEI 010,1
 	SETCA 1,1
 	SETCA 2,2
 	AND 2,[0377777777777]
@@ -922,13 +929,12 @@ FUNC(floatdisf):
 	LSH 3,033
 	IOR 4,3
 	MOVE 1,4
-	JUMPE 010,%Lfdsf_done
+	JUMPE 7,%Lfdsf_done
 	MOVNS 1
 	JRST %Lfdsf_done
 %Lfdsf_zero:
 	SETZ 1,
 %Lfdsf_done:
-	POP 17,010
 	POP 17,6
 	POP 17,5
 	POP 17,4
@@ -946,23 +952,30 @@ FUNC(floatdisf):
 ; canonical 27+35-bit D-format, rounded nearest/ties-to-even.  The
 ; generic libgcc2 arithmetic used a host-style 72-bit word split and
 ; produced wrong D-format values at 2^35-1 and at larger boundaries.
-; Only PDP-6 instructions are used; preserve AC3..AC6 and AC10.
+; Only PDP-6 instructions are used; preserve AC3..AC6; AC7 is volatile.
+; Unsigned entry shares the magnitude conversion, not the signed
+; interpretation of the high limb. AC7 carries the signed-mode flag
+; until magnitude normalization, and then the negative-result flag.
+	GLOBAL(FUNC(floatundidf))
+FUNC(floatundidf):
+	SETZ 7,
+	JRST %Lfd71_entry
 	GLOBAL(FUNC(floatdidf))
 FUNC(floatdidf):
+	MOVEI 7,1
+%Lfd71_entry:
 	PUSH 17,3
 	PUSH 17,4
 	PUSH 17,5
 	PUSH 17,6
-	PUSH 17,010
 	MOVE 3,1
 	IOR 3,2
 	JUMPE 3,%Lfd71_zero
-	SETZ 010,
-	TLNE 1,0400000
-	 JRST %Lfd71_abs
+	JUMPE 7,%Lfd71_unsigned
+	JUMPL 1,%Lfd71_abs
+	SETZ 7,
 	JRST %Lfd71_unsigned
 %Lfd71_abs:
-	MOVEI 010,1
 	SETCA 1,1
 	SETCA 2,2
 	AND 2,[0377777777777]
@@ -1017,7 +1030,7 @@ FUNC(floatdidf):
 	IOR 4,3
 	MOVE 1,4
 	MOVE 2,5
-	JUMPE 010,%Lfd71_done
+	JUMPE 7,%Lfd71_done
 ; Two's-complement the whole D-format 71-bit pair, not each word.
 	SETCA 1,1
 	SETCA 2,2
@@ -1032,7 +1045,6 @@ FUNC(floatdidf):
 	SETZ 1,
 	SETZ 2,
 %Lfd71_done:
-	POP 17,010
 	POP 17,6
 	POP 17,5
 	POP 17,4
