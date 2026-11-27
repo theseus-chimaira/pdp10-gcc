@@ -486,6 +486,29 @@ store_bit_field (str_rtx, bitsize, bitnum, fieldmode, value, total_size)
       return value;
     }
 
+#if REAL_BITS_PER_UNIT == 36
+  /* The physical field is contiguous, but the normal DImode integer
+     has 35 payload bits in its low word.  Split at the arithmetic
+     limb boundary, not the physical word boundary.  Copy the input
+     before storing either part (it can alias the destination).  */
+  if (TARGET_71BIT && bitsize > BITS_PER_WORD
+      && bitsize < 2 * BITS_PER_WORD
+      && (fieldmode == DImode || fieldmode == VOIDmode)
+      && (GET_MODE (value) == DImode || GET_MODE (value) == VOIDmode))
+    {
+      rtx pair = copy_to_mode_reg (DImode, value);
+      rtx lo = gen_rtx_SUBREG (SImode, pair, UNITS_PER_WORD);
+      rtx hi = gen_rtx_SUBREG (SImode, pair, 0);
+      unsigned HOST_WIDE_INT pos = offset * unit + bitpos;
+      store_bit_field (op0, BITS_PER_WORD - 1,
+                       pos + bitsize - (BITS_PER_WORD - 1),
+                       word_mode, lo, total_size);
+      store_bit_field (op0, bitsize - (BITS_PER_WORD - 1), pos,
+                       word_mode, hi, total_size);
+      return value;
+    }
+#endif
+
   /* Handle fields bigger than a word.  */
 
   if (bitsize > BITS_PER_WORD)
@@ -1324,6 +1347,36 @@ extract_bit_field (str_rtx, bitsize, bitnum, unsignedp,
 	return convert_to_mode (tmode, op0, unsignedp);
       return op0;
     }
+
+#if REAL_BITS_PER_UNIT == 36
+  /* Build an arithmetic pair from contiguous physical field bits.
+     The low word contains 35 payload bits and repeats the high-word
+     sign.  Never apply an arithmetic shift to a raw physical pair. */
+  if (TARGET_71BIT && mode == DImode && bitsize > BITS_PER_WORD
+      && bitsize < 2 * BITS_PER_WORD)
+    {
+      rtx pair = gen_reg_rtx (DImode);
+      rtx hi = gen_reg_rtx (SImode);
+      rtx lo = gen_reg_rtx (SImode);
+      rtx part;
+      unsigned HOST_WIDE_INT pos = offset * unit + bitpos;
+      part = extract_bit_field (op0, bitsize - (BITS_PER_WORD - 1), pos,
+                                unsignedp, hi, word_mode, word_mode,
+                                total_size);
+      emit_move_insn (hi, part);
+      part = extract_bit_field (op0, BITS_PER_WORD - 1,
+                                pos + bitsize - (BITS_PER_WORD - 1),
+                                1, lo, word_mode, word_mode,
+                                total_size);
+      emit_move_insn (lo, part);
+      if (!unsignedp || bitsize == 2 * BITS_PER_WORD - 1)
+        emit_insn (gen_pdp10_bitfield_sign (lo, lo, hi));
+      emit_insn (gen_rtx_CLOBBER (VOIDmode, pair));
+      emit_move_insn (gen_rtx_SUBREG (SImode, pair, 0), hi);
+      emit_move_insn (gen_rtx_SUBREG (SImode, pair, UNITS_PER_WORD), lo);
+      return pair;
+    }
+#endif
 
   /* Handle fields bigger than a word.  */
 

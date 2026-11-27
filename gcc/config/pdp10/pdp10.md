@@ -3005,6 +3005,17 @@
      DONE;
    }")
 
+;; A wide field has a zero-extended 35-bit low payload.  Copy the
+;; high sign into its spare bit without another accumulator or literal.
+(define_insn "pdp10_bitfield_sign"
+  [(set (match_operand:SI 0 "register_operand" "=r")
+        (ior:SI (match_operand:SI 1 "register_operand" "0")
+                (and:SI (match_operand:SI 2 "register_operand" "r")
+                        (const_int -34359738368))))]
+  "TARGET_71BIT"
+  "tlne %2,0400000\;tlo %0,0400000"
+  [(set_attr "length" "2")])
+
 ;; CSE and copy propagation may substitute a different low-word input.
 ;; Describe that value explicitly in RTL and tie it to the destination
 ;; only when allocating hard registers, rather than requiring identical RTL.
