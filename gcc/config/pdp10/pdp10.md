@@ -3408,7 +3408,9 @@
 ;; bit into bit 0 of the first AC before DIV, and clear it in the second AC.
 ;; Merely using SETZ on the first AC silently truncates 36-bit unsigned
 ;; numerators at 2^35.  A divisor with bit 35 set can only produce quotient
-;; zero or one, so handle that case with an unsigned comparison.  Do not use
+;; zero or one, so handle that case with an unsigned comparison. A divisor
+;; of one can produce a quotient outside the signed DIV result range;
+;; return the numerator and zero remainder without executing DIV. Do not use
 ;; reciprocal multiplication: default PDP-10 DImode has only 71 value bits.
 (define_expand "udivmodsi4"
   [(parallel
@@ -3426,7 +3428,13 @@
      if (!register_operand (operands[1], SImode))
        operands[1] = force_reg (SImode, operands[1]);
      if (GET_CODE (operands[2]) == CONST_INT
-         && INTVAL (operands[2]) >= 0)
+         && INTVAL (operands[2]) == 1)
+       {
+         emit_move_insn (quotient, operands[1]);
+         emit_move_insn (remainder, const0_rtx);
+       }
+     else if (GET_CODE (operands[2]) == CONST_INT
+              && INTVAL (operands[2]) >= 0)
        emit_insn (gen_pdp10_udivmodsi4_positive
                   (pair, operands[1], operands[2]));
      else
@@ -3462,8 +3470,8 @@
         (umod:SI (match_dup 1) (match_dup 2)))
    (clobber (match_scratch:SI 3 "=&r"))]
   ""
-  "jumpge %2,.+16\;move %0,%1\;tlc %0,0400000\;move %3,%2\;tlc %3,0400000\;camge %0,%3\;jrst .+5\;movei %0,1\;move %Z0,%1\;sub %Z0,%2\;jrst .+11\;movei %0,0\;move %Z0,%1\;jrst .+6\;move %Z0,%1\;move %0,%1\;lsh %0,-43\;tlz %Z0,0400000\;div %0,%2"
-  [(set_attr "length" "19")])
+  "cain %2,1\;jrst .+25\;jumpge %2,.+16\;move %0,%1\;tlc %0,0400000\;move %3,%2\;tlc %3,0400000\;camge %0,%3\;jrst .+5\;movei %0,1\;move %Z0,%1\;sub %Z0,%2\;jrst .+11\;movei %0,0\;move %Z0,%1\;jrst .+6\;move %Z0,%1\;move %0,%1\;lsh %0,-43\;tlz %Z0,0400000\;div %0,%2\;jrst .+3\;move %0,%1\;setz %Z0,"
+  [(set_attr "length" "24")])
 
 (define_expand "udivsi3"
   [(set (match_operand:SI 0 "nonimmediate_operand" "")
@@ -3485,8 +3493,14 @@
 	 if (!register_operand (operands[1], SImode))
 	   operands[1] = force_reg (SImode, operands[1]);
 	 if (GET_CODE (operands[2]) == CONST_INT
-	     && INTVAL (operands[2]) >= 0)
-	   emit_insn (gen_pdp10_udivmodsi4_positive
+             && INTVAL (operands[2]) == 1)
+           {
+             emit_move_insn (operands[0], operands[1]);
+             DONE;
+           }
+         else if (GET_CODE (operands[2]) == CONST_INT
+                  && INTVAL (operands[2]) >= 0)
+           emit_insn (gen_pdp10_udivmodsi4_positive
 		      (pair, operands[1], operands[2]));
 	 else
 	   {
@@ -3534,8 +3548,14 @@
 	 if (!register_operand (operands[1], SImode))
 	   operands[1] = force_reg (SImode, operands[1]);
 	 if (GET_CODE (operands[2]) == CONST_INT
-	     && INTVAL (operands[2]) >= 0)
-	   emit_insn (gen_pdp10_udivmodsi4_positive
+             && INTVAL (operands[2]) == 1)
+           {
+             emit_move_insn (operands[0], const0_rtx);
+             DONE;
+           }
+         else if (GET_CODE (operands[2]) == CONST_INT
+                  && INTVAL (operands[2]) >= 0)
+           emit_insn (gen_pdp10_udivmodsi4_positive
 		      (pair, operands[1], operands[2]));
 	 else
 	   {
