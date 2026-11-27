@@ -4168,14 +4168,28 @@ pdp10_native_record_decl_ref (exp, pos, width, words)
      tree *words;
 {
   tree t = exp, type = TREE_TYPE (exp);
-  int record = 0;
+  int record = 0, bitfield = 0;
 
   if (TARGET_EXTENDED || !INTEGRAL_TYPE_P (type)
       || !TYPE_SIZE (type) || !host_integerp (TYPE_SIZE (type), 1))
     return NULL_TREE;
   *width = tree_low_cst (TYPE_SIZE (type), 1);
-  if (*width != BITS_PER_UNIT && *width != BITS_PER_WORD / 2
-      && *width != BITS_PER_WORD)
+  /* A bitfield has the width of its FIELD_DECL, not its promoted
+     expression type.  Its constant bit position need not be a
+     multiple of that width.  Only the containing array strides
+     must be whole words. */
+  if (TREE_CODE (exp) == COMPONENT_REF
+      && DECL_BIT_FIELD (TREE_OPERAND (exp, 1)))
+    {
+      tree field = TREE_OPERAND (exp, 1);
+      if (!DECL_SIZE (field) || !host_integerp (DECL_SIZE (field), 1))
+        return NULL_TREE;
+      *width = tree_low_cst (DECL_SIZE (field), 1);
+      bitfield = 1;
+    }
+  if (bitfield ? (*width <= 0 || *width > BITS_PER_WORD)
+      : (*width != BITS_PER_UNIT && *width != BITS_PER_WORD / 2
+         && *width != BITS_PER_WORD))
     return NULL_TREE;
   *pos = 0;
   *words = NULL_TREE;
@@ -4190,7 +4204,8 @@ pdp10_native_record_decl_ref (exp, pos, width, words)
           tree field = TREE_OPERAND (t, 1);
           if (TREE_CODE (TREE_TYPE (parent)) != RECORD_TYPE
               || TYPE_PACKED (TREE_TYPE (parent)) || DECL_PACKED (field)
-              || DECL_BIT_FIELD (field) || !DECL_FIELD_OFFSET (field)
+              || (DECL_BIT_FIELD (field) && t != exp)
+              || !DECL_FIELD_OFFSET (field)
               || !host_integerp (DECL_FIELD_OFFSET (field), 1)
               || !host_integerp (DECL_FIELD_BIT_OFFSET (field), 1))
             return NULL_TREE;
@@ -4225,9 +4240,11 @@ pdp10_native_record_decl_ref (exp, pos, width, words)
       t = parent;
     }
 
-  if (!record || *pos < 0 || *pos % *width
+  if (!record || *pos < 0 || (!bitfield && *pos % *width)
       || TREE_CODE (t) != VAR_DECL || TREE_THIS_VOLATILE (t)
-      || TREE_CODE (TREE_TYPE (t)) != ARRAY_TYPE)
+      || (TREE_CODE (TREE_TYPE (t)) != ARRAY_TYPE
+          && !(bitfield && *words
+               && TREE_CODE (TREE_TYPE (t)) == RECORD_TYPE)))
     return NULL_TREE;
   /* Small automatic aggregates can live in registers.  The physical
      word-address path requires memory; leave register field extraction
