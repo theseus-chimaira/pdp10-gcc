@@ -4078,9 +4078,12 @@ pdp10_packed_decl_ref (exp, pos, width, dynamic)
   tree type = TREE_TYPE (exp);
   tree t = exp;
   int packed = 0;
+  int word_stride = 1;
+  tree word_delta = NULL_TREE;
   *pos = 0;
   *dynamic = NULL_TREE;
-  if (!INTEGRAL_TYPE_P (type) || !TYPE_SIZE (type)
+  if ((!INTEGRAL_TYPE_P (type) && !POINTER_TYPE_P (type))
+      || !TYPE_SIZE (type)
       || !host_integerp (TYPE_SIZE (type), 1))
     return NULL_TREE;
   *width = tree_low_cst (TYPE_SIZE (type), 1);
@@ -4128,6 +4131,19 @@ pdp10_packed_decl_ref (exp, pos, width, dynamic)
                 return NULL_TREE;
               units = size_diffop (convert (sizetype, index),
                                     convert (sizetype, low));
+              /* Word-addressed roots can retain a constant intra-word
+                 field position when every variable stride is a word
+                 multiple.  Accumulate that coordinate separately. */
+              if (stride % BITS_PER_WORD)
+                word_stride = 0;
+              if (word_stride)
+                {
+                  tree delta = size_binop (MULT_EXPR, units,
+                      convert (TREE_TYPE (units),
+                               size_int (stride / BITS_PER_WORD)));
+                  word_delta = word_delta
+                    ? size_binop (PLUS_EXPR, word_delta, delta) : delta;
+                }
               units = size_binop (MULT_EXPR, units,
                                   convert (TREE_TYPE (units),
                                            size_int (stride / BITS_PER_UNIT)));
@@ -4150,7 +4166,17 @@ pdp10_packed_decl_ref (exp, pos, width, dynamic)
       while (TREE_CODE (base_type) == ARRAY_TYPE)
         base_type = TREE_TYPE (base_type);
       if (!pdp10_continuous_record_p (base_type))
-        return NULL_TREE;
+        {
+          if (!word_stride
+              || TREE_CODE (t) != VAR_DECL
+              || pdp10_bytesize (base_type) != BITS_PER_WORD
+              || (DECL_RTL_SET_P (t)
+                  && GET_CODE (DECL_RTL (t)) != MEM))
+            return NULL_TREE;
+          /* This root uses a word coordinate, not a byte pointer.
+             pdp10_indirect_packed_scalar consumes words in this case. */
+          *dynamic = word_delta;
+        }
     }
   return t;
 }
@@ -4449,6 +4475,20 @@ pdp10_indirect_packed_scalar (root, dynamic, pos, width, unsignedp, value)
      rtx value;
 {
   rtx ptr, addr, mem, bit, first;
+  /* A direct word-addressed root with word-stride subscripts
+     retains its constant field position.  The recognizer supplies
+     the displacement in words, so do not run it through ADJBP. */
+  if (TREE_CODE (root) == VAR_DECL && dynamic
+      && pdp10_bytesize (TREE_TYPE (root)) == BITS_PER_WORD)
+    {
+      mem = pdp10_native_record_mem (root, dynamic, 0);
+      if (value)
+        {
+          pdp10_packed_scalar_store (mem, pos, width, value);
+          return value;
+        }
+      return pdp10_packed_scalar_load (mem, pos, width, unsignedp);
+    }
   if (TREE_CODE (root) == INDIRECT_REF)
     ptr = expand_expr (TREE_OPERAND (root, 0),
                        NULL_RTX, Pmode, EXPAND_NORMAL);
