@@ -2265,18 +2265,26 @@
 ;      DONE;
 ;    FAIL;")
 
+;; BLT reads and writes memory through addresses packed into its AC.
+;; The effective address operand is the final destination word, not the
+;; base of either range. UNSPEC_VOLATILE protects the hidden reads; the
+;; standard alias-all memory clobber makes the hidden writes visible to
+;; GCSE and the other RTL optimizers. No additional target code or AC is
+;; needed. XBLT has the same opaque memory effects.
 (define_insn "BLT"
   [(unspec_volatile:BLK
     [(match_operand:SI 0 "register_operand" "r")] VUNSPEC_BLT)
    (clobber (match_dup 0))
-   (use (match_operand:BLK 1 "memory_operand" "m"))]
+   (use (match_operand:BLK 1 "memory_operand" "m"))
+   (clobber (mem:BLK (scratch)))]
   ""
   "blt %0,%1")
 
 (define_insn "XBLT"
   [(unspec_volatile:BLK
     [(match_operand:TI 0 "register_operand" "+r")] VUNSPEC_XBLT)
-  (clobber (match_dup 0))]
+   (clobber (match_dup 0))
+   (clobber (mem:BLK (scratch)))]
   "TARGET_KL10up"
   "extend %0,[xblt]")
 
@@ -7387,14 +7395,16 @@
                    UNSPEC_BLT_SETUP))
    (parallel [(unspec_volatile:BLK [(match_dup 0)] VUNSPEC_BLT)
               (clobber (match_dup 0))
-              (use (match_operand:BLK 3 "memory_operand" ""))])]
+              (use (match_operand:BLK 3 "memory_operand" ""))
+              (clobber (mem:BLK (scratch)))])]
   "pdp10_normalize_blt_source_p (operands[1], operands[2],
                                   XEXP (operands[3], 0), 0)"
   [(set (match_dup 0)
         (unspec:SI [(match_dup 4) (match_dup 2)] UNSPEC_BLT_SETUP))
    (parallel [(unspec_volatile:BLK [(match_dup 0)] VUNSPEC_BLT)
               (clobber (match_dup 0))
-              (use (match_dup 3))])]
+              (use (match_dup 3))
+              (clobber (mem:BLK (scratch)))])]
   "if (!pdp10_normalize_blt_source_p (operands[1], operands[2],
                                       XEXP (operands[3], 0), &operands[4]))
      abort ();")
@@ -7412,7 +7422,8 @@
                    UNSPEC_BLT_SETUP))
    (parallel [(unspec_volatile:BLK [(match_dup 2)] VUNSPEC_BLT)
               (clobber (match_dup 2))
-              (use (match_operand:BLK 4 "memory_operand" ""))])]
+              (use (match_operand:BLK 4 "memory_operand" ""))
+              (clobber (mem:BLK (scratch)))])]
   "pdp10_normalize_blt_source_p (operands[1], operands[3],
                                   XEXP (operands[4], 0), 0)"
   [(set (match_dup 0) (match_dup 5))
@@ -7420,7 +7431,8 @@
         (unspec:SI [(match_dup 0) (match_dup 3)] UNSPEC_BLT_SETUP))
    (parallel [(unspec_volatile:BLK [(match_dup 2)] VUNSPEC_BLT)
               (clobber (match_dup 2))
-              (use (match_dup 4))])]
+              (use (match_dup 4))
+              (clobber (mem:BLK (scratch)))])]
   "if (!pdp10_normalize_blt_source_p (operands[1], operands[3],
                                       XEXP (operands[4], 0), &operands[5]))
      abort ();")
@@ -7459,7 +7471,8 @@
                    UNSPEC_BLT_SETUP))
    (parallel [(unspec_volatile:BLK [(match_dup 13)] VUNSPEC_BLT)
               (clobber (match_dup 13))
-              (use (match_operand:BLK 16 "memory_operand" ""))])]
+              (use (match_operand:BLK 16 "memory_operand" ""))
+              (clobber (mem:BLK (scratch)))])]
   "pdp10_word_address_plus_one_p (XEXP (operands[3], 0),
                                   XEXP (operands[1], 0))
    && pdp10_word_address_plus_one_p (XEXP (operands[9], 0),
@@ -7470,23 +7483,9 @@
         (unspec:SI [(match_dup 17) (match_dup 15)] UNSPEC_BLT_SETUP))
    (parallel [(unspec_volatile:BLK [(match_dup 13)] VUNSPEC_BLT)
               (clobber (match_dup 13))
-              (use (match_dup 16))])]
+              (use (match_dup 16))
+              (clobber (mem:BLK (scratch)))])]
   "operands[17] = XEXP (operands[3], 0);")
-
-;; Remove an unneccesary MOVEI instruction.
-(define_peephole2
-  [(set (match_operand:SI 0 "register_operand" "")
-        (unspec:SI
-	 [(plus:SI (match_dup 0) (match_operand 1 "const_int_operand" ""))]
-	 UNSPEC_ADDRESS))
-   (parallel [(unspec_volatile:BLK
-	       [(match_operand:SI 2 "register_operand" "")]
-	       VUNSPEC_BLT)
-	      (use (mem:BLK (match_dup 0)))])]
-  "dead_or_set_p (insn, operands[0])"
-  ;"peep2_reg_dead_p (0, operands[0])"
-  [(parallel [(unspec_volatile:BLK [(match_dup 2)] VUNSPEC_BLT)
-	      (use (mem:BLK (plus:SI (match_dup 0) (match_dup 1))))])])
 
 ;; Optimize a block-copy operation with constant addresses.
 (define_peephole2

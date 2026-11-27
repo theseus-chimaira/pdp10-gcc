@@ -4424,7 +4424,7 @@ pdp10_reorg_word_repack_blt (insn)
     return 0;
 
   x = PATTERN (seq[10]);
-  if (GET_CODE (x) != PARALLEL || XVECLEN (x, 0) != 3)
+  if (GET_CODE (x) != PARALLEL || XVECLEN (x, 0) != 4)
     return 0;
   x = XVECEXP (PATTERN (seq[10]), 0, 2);
   if (GET_CODE (x) != USE
@@ -4520,7 +4520,7 @@ pdp10_reorg_word_repack_spill_blt (insn)
     return 0;
 
   x = PATTERN (seq[20]);
-  if (GET_CODE (x) != PARALLEL || XVECLEN (x, 0) != 3)
+  if (GET_CODE (x) != PARALLEL || XVECLEN (x, 0) != 4)
     return 0;
 
   pdp10_reorg_install_blt (seq[0], seq[1], seq, 21, ac, src1, blt_dst);
