@@ -4162,10 +4162,11 @@ pdp10_packed_decl_ref (exp, pos, width, dynamic)
    Use the front end's actual layout, including padding.  Packed and
    non-word-stride arrays have their own byte-addressed lowering. */
 static tree
-pdp10_native_record_decl_ref (exp, pos, width, words)
+pdp10_native_record_decl_ref (exp, pos, width, words, volatilep)
      tree exp;
      HOST_WIDE_INT *pos, *width;
      tree *words;
+     int *volatilep;
 {
   tree t = exp, type = TREE_TYPE (exp);
   int record = 0, bitfield = 0;
@@ -4193,11 +4194,13 @@ pdp10_native_record_decl_ref (exp, pos, width, words)
     return NULL_TREE;
   *pos = 0;
   *words = NULL_TREE;
+  *volatilep = 0;
 
   while (TREE_CODE (t) == COMPONENT_REF || TREE_CODE (t) == ARRAY_REF)
     {
       tree parent = TREE_OPERAND (t, 0);
-      if (TREE_THIS_VOLATILE (t))
+      *volatilep |= TREE_THIS_VOLATILE (t);
+      if (*volatilep && !bitfield)
         return NULL_TREE;
       if (TREE_CODE (t) == COMPONENT_REF)
         {
@@ -4241,7 +4244,8 @@ pdp10_native_record_decl_ref (exp, pos, width, words)
     }
 
   if (!record || *pos < 0 || (!bitfield && *pos % *width)
-      || TREE_CODE (t) != VAR_DECL || TREE_THIS_VOLATILE (t)
+      || TREE_CODE (t) != VAR_DECL
+      || (!bitfield && TREE_THIS_VOLATILE (t))
       || (TREE_CODE (TREE_TYPE (t)) != ARRAY_TYPE
           && !(bitfield && *words
                && TREE_CODE (TREE_TYPE (t)) == RECORD_TYPE)))
@@ -4258,26 +4262,38 @@ pdp10_native_record_decl_ref (exp, pos, width, words)
       || !TYPE_SIZE (type) || !host_integerp (TYPE_SIZE (type), 1)
       || tree_low_cst (TYPE_SIZE (type), 1) % BITS_PER_WORD)
     return NULL_TREE;
+  *volatilep |= TREE_THIS_VOLATILE (t);
   return t;
 }
 
 /* Materialize only the word coordinate.  The scalar slice helpers below
    then extract or insert the field without changing adjacent storage. */
 static rtx
-pdp10_native_record_mem (root, words)
+pdp10_native_record_mem (root, words, volatilep)
      tree root, words;
+     int volatilep;
 {
   rtx mem = expand_expr (root, NULL_RTX, VOIDmode, EXPAND_NORMAL);
   rtx addr;
   if (GET_CODE (mem) != MEM)
     abort ();
   mem = pdp10_aggregate_word_mem (mem);
-  if (!words)
+  if (!words && !volatilep)
     return mem;
-  addr = force_reg (Pmode, XEXP (mem, 0));
-  addr = force_operand (gen_rtx_PLUS (Pmode, addr,
-            expand_expr (words, NULL_RTX, Pmode, EXPAND_NORMAL)), NULL_RTX);
-  return gen_rtx_MEM (SImode, memory_address (SImode, addr));
+  if (!words)
+    addr = XEXP (mem, 0);
+  else
+    {
+      addr = force_reg (Pmode, XEXP (mem, 0));
+      addr = force_operand (gen_rtx_PLUS (Pmode, addr,
+                expand_expr (words, NULL_RTX, Pmode, EXPAND_NORMAL)), NULL_RTX);
+    }
+  /* A fresh physical MEM avoids mutating DECL_RTL.  Volatility must
+     survive the computed word address and the final field slice. */
+  mem = gen_rtx_MEM (SImode, memory_address (SImode, addr));
+  MEM_VOLATILE_P (mem) = volatilep;
+  set_mem_align (mem, BITS_PER_WORD);
+  return mem;
 }
 
 /* Extract a scalar from a physical bit interval, possibly spanning two
@@ -4729,14 +4745,16 @@ expand_assignment (to, from, want_value, suggest_reg)
       {
         HOST_WIDE_INT p, w;
         tree dynamic;
-        tree root = pdp10_packed_decl_ref (to, &p, &w, &dynamic);
-        int native = 0;
+        tree root = TREE_THIS_VOLATILE (to) ? NULL_TREE
+          : pdp10_packed_decl_ref (to, &p, &w, &dynamic);
+        int native = 0, volatilep = 0;
         if (!root)
           {
-            root = pdp10_native_record_decl_ref (to, &p, &w, &dynamic);
+            root = pdp10_native_record_decl_ref (to, &p, &w, &dynamic, &volatilep);
             native = root != NULL_TREE;
           }
-        if (root && !TREE_THIS_VOLATILE (to) && !TREE_THIS_VOLATILE (root))
+        if (root && (native || (!TREE_THIS_VOLATILE (to)
+                              && !TREE_THIS_VOLATILE (root))))
           {
             rtx mem;
             push_temp_slots ();
@@ -4767,7 +4785,7 @@ expand_assignment (to, from, want_value, suggest_reg)
                 pop_temp_slots ();
                 return result;
               }
-            mem = native ? pdp10_native_record_mem (root, dynamic)
+            mem = native ? pdp10_native_record_mem (root, dynamic, volatilep)
               : expand_expr (root, NULL_RTX, VOIDmode, EXPAND_NORMAL);
             if (GET_CODE (mem) == MEM)
               {
@@ -4776,12 +4794,32 @@ expand_assignment (to, from, want_value, suggest_reg)
                                    v, TREE_UNSIGNED (TREE_TYPE (from)));
                 mem = pdp10_aggregate_word_mem (mem);
                 pdp10_packed_scalar_store (mem, p, w, v);
-                result = want_value
-                  ? convert_modes (TYPE_MODE (TREE_TYPE (to)), SImode,
-                                   pdp10_packed_scalar_load
-                                     (mem, p, w, TREE_UNSIGNED (TREE_TYPE (to))),
-                                   TREE_UNSIGNED (TREE_TYPE (to)))
-                  : NULL_RTX;
+                if (want_value && native && volatilep)
+                  {
+                    /* A volatile assignment returns the value stored,
+                       not a second read of a possibly changing device. */
+                    if (w < BITS_PER_WORD)
+                      {
+                        rtx narrow = gen_reg_rtx (SImode);
+                        if (TREE_UNSIGNED (TREE_TYPE (to)))
+                          emit_insn (gen_andsi3 (narrow, force_reg (SImode, v),
+                                     GEN_INT (((HOST_WIDE_INT) 1 << w) - 1)));
+                        else
+                          emit_insn (gen_sign_extendsi (narrow,
+                                     force_reg (SImode, v),
+                                     GEN_INT (BITS_PER_WORD - w)));
+                        v = narrow;
+                      }
+                    result = convert_modes (TYPE_MODE (TREE_TYPE (to)),
+                                 SImode, v, TREE_UNSIGNED (TREE_TYPE (to)));
+                  }
+                else
+                  result = want_value
+                    ? convert_modes (TYPE_MODE (TREE_TYPE (to)), SImode,
+                                     pdp10_packed_scalar_load
+                                       (mem, p, w, TREE_UNSIGNED (TREE_TYPE (to))),
+                                     TREE_UNSIGNED (TREE_TYPE (to)))
+                    : NULL_RTX;
                 preserve_temp_slots (result);
                 free_temp_slots ();
                 pop_temp_slots ();
@@ -8783,17 +8821,19 @@ expand_expr (exp, target, tmode, modifier)
           if (mem != NULL_RTX)
             return mem;
         }
-      if (modifier == EXPAND_NORMAL && !TREE_THIS_VOLATILE (exp))
+      if (modifier == EXPAND_NORMAL)
         {
           HOST_WIDE_INT p, w;
           tree dynamic;
-          tree root = pdp10_packed_decl_ref (exp, &p, &w, &dynamic);
+          int volatilep = 0;
+          tree root = TREE_THIS_VOLATILE (exp) ? NULL_TREE
+            : pdp10_packed_decl_ref (exp, &p, &w, &dynamic);
           if (!root)
             {
-              root = pdp10_native_record_decl_ref (exp, &p, &w, &dynamic);
+              root = pdp10_native_record_decl_ref (exp, &p, &w, &dynamic, &volatilep);
               if (root)
                 return convert_modes (mode, SImode,
-                         pdp10_packed_scalar_load (pdp10_native_record_mem (root, dynamic),
+                         pdp10_packed_scalar_load (pdp10_native_record_mem (root, dynamic, volatilep),
                                                   p, w, TREE_UNSIGNED (type)),
                          TREE_UNSIGNED (type));
             }
@@ -8989,17 +9029,19 @@ expand_expr (exp, target, tmode, modifier)
           if (mem != NULL_RTX)
             return mem;
         }
-      if (modifier == EXPAND_NORMAL && !TREE_THIS_VOLATILE (exp))
+      if (modifier == EXPAND_NORMAL)
         {
           HOST_WIDE_INT p, w;
           tree dynamic;
-          tree root = pdp10_packed_decl_ref (exp, &p, &w, &dynamic);
+          int volatilep = 0;
+          tree root = TREE_THIS_VOLATILE (exp) ? NULL_TREE
+            : pdp10_packed_decl_ref (exp, &p, &w, &dynamic);
           if (!root)
             {
-              root = pdp10_native_record_decl_ref (exp, &p, &w, &dynamic);
+              root = pdp10_native_record_decl_ref (exp, &p, &w, &dynamic, &volatilep);
               if (root)
                 return convert_modes (mode, SImode,
-                         pdp10_packed_scalar_load (pdp10_native_record_mem (root, dynamic),
+                         pdp10_packed_scalar_load (pdp10_native_record_mem (root, dynamic, volatilep),
                                                   p, w, TREE_UNSIGNED (type)),
                          TREE_UNSIGNED (type));
             }
